@@ -1,0 +1,438 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+import logging
+from typing import Any
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.util import dt as dt_util
+
+from .const import (
+    DOMAIN,
+    CONF_SOC_SENSOR,
+    CONF_BATTERY_POWER_SENSOR,
+    CONF_PV_POWER_SENSOR,
+    CONF_LOAD_POWER_SENSOR,
+    CONF_GRID_POWER_SENSOR,
+    CONF_BUY_PRICE_SENSOR,
+    CONF_SELL_PRICE_SENSOR,
+    CONF_PV_FORECAST_TODAY_SENSOR,
+    CONF_PV_FORECAST_TOMORROW_SENSOR,
+    CONF_BATTERY_CAPACITY_KWH,
+    CONF_MIN_SOC,
+    CONF_EMERGENCY_SOC,
+    CONF_NIGHT_CONSUMPTION_KWH,
+    CONF_NIGHT_SAFETY_MARGIN,
+    CONF_MIN_NIGHT_RESERVE_SOC,
+    CONF_BATTERY_DISCHARGE_POSITIVE,
+    CONF_GRID_IMPORT_POSITIVE,
+    CONF_PV_MEDIUM_FORECAST_KWH,
+    CONF_PV_GOOD_FORECAST_KWH,
+    CONF_PV_VERY_GOOD_FORECAST_KWH,
+    DEFAULT_BATTERY_CAPACITY_KWH,
+    DEFAULT_MIN_SOC,
+    DEFAULT_EMERGENCY_SOC,
+    DEFAULT_NIGHT_CONSUMPTION_KWH,
+    DEFAULT_NIGHT_SAFETY_MARGIN,
+    DEFAULT_MIN_NIGHT_RESERVE_SOC,
+    DEFAULT_PV_MEDIUM_FORECAST_KWH,
+    DEFAULT_PV_GOOD_FORECAST_KWH,
+    DEFAULT_PV_VERY_GOOD_FORECAST_KWH,
+)
+
+_LOGGER = logging.getLogger(__name__)
+
+
+class HomeOnEnergyCoordinator(DataUpdateCoordinator):
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        self.entry = entry
+
+        super().__init__(
+            hass,
+            _LOGGER,
+            name="HomeOn Energy Manager",
+            update_interval=timedelta(seconds=30),
+            config_entry=entry,
+        )
+
+    def _conf_float(self, key: str, default: float) -> float:
+        try:
+            return float(self.entry.data.get(key, default))
+        except Exception:
+            return default
+
+    def _conf_bool(self, key: str, default: bool) -> bool:
+        value = self.entry.data.get(key, default)
+        return bool(value)
+
+    def _state_float_by_entity(self, entity_id: str | None, default: float = 0.0) -> float:
+        if not entity_id:
+            return default
+
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            return default
+
+        raw = state.state
+        if raw in (None, "", "unknown", "unavailable"):
+            return default
+
+        return self._as_float(raw, default)
+
+    def _state_float_by_key(self, key: str, default: float = 0.0) -> float:
+        return self._state_float_by_entity(self.entry.data.get(key), default)
+
+    def _as_float(self, value: Any, default: float | None = None) -> float | None:
+        if isinstance(value, bool):
+            return default
+
+        if isinstance(value, (int, float)):
+            return float(value)
+
+        try:
+            text = str(value).strip()
+            text = text.replace(",", ".")
+            text = text.replace("PLN/kWh", "")
+            text = text.replace("zł/kWh", "")
+            text = text.replace("zl/kWh", "")
+            text = text.replace("PLN", "")
+            text = text.replace("zł", "")
+            text = text.replace(" ", "")
+            return float(text)
+        except Exception:
+            return default
+
+    def _parse_dt(self, value: Any) -> datetime | None:
+        if value is None:
+            return None
+
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            if isinstance(value, (int, float)):
+                try:
+                    if value > 1000000000:
+                        dt = datetime.fromtimestamp(value, dt_util.DEFAULT_TIME_ZONE)
+                    else:
+                        return None
+                except Exception:
+                    return None
+            else:
+                text = str(value).strip()
+                dt = dt_util.parse_datetime(text)
+                if dt is None:
+                    return None
+
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE)
+
+        return dt_util.as_local(dt)
+
+    def _fmt_dt_hour(self, dt: datetime | None) -> str:
+        if dt is None:
+            return "-"
+        try:
+            return dt_util.as_local(dt).strftime("%H:%M")
+        except Exception:
+            return "-"
+
+    def _extract_price_points(self, obj: Any, points: list[dict[str, Any]]) -> None:
+        if isinstance(obj, dict):
+            # Format: {"2026-07-01T18:00:00+02:00": 0.70}
+            for key, val in obj.items():
+                dt_from_key = self._parse_dt(key)
+                price_from_val = self._as_float(val, None)
+
+                if dt_from_key is not None and price_from_val is not None:
+                    points.append({"dt": dt_from_key, "price": price_from_val})
+
+            # Format: {"start": "...", "price": 0.70}
+            dt_candidate = None
+            price_candidate = None
+
+            for key, val in obj.items():
+                key_l = str(key).lower()
+
+                if (
+                    key_l in ("time", "datetime", "date", "start", "start_time", "from", "valid_from", "hour", "timestamp")
+                    or "time" in key_l
+                    or "date" in key_l
+                    or "start" in key_l
+                    or "from" == key_l
+                ):
+                    parsed = self._parse_dt(val)
+                    if parsed is not None:
+                        dt_candidate = parsed
+
+                if (
+                    key_l in ("price", "value", "total", "rate", "amount", "cena")
+                    or "price" in key_l
+                    or "cena" in key_l
+                ):
+                    parsed_price = self._as_float(val, None)
+                    if parsed_price is not None:
+                        price_candidate = parsed_price
+
+            if dt_candidate is not None and price_candidate is not None:
+                points.append({"dt": dt_candidate, "price": price_candidate})
+
+            for val in obj.values():
+                self._extract_price_points(val, points)
+
+        elif isinstance(obj, list):
+            for item in obj:
+                self._extract_price_points(item, points)
+
+    def _price_stats_from_entity(self, entity_id: str | None, current_price: float) -> dict[str, Any]:
+        now = dt_util.now()
+        horizon_end = now + timedelta(hours=24)
+
+        raw_points: list[dict[str, Any]] = []
+
+        if entity_id:
+            state = self.hass.states.get(entity_id)
+            if state is not None:
+                self._extract_price_points(dict(state.attributes), raw_points)
+
+        # Usuń śmieci i duplikaty
+        by_minute: dict[str, dict[str, Any]] = {}
+
+        for item in raw_points:
+            dt = item.get("dt")
+            price = self._as_float(item.get("price"), None)
+
+            if dt is None or price is None:
+                continue
+
+            # Pstryk w PLN/kWh zwykle jest < 5. Jeśli znajdzie coś dużego, ignorujemy.
+            if price < -5 or price > 5:
+                continue
+
+            if dt < now - timedelta(minutes=20):
+                continue
+
+            if dt > horizon_end:
+                continue
+
+            key = dt.strftime("%Y-%m-%d %H:%M")
+            by_minute[key] = {"dt": dt, "price": float(price)}
+
+        points = sorted(by_minute.values(), key=lambda x: x["dt"])
+
+        if not points:
+            return {
+                "sell_prices_found": 0,
+                "best_sell_price_24h": round(current_price, 3),
+                "best_sell_time_24h": "teraz",
+                "next_better_sell_price": 0,
+                "next_better_sell_time": "-",
+                "sell_now_best": True,
+                "sell_price_delta_to_best": 0,
+                "sell_wait_reason": "Brak harmonogramu cen w atrybutach — używam ceny aktualnej",
+            }
+
+        best = max(points, key=lambda x: x["price"])
+        best_price = float(best["price"])
+        best_time = self._fmt_dt_hour(best["dt"])
+
+        better_later = [
+            x for x in points
+            if x["dt"] > now + timedelta(minutes=15)
+            and float(x["price"]) > float(current_price) + 0.005
+        ]
+
+        if better_later:
+            next_better = sorted(better_later, key=lambda x: x["dt"])[0]
+            next_better_price = float(next_better["price"])
+            next_better_time = self._fmt_dt_hour(next_better["dt"])
+        else:
+            next_better_price = 0
+            next_better_time = "-"
+
+        tolerance = 0.01
+        sell_now_best = current_price >= best_price - tolerance
+
+        if sell_now_best:
+            wait_reason = "Aktualna cena jest najlepsza lub prawie najlepsza w oknie 24h"
+        elif next_better_price > 0:
+            wait_reason = f"Za chwilę będzie lepsza cena sprzedaży: {next_better_price:.2f} PLN/kWh o {next_better_time}"
+        else:
+            wait_reason = f"Najlepsza cena sprzedaży w 24h to {best_price:.2f} PLN/kWh o {best_time}"
+
+        return {
+            "sell_prices_found": len(points),
+            "best_sell_price_24h": round(best_price, 3),
+            "best_sell_time_24h": best_time,
+            "next_better_sell_price": round(next_better_price, 3),
+            "next_better_sell_time": next_better_time,
+            "sell_now_best": bool(sell_now_best),
+            "sell_price_delta_to_best": round(max(0.0, best_price - current_price), 3),
+            "sell_wait_reason": wait_reason,
+        }
+
+    async def _async_update_data(self) -> dict:
+        store = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
+        enabled = bool(store.get("enabled", True))
+        dry_run = bool(store.get("dry_run", True))
+
+        battery_capacity_kwh = self._conf_float(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH)
+        min_soc = self._conf_float(CONF_MIN_SOC, DEFAULT_MIN_SOC)
+        emergency_soc = self._conf_float(CONF_EMERGENCY_SOC, DEFAULT_EMERGENCY_SOC)
+        night_consumption_kwh = self._conf_float(CONF_NIGHT_CONSUMPTION_KWH, DEFAULT_NIGHT_CONSUMPTION_KWH)
+        night_safety_margin = self._conf_float(CONF_NIGHT_SAFETY_MARGIN, DEFAULT_NIGHT_SAFETY_MARGIN)
+        min_night_reserve_soc = self._conf_float(CONF_MIN_NIGHT_RESERVE_SOC, DEFAULT_MIN_NIGHT_RESERVE_SOC)
+
+        pv_medium = self._conf_float(CONF_PV_MEDIUM_FORECAST_KWH, DEFAULT_PV_MEDIUM_FORECAST_KWH)
+        pv_good = self._conf_float(CONF_PV_GOOD_FORECAST_KWH, DEFAULT_PV_GOOD_FORECAST_KWH)
+        pv_very_good = self._conf_float(CONF_PV_VERY_GOOD_FORECAST_KWH, DEFAULT_PV_VERY_GOOD_FORECAST_KWH)
+
+        battery_discharge_positive = self._conf_bool(CONF_BATTERY_DISCHARGE_POSITIVE, True)
+        grid_import_positive = self._conf_bool(CONF_GRID_IMPORT_POSITIVE, True)
+
+        soc = self._state_float_by_key(CONF_SOC_SENSOR)
+        battery_power = self._state_float_by_key(CONF_BATTERY_POWER_SENSOR)
+        pv_power = self._state_float_by_key(CONF_PV_POWER_SENSOR)
+        load_power = self._state_float_by_key(CONF_LOAD_POWER_SENSOR)
+        grid_power = self._state_float_by_key(CONF_GRID_POWER_SENSOR)
+        buy_price = self._state_float_by_key(CONF_BUY_PRICE_SENSOR)
+        sell_price = self._state_float_by_key(CONF_SELL_PRICE_SENSOR)
+
+        pv_today = self._state_float_by_key(CONF_PV_FORECAST_TODAY_SENSOR)
+        pv_tomorrow = self._state_float_by_key(CONF_PV_FORECAST_TOMORROW_SENSOR)
+
+        sell_stats = self._price_stats_from_entity(
+            self.entry.data.get(CONF_SELL_PRICE_SENSOR),
+            sell_price,
+        )
+
+        if battery_discharge_positive:
+            battery_discharge_w = max(battery_power, 0.0)
+            battery_charge_w = max(-battery_power, 0.0)
+            battery_status = "Rozładowanie" if battery_power > 20 else "Ładowanie" if battery_power < -20 else "Postój"
+        else:
+            battery_discharge_w = max(-battery_power, 0.0)
+            battery_charge_w = max(battery_power, 0.0)
+            battery_status = "Rozładowanie" if battery_power < -20 else "Ładowanie" if battery_power > 20 else "Postój"
+
+        if grid_import_positive:
+            grid_import_w = max(grid_power, 0.0)
+            grid_export_w = max(-grid_power, 0.0)
+            grid_status = "Import" if grid_power > 20 else "Eksport" if grid_power < -20 else "Zero"
+        else:
+            grid_import_w = max(-grid_power, 0.0)
+            grid_export_w = max(grid_power, 0.0)
+            grid_status = "Import" if grid_power < -20 else "Eksport" if grid_power > 20 else "Zero"
+
+        night_reserve_soc = max(
+            min_night_reserve_soc,
+            min(100.0, (night_consumption_kwh * night_safety_margin / max(battery_capacity_kwh, 0.1)) * 100.0),
+        )
+
+        if pv_tomorrow >= pv_very_good:
+            morning_target_soc = 50.0
+            charge_target_soc = 55.0
+        elif pv_tomorrow >= pv_good:
+            morning_target_soc = 60.0
+            charge_target_soc = 65.0
+        elif pv_tomorrow >= pv_medium:
+            morning_target_soc = 72.0
+            charge_target_soc = 78.0
+        else:
+            morning_target_soc = 90.0
+            charge_target_soc = 92.0
+
+        discharge_target_soc = night_reserve_soc
+
+        available_to_sell_kwh = max(0.0, battery_capacity_kwh * (soc - discharge_target_soc) / 100.0)
+        free_space_kwh = max(0.0, battery_capacity_kwh * (100.0 - soc) / 100.0)
+        energy_to_charge_target_kwh = max(0.0, battery_capacity_kwh * (charge_target_soc - soc) / 100.0)
+        energy_above_morning_target_kwh = max(0.0, battery_capacity_kwh * (soc - morning_target_soc) / 100.0)
+
+        deye_self_power = (
+            pv_power
+            + grid_import_w
+            + battery_discharge_w
+            - load_power
+            - grid_export_w
+            - battery_charge_w
+        )
+
+        if abs(deye_self_power) < 8:
+            deye_self_power = 0.0
+
+        deye_self_power = max(deye_self_power, 0.0)
+
+        sell_ready = sell_price >= 0.55 and soc > discharge_target_soc + 8
+
+        if not enabled:
+            mode = "DISABLED"
+            reason = "HomeOn EMS jest wyłączony"
+        elif soc <= emergency_soc:
+            mode = "EMERGENCY_RESERVE"
+            reason = "SOC jest poniżej poziomu awaryjnego"
+        elif buy_price <= 0 and soc < 100:
+            mode = "NEGATIVE_IMPORT"
+            reason = "Cena zakupu jest ujemna lub zerowa — opłaca się ładować"
+        elif buy_price < 0.30 and soc < charge_target_soc:
+            mode = "CHEAP_CHARGE"
+            reason = "Tania energia — można ładować magazyn"
+        elif sell_ready and not sell_stats["sell_now_best"]:
+            mode = "WAIT_BETTER_SELL_PRICE"
+            reason = sell_stats["sell_wait_reason"]
+        elif sell_ready and sell_stats["sell_now_best"]:
+            mode = "SELL_BATTERY_HIGH_PRICE"
+            reason = f"Sprzedaż teraz ma sens — cena {sell_price:.2f} PLN/kWh jest najlepsza lub prawie najlepsza"
+        elif pv_power > 1000 and soc < charge_target_soc:
+            mode = "PV_CHARGE"
+            reason = "Produkcja PV ładuje magazyn"
+        elif buy_price >= 0.55 and soc > min_soc:
+            mode = "EXPENSIVE_SELF_USE"
+            reason = "Droga energia — używam baterii na dom"
+        else:
+            mode = "NORMAL"
+            reason = "Normalna praca systemu"
+
+        data = {
+            "enabled": enabled,
+            "dry_run": dry_run,
+            "mode": mode,
+            "reason": reason,
+
+            "soc": round(soc, 1),
+            "battery_power": round(battery_power, 0),
+            "battery_status": battery_status,
+            "pv_power": round(pv_power, 0),
+            "load_power": round(load_power, 0),
+            "grid_power": round(grid_power, 0),
+            "grid_status": grid_status,
+
+            "buy_price": round(buy_price, 3),
+            "sell_price": round(sell_price, 3),
+
+            "pv_forecast_today": round(pv_today, 1),
+            "pv_forecast_tomorrow": round(pv_tomorrow, 1),
+
+            "battery_capacity_kwh": round(battery_capacity_kwh, 1),
+            "min_soc": round(min_soc, 1),
+            "emergency_soc": round(emergency_soc, 1),
+            "night_reserve_soc": round(night_reserve_soc, 1),
+            "morning_target_soc": round(morning_target_soc, 1),
+            "charge_target_soc": round(charge_target_soc, 1),
+            "discharge_target_soc": round(discharge_target_soc, 1),
+
+            "available_to_sell_kwh": round(available_to_sell_kwh, 2),
+            "free_space_kwh": round(free_space_kwh, 2),
+            "energy_to_charge_target_kwh": round(energy_to_charge_target_kwh, 2),
+            "energy_above_morning_target_kwh": round(energy_above_morning_target_kwh, 2),
+
+            "deye_self_power": round(deye_self_power, 0),
+            "battery_discharge_w": round(battery_discharge_w, 0),
+            "battery_charge_w": round(battery_charge_w, 0),
+            "grid_import_w": round(grid_import_w, 0),
+            "grid_export_w": round(grid_export_w, 0),
+        }
+
+        data.update(sell_stats)
+        return data

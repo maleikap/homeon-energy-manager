@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+from homeassistant.components.switch import SwitchEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from .const import DOMAIN
+
+
+SWITCHES = [
+    ("enabled", "Włączony", "mdi:power"),
+    ("dry_run", "Tryb testowy dry-run", "mdi:test-tube"),
+]
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+
+    async_add_entities(
+        HomeOnSwitch(coordinator, entry, key, name, icon)
+        for key, name, icon in SWITCHES
+    )
+
+
+class HomeOnSwitch(CoordinatorEntity, SwitchEntity):
+    def __init__(self, coordinator, entry, key, name, icon):
+        super().__init__(coordinator)
+        self._entry = entry
+        self._key = key
+        self._attr_name = f"HomeOn {name}"
+        self._attr_unique_id = f"{entry.entry_id}_{key}"
+        self._attr_icon = icon
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry.entry_id)},
+            "name": "HomeOn Energy Manager",
+            "manufacturer": "HomeOn",
+            "model": "Energy Manager",
+            "sw_version": "0.1.0",
+        }
+
+    @property
+    def is_on(self):
+        return bool(
+            self.hass.data[DOMAIN][self._entry.entry_id].get(
+                self._key,
+                True,
+            )
+        )
+
+    async def async_turn_on(self, **kwargs):
+        self.hass.data[DOMAIN][self._entry.entry_id][self._key] = True
+        self.async_write_ha_state()
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_off(self, **kwargs):
+        self.hass.data[DOMAIN][self._entry.entry_id][self._key] = False
+        self.async_write_ha_state()
+        await self.coordinator.async_request_refresh()

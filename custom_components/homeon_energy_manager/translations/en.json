@@ -1,0 +1,36 @@
+{
+  "title": "HomeOn Energy Manager",
+  "config": {
+    "step": {
+      "user": {
+        "title": "HomeOn Energy Manager",
+        "description": "Select inverter, battery, energy price and PV forecast entities.",
+        "data": {
+          "soc_sensor": "Battery SOC",
+          "battery_power_sensor": "Battery power",
+          "pv_power_sensor": "PV power",
+          "load_power_sensor": "Load power",
+          "grid_power_sensor": "Grid power",
+          "buy_price_sensor": "Buy price",
+          "sell_price_sensor": "Sell price",
+          "pv_forecast_today_sensor": "PV forecast today",
+          "pv_forecast_tomorrow_sensor": "PV forecast tomorrow",
+          "battery_capacity_kwh": "Battery capacity kWh",
+          "min_soc": "Minimum SOC",
+          "emergency_soc": "Emergency SOC",
+          "night_consumption_kwh": "Estimated night consumption kWh",
+          "night_safety_margin": "Night safety margin",
+          "min_night_reserve_soc": "Minimum night reserve SOC",
+          "battery_discharge_positive": "Positive battery power means discharge",
+          "grid_import_positive": "Positive grid power means import",
+          "pv_medium_forecast_kwh": "Medium PV forecast kWh",
+          "pv_good_forecast_kwh": "Good PV forecast kWh",
+          "pv_very_good_forecast_kwh": "Very good PV forecast kWh"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "HomeOn Energy Manager is already configured."
+    }
+  }
+}

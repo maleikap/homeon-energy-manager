@@ -1,0 +1,36 @@
+{
+  "title": "HomeOn Energy Manager",
+  "config": {
+    "step": {
+      "user": {
+        "title": "HomeOn Energy Manager",
+        "description": "Wybierz encje falownika, magazynu, cen energii i prognozy PV.",
+        "data": {
+          "soc_sensor": "SOC magazynu",
+          "battery_power_sensor": "Moc baterii",
+          "pv_power_sensor": "Moc PV",
+          "load_power_sensor": "Moc domu",
+          "grid_power_sensor": "Moc sieci",
+          "buy_price_sensor": "Cena zakupu energii",
+          "sell_price_sensor": "Cena sprzedaży energii",
+          "pv_forecast_today_sensor": "Prognoza PV dziś",
+          "pv_forecast_tomorrow_sensor": "Prognoza PV jutro",
+          "battery_capacity_kwh": "Pojemność magazynu kWh",
+          "min_soc": "Minimalny SOC",
+          "emergency_soc": "Awaryjny SOC",
+          "night_consumption_kwh": "Szacowane nocne zużycie kWh",
+          "night_safety_margin": "Margines bezpieczeństwa nocy",
+          "min_night_reserve_soc": "Minimalna rezerwa nocna SOC",
+          "battery_discharge_positive": "Dodatnia moc baterii oznacza rozładowanie",
+          "grid_import_positive": "Dodatnia moc sieci oznacza import",
+          "pv_medium_forecast_kwh": "Średnia prognoza PV kWh",
+          "pv_good_forecast_kwh": "Dobra prognoza PV kWh",
+          "pv_very_good_forecast_kwh": "Bardzo dobra prognoza PV kWh"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "HomeOn Energy Manager jest już skonfigurowany."
+    }
+  }
+}
