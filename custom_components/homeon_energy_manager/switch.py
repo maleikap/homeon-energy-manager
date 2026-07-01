@@ -10,8 +10,9 @@ from .const import DOMAIN
 
 
 SWITCHES = [
-    ("enabled", "Włączony", "mdi:power"),
-    ("dry_run", "Tryb testowy dry-run", "mdi:test-tube"),
+    ("enabled", "Włączony", "mdi:power", True),
+    ("dry_run", "Tryb testowy dry-run", "mdi:test-tube", True),
+    ("inverter_control", "Sterowanie falownikiem", "mdi:power-settings", False),
 ]
 
 
@@ -23,16 +24,17 @@ async def async_setup_entry(
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
     async_add_entities(
-        HomeOnSwitch(coordinator, entry, key, name, icon)
-        for key, name, icon in SWITCHES
+        HomeOnSwitch(coordinator, entry, key, name, icon, default)
+        for key, name, icon, default in SWITCHES
     )
 
 
 class HomeOnSwitch(CoordinatorEntity, SwitchEntity):
-    def __init__(self, coordinator, entry, key, name, icon):
+    def __init__(self, coordinator, entry, key, name, icon, default):
         super().__init__(coordinator)
         self._entry = entry
         self._key = key
+        self._default = default
         self._attr_name = f"HomeOn {name}"
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         self._attr_icon = icon
@@ -41,7 +43,7 @@ class HomeOnSwitch(CoordinatorEntity, SwitchEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.1.0",
+            "sw_version": "0.2.0",
         }
 
     @property
@@ -49,7 +51,7 @@ class HomeOnSwitch(CoordinatorEntity, SwitchEntity):
         return bool(
             self.hass.data[DOMAIN][self._entry.entry_id].get(
                 self._key,
-                True,
+                self._default,
             )
         )
 

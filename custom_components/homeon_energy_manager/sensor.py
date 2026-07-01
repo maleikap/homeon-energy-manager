@@ -16,6 +16,10 @@ SENSORS = [
     ("mode", "Tryb EMS", None, "mdi:state-machine"),
     ("reason", "Decyzja EMS", None, "mdi:text-box-check"),
 
+    ("inverter_control_enabled", "Sterowanie falownikiem", None, "mdi:power-settings"),
+    ("inverter_control_action", "Akcja falownika", None, "mdi:inverter"),
+    ("inverter_control_last_result", "Wynik sterowania falownikiem", None, "mdi:check-network"),
+
     ("soc", "SOC magazynu", PERCENT, "mdi:battery"),
     ("battery_status", "Status baterii", None, "mdi:battery-sync"),
     ("battery_power", "Moc baterii", UnitOfPower.WATT, "mdi:battery-charging"),

@@ -44,6 +44,18 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+INVERTER_GRID_CHARGING = "switch.inverter_battery_grid_charging"
+INVERTER_EXPORT_SURPLUS = "switch.inverter_export_surplus"
+INVERTER_EXPORT_SURPLUS_POWER = "number.inverter_export_surplus_power"
+INVERTER_MAX_CHARGE_CURRENT = "number.inverter_battery_max_charging_current"
+INVERTER_MAX_DISCHARGE_CURRENT = "number.inverter_battery_max_discharging_current"
+
+HOMEON_EXPORT_TARGET_W = 10000
+HOMEON_CHARGE_CURRENT_A = 80
+HOMEON_DISCHARGE_CURRENT_A = 120
+HOMEON_SAFE_DISCHARGE_CURRENT_A = 20
+HOMEON_BLOCK_DISCHARGE_CURRENT_A = 5
+
 
 class HomeOnEnergyCoordinator(DataUpdateCoordinator):
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -140,7 +152,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
     def _extract_price_points(self, obj: Any, points: list[dict[str, Any]]) -> None:
         if isinstance(obj, dict):
-            # Format: {"2026-07-01T18:00:00+02:00": 0.70}
             for key, val in obj.items():
                 dt_from_key = self._parse_dt(key)
                 price_from_val = self._as_float(val, None)
@@ -148,7 +159,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 if dt_from_key is not None and price_from_val is not None:
                     points.append({"dt": dt_from_key, "price": price_from_val})
 
-            # Format: {"start": "...", "price": 0.70}
             dt_candidate = None
             price_candidate = None
 
@@ -196,7 +206,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             if state is not None:
                 self._extract_price_points(dict(state.attributes), raw_points)
 
-        # Usuń śmieci i duplikaty
         by_minute: dict[str, dict[str, Any]] = {}
 
         for item in raw_points:
@@ -206,7 +215,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             if dt is None or price is None:
                 continue
 
-            # Pstryk w PLN/kWh zwykle jest < 5. Jeśli znajdzie coś dużego, ignorujemy.
             if price < -5 or price > 5:
                 continue
 
@@ -271,6 +279,135 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "sell_price_delta_to_best": round(max(0.0, best_price - current_price), 3),
             "sell_wait_reason": wait_reason,
         }
+
+    async def _async_set_switch(self, entity_id: str, turn_on: bool, actions: list[str]) -> None:
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            actions.append(f"{entity_id}: brak encji")
+            return
+
+        service = "turn_on" if turn_on else "turn_off"
+
+        try:
+            await self.hass.services.async_call(
+                "switch",
+                service,
+                {"entity_id": entity_id},
+                blocking=True,
+            )
+            actions.append(f"{entity_id}: {'ON' if turn_on else 'OFF'}")
+        except Exception as err:
+            _LOGGER.exception("HomeOn inverter switch control failed: %s", entity_id)
+            actions.append(f"{entity_id}: BŁĄD {err}")
+
+    async def _async_set_number(self, entity_id: str, value: float, actions: list[str]) -> None:
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            actions.append(f"{entity_id}: brak encji")
+            return
+
+        min_v = self._as_float(state.attributes.get("min"), None)
+        max_v = self._as_float(state.attributes.get("max"), None)
+
+        final_value = float(value)
+
+        if min_v is not None:
+            final_value = max(final_value, float(min_v))
+
+        if max_v is not None:
+            final_value = min(final_value, float(max_v))
+
+        try:
+            await self.hass.services.async_call(
+                "number",
+                "set_value",
+                {
+                    "entity_id": entity_id,
+                    "value": final_value,
+                },
+                blocking=True,
+            )
+            actions.append(f"{entity_id}: {final_value:g}")
+        except Exception as err:
+            _LOGGER.exception("HomeOn inverter number control failed: %s", entity_id)
+            actions.append(f"{entity_id}: BŁĄD {err}")
+
+    async def _async_apply_inverter_control(self, data: dict[str, Any]) -> dict[str, Any]:
+        store = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
+
+        enabled = bool(store.get("enabled", True))
+        dry_run = bool(store.get("dry_run", True))
+        inverter_control = bool(store.get("inverter_control", False))
+        mode = str(data.get("mode", "NORMAL"))
+
+        data["inverter_control_enabled"] = inverter_control
+
+        if not enabled:
+            data["inverter_control_action"] = "HomeOn wyłączony — nie steruję falownikiem"
+            data["inverter_control_last_result"] = "OFF"
+            return data
+
+        if dry_run:
+            data["inverter_control_action"] = "Dry-run aktywny — tylko symulacja, bez zmian w falowniku"
+            data["inverter_control_last_result"] = "DRY RUN"
+            return data
+
+        if not inverter_control:
+            data["inverter_control_action"] = "Sterowanie falownikiem wyłączone"
+            data["inverter_control_last_result"] = "OFF"
+            return data
+
+        actions: list[str] = []
+
+        if mode == "EMERGENCY_RESERVE":
+            data["inverter_control_action"] = "Awaryjny SOC — włączam ładowanie z sieci i blokuję eksport"
+            await self._async_set_switch(INVERTER_EXPORT_SURPLUS, False, actions)
+            await self._async_set_switch(INVERTER_GRID_CHARGING, True, actions)
+            await self._async_set_number(INVERTER_MAX_CHARGE_CURRENT, HOMEON_CHARGE_CURRENT_A, actions)
+            await self._async_set_number(INVERTER_MAX_DISCHARGE_CURRENT, HOMEON_BLOCK_DISCHARGE_CURRENT_A, actions)
+
+        elif mode in ("NEGATIVE_IMPORT", "CHEAP_CHARGE"):
+            data["inverter_control_action"] = "Tania energia — włączam ładowanie z sieci"
+            await self._async_set_switch(INVERTER_EXPORT_SURPLUS, False, actions)
+            await self._async_set_switch(INVERTER_GRID_CHARGING, True, actions)
+            await self._async_set_number(INVERTER_MAX_CHARGE_CURRENT, HOMEON_CHARGE_CURRENT_A, actions)
+            await self._async_set_number(INVERTER_MAX_DISCHARGE_CURRENT, HOMEON_BLOCK_DISCHARGE_CURRENT_A, actions)
+
+        elif mode == "SELL_BATTERY_HIGH_PRICE":
+            data["inverter_control_action"] = "Najlepsza cena sprzedaży — włączam sprzedaż nadwyżki"
+            await self._async_set_switch(INVERTER_GRID_CHARGING, False, actions)
+            await self._async_set_number(INVERTER_EXPORT_SURPLUS_POWER, HOMEON_EXPORT_TARGET_W, actions)
+            await self._async_set_number(INVERTER_MAX_DISCHARGE_CURRENT, HOMEON_DISCHARGE_CURRENT_A, actions)
+            await self._async_set_switch(INVERTER_EXPORT_SURPLUS, True, actions)
+
+        elif mode == "WAIT_BETTER_SELL_PRICE":
+            data["inverter_control_action"] = "Czekam na lepszą cenę sprzedaży — blokuję sprzedaż baterii"
+            await self._async_set_switch(INVERTER_GRID_CHARGING, False, actions)
+            await self._async_set_switch(INVERTER_EXPORT_SURPLUS, False, actions)
+            await self._async_set_number(INVERTER_MAX_DISCHARGE_CURRENT, HOMEON_SAFE_DISCHARGE_CURRENT_A, actions)
+
+        elif mode == "PV_CHARGE":
+            data["inverter_control_action"] = "Ładowanie z PV — wyłączam ładowanie z sieci"
+            await self._async_set_switch(INVERTER_GRID_CHARGING, False, actions)
+            await self._async_set_switch(INVERTER_EXPORT_SURPLUS, False, actions)
+            await self._async_set_number(INVERTER_MAX_CHARGE_CURRENT, HOMEON_CHARGE_CURRENT_A, actions)
+            await self._async_set_number(INVERTER_MAX_DISCHARGE_CURRENT, HOMEON_SAFE_DISCHARGE_CURRENT_A, actions)
+
+        elif mode == "EXPENSIVE_SELF_USE":
+            data["inverter_control_action"] = "Droga energia — bateria pracuje na dom, bez sprzedaży do sieci"
+            await self._async_set_switch(INVERTER_GRID_CHARGING, False, actions)
+            await self._async_set_switch(INVERTER_EXPORT_SURPLUS, False, actions)
+            await self._async_set_number(INVERTER_MAX_DISCHARGE_CURRENT, HOMEON_DISCHARGE_CURRENT_A, actions)
+
+        else:
+            data["inverter_control_action"] = "Normalna praca — bez ładowania z sieci i bez wymuszonej sprzedaży"
+            await self._async_set_switch(INVERTER_GRID_CHARGING, False, actions)
+            await self._async_set_switch(INVERTER_EXPORT_SURPLUS, False, actions)
+            await self._async_set_number(INVERTER_MAX_CHARGE_CURRENT, HOMEON_CHARGE_CURRENT_A, actions)
+            await self._async_set_number(INVERTER_MAX_DISCHARGE_CURRENT, HOMEON_SAFE_DISCHARGE_CURRENT_A, actions)
+
+        data["inverter_control_last_result"] = " | ".join(actions) if actions else "Brak wykonanych akcji"
+        return data
 
     async def _async_update_data(self) -> dict:
         store = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
@@ -435,4 +572,5 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         }
 
         data.update(sell_stats)
+        data = await self._async_apply_inverter_control(data)
         return data
