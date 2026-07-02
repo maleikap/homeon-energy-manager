@@ -114,6 +114,11 @@ SENSORS = [
     ("plan_safe_export_limit_w", "Plan bezpieczny limit eksportu", UnitOfPower.WATT, "mdi:transmission-tower-export"),
     ("plan_weather_strategy", "Plan strategia pogoda", None, "mdi:weather-cloudy-clock"),
     ("plan_reasonable_buy_window", "Plan okno normalnego zakupu", None, "mdi:cash-clock"),
+    ("inverter_control_executor_mode", "Sterowanie tryb wykonawczy", None, "mdi:state-machine"),
+    ("inverter_control_safe_export_limit_w", "Sterowanie bezpieczny limit eksportu", UnitOfPower.WATT, "mdi:transmission-tower-export"),
+    ("inverter_control_safe_to_sell_kwh", "Sterowanie bezpieczna energia do sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:cash-check"),
+    ("inverter_control_weather_lock", "Sterowanie blokada pogodowa", None, "mdi:weather-cloudy-alert"),
+    ("inverter_control_last_run", "Sterowanie ostatnie wykonanie", None, "mdi:clock-check"),
 ]
 
 
@@ -143,7 +148,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.6",
+            "sw_version": "0.2.7",
         }
 
     @property
