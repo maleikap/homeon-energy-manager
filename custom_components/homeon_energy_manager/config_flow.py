@@ -3,7 +3,6 @@ from __future__ import annotations
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
@@ -28,11 +27,6 @@ from .const import (
     CONF_PV_MEDIUM_FORECAST_KWH,
     CONF_PV_GOOD_FORECAST_KWH,
     CONF_PV_VERY_GOOD_FORECAST_KWH,
-    CONF_INVERTER_GRID_CHARGING_SWITCH,
-    CONF_INVERTER_EXPORT_SURPLUS_SWITCH,
-    CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
-    CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
-    CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
     DEFAULT_BATTERY_CAPACITY_KWH,
     DEFAULT_MIN_SOC,
     DEFAULT_EMERGENCY_SOC,
@@ -42,11 +36,6 @@ from .const import (
     DEFAULT_PV_MEDIUM_FORECAST_KWH,
     DEFAULT_PV_GOOD_FORECAST_KWH,
     DEFAULT_PV_VERY_GOOD_FORECAST_KWH,
-    DEFAULT_INVERTER_GRID_CHARGING_SWITCH,
-    DEFAULT_INVERTER_EXPORT_SURPLUS_SWITCH,
-    DEFAULT_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
-    DEFAULT_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
-    DEFAULT_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
 )
 
 
@@ -54,22 +43,9 @@ SENSOR_SELECTOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="sensor")
 )
 
-SWITCH_SELECTOR = selector.EntitySelector(
-    selector.EntitySelectorConfig(domain="switch")
-)
-
-NUMBER_SELECTOR = selector.EntitySelector(
-    selector.EntitySelectorConfig(domain="number")
-)
-
 
 class HomeOnEnergyManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
-
-    @staticmethod
-    @callback
-    def async_get_options_flow(config_entry):
-        return HomeOnEnergyManagerOptionsFlow(config_entry)
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -116,71 +92,4 @@ class HomeOnEnergyManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=data_schema,
             errors=errors,
-        )
-
-
-class HomeOnEnergyManagerOptionsFlow(config_entries.OptionsFlow):
-    def __init__(self, config_entry):
-        self._homeon_config_entry = config_entry
-
-    async def async_step_init(self, user_input=None):
-        if user_input is not None:
-            options = dict(self._homeon_config_entry.options)
-            options.update(user_input)
-
-            return self.async_create_entry(
-                title="",
-                data=options,
-            )
-
-        current = dict(self._homeon_config_entry.data)
-        current.update(dict(self._homeon_config_entry.options))
-
-        data_schema = vol.Schema(
-            {
-                vol.Required(
-                    CONF_INVERTER_GRID_CHARGING_SWITCH,
-                    default=current.get(
-                        CONF_INVERTER_GRID_CHARGING_SWITCH,
-                        DEFAULT_INVERTER_GRID_CHARGING_SWITCH,
-                    ),
-                ): SWITCH_SELECTOR,
-
-                vol.Required(
-                    CONF_INVERTER_EXPORT_SURPLUS_SWITCH,
-                    default=current.get(
-                        CONF_INVERTER_EXPORT_SURPLUS_SWITCH,
-                        DEFAULT_INVERTER_EXPORT_SURPLUS_SWITCH,
-                    ),
-                ): SWITCH_SELECTOR,
-
-                vol.Required(
-                    CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
-                    default=current.get(
-                        CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
-                        DEFAULT_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
-                    ),
-                ): NUMBER_SELECTOR,
-
-                vol.Required(
-                    CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
-                    default=current.get(
-                        CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
-                        DEFAULT_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
-                    ),
-                ): NUMBER_SELECTOR,
-
-                vol.Required(
-                    CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
-                    default=current.get(
-                        CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
-                        DEFAULT_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
-                    ),
-                ): NUMBER_SELECTOR,
-            }
-        )
-
-        return self.async_show_form(
-            step_id="init",
-            data_schema=data_schema,
         )
