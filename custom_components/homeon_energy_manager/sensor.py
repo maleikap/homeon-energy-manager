@@ -106,6 +106,14 @@ SENSORS = [
     ("learn_peak_load_w", "EMS największe godzinowe zużycie", UnitOfPower.WATT, "mdi:home-lightning-bolt"),
     ("learn_low_load_hour", "EMS godzina najniższego zużycia", None, "mdi:chart-bell-curve-cumulative"),
     ("learn_low_load_w", "EMS najniższe godzinowe zużycie", UnitOfPower.WATT, "mdi:home-lightning-bolt-outline"),
+    ("plan_weather_tomorrow", "Plan pogoda jutro", None, "mdi:weather-partly-cloudy"),
+    ("plan_pv_tomorrow_kwh", "Plan prognoza PV jutro", UnitOfEnergy.KILO_WATT_HOUR, "mdi:solar-power"),
+    ("plan_next_day_energy_balance_kwh", "Plan bilans energii jutro", UnitOfEnergy.KILO_WATT_HOUR, "mdi:scale-balance"),
+    ("plan_energy_to_keep_kwh", "Plan energia do zostawienia", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-lock"),
+    ("plan_safe_to_sell_kwh", "Plan bezpieczna energia do sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:cash-check"),
+    ("plan_safe_export_limit_w", "Plan bezpieczny limit eksportu", UnitOfPower.WATT, "mdi:transmission-tower-export"),
+    ("plan_weather_strategy", "Plan strategia pogoda", None, "mdi:weather-cloudy-clock"),
+    ("plan_reasonable_buy_window", "Plan okno normalnego zakupu", None, "mdi:cash-clock"),
 ]
 
 
@@ -135,7 +143,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.5",
+            "sw_version": "0.2.6",
         }
 
     @property

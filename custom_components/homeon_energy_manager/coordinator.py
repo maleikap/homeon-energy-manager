@@ -357,6 +357,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         inverter_discharge_current_a = self._runtime_float("inverter_discharge_current_a", HOMEON_DISCHARGE_CURRENT_A)
         inverter_safe_discharge_current_a = self._runtime_float("inverter_safe_discharge_current_a", HOMEON_SAFE_DISCHARGE_CURRENT_A)
         inverter_block_discharge_current_a = self._runtime_float("inverter_block_discharge_current_a", HOMEON_BLOCK_DISCHARGE_CURRENT_A)
+        weather_export_limit_w = min(
+            inverter_export_target_w,
+            max(0.0, self._as_float(data.get("plan_safe_export_limit_w"), inverter_export_target_w)),
+        )
 
         if not enabled:
             data["inverter_control_action"] = "HomeOn wyłączony — nie steruję falownikiem"
@@ -392,7 +396,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif mode == "SELL_BATTERY_HIGH_PRICE":
             data["inverter_control_action"] = "Najlepsza cena sprzedaży — włączam sprzedaż nadwyżki"
             await self._async_set_switch(INVERTER_GRID_CHARGING, False, actions)
-            await self._async_set_number(INVERTER_EXPORT_SURPLUS_POWER, inverter_export_target_w, actions)
+            await self._async_set_number(INVERTER_EXPORT_SURPLUS_POWER, weather_export_limit_w, actions)
             await self._async_set_number(INVERTER_MAX_DISCHARGE_CURRENT, inverter_discharge_current_a, actions)
             await self._async_set_switch(INVERTER_EXPORT_SURPLUS, True, actions)
 

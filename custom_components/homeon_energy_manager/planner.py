@@ -91,6 +91,22 @@ def _phase(hour: int) -> str:
     return "Noc / rezerwa"
 
 
+def _weather_label(pv_tomorrow_kwh: float, expected_24h_kwh: float) -> tuple[str, float]:
+    expected = max(expected_24h_kwh, 0.1)
+    ratio = pv_tomorrow_kwh / expected
+
+    if ratio >= 1.15:
+        return "Bardzo dobra produkcja PV", 0.15
+
+    if ratio >= 0.80:
+        return "Dobra produkcja PV", 0.35
+
+    if ratio >= 0.45:
+        return "Średnia produkcja PV", 0.65
+
+    return "Słaba produkcja PV", 1.00
+
+
 def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     now = dt_util.now()
     base = now.replace(minute=0, second=0, microsecond=0)
@@ -109,6 +125,7 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     night_reserve_soc = _f(data.get("night_reserve_soc"), 30.0)
     morning_target_soc = _f(data.get("morning_target_soc"), 60.0)
     available_to_sell_kwh = _f(data.get("available_to_sell_kwh"), 0.0)
+    pv_tomorrow_kwh = _f(data.get("pv_forecast_tomorrow"), 0.0)
 
     buy_series = _series_from_entity(
         coordinator,
@@ -180,8 +197,58 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     if night_need_kwh <= 0:
         night_need_kwh = avg_night_w * 8.0 / 1000.0
 
+    weather_tomorrow, weather_safety_factor = _weather_label(pv_tomorrow_kwh, day_need_kwh)
+
+    next_day_energy_balance_kwh = pv_tomorrow_kwh - day_need_kwh
+    tomorrow_deficit_kwh = max(0.0, day_need_kwh - pv_tomorrow_kwh)
+
+    reasonable_buy_threshold = max(cheapest_buy + 0.08, 0.35)
+    reasonable_buy_threshold = min(reasonable_buy_threshold, 0.55)
+
+    reasonable_buy_hour = cheapest
+
+    for item in hours:
+        if _f(item.get("buy"), 9.0) <= reasonable_buy_threshold:
+            reasonable_buy_hour = item
+            break
+
+    reasonable_buy_dt = reasonable_buy_hour.get("dt", cheapest.get("dt", base))
+    reasonable_buy_window = f"{reasonable_buy_hour.get('hour', '-')} ({_f(reasonable_buy_hour.get('buy'), cheapest_buy):.3f} PLN/kWh)"
+
+    load_until_reasonable_buy_kwh = 0.0
+
+    for item in hours:
+        dt = item.get("dt")
+        if dt is None:
+            continue
+
+        if dt <= reasonable_buy_dt:
+            load_until_reasonable_buy_kwh += _f(item.get("load_w"), avg_load_w) / 1000.0
+
+    if load_until_reasonable_buy_kwh <= 0:
+        load_until_reasonable_buy_kwh = night_need_kwh
+
+    base_keep_kwh = max(night_need_kwh, load_until_reasonable_buy_kwh)
+    weather_keep_kwh = tomorrow_deficit_kwh * weather_safety_factor
+
+    energy_to_keep_kwh = base_keep_kwh + weather_keep_kwh + 1.0
+    energy_to_keep_kwh = min(max(energy_to_keep_kwh, 0.0), battery_capacity)
+
+    current_battery_energy_kwh = battery_capacity * soc / 100.0
+
+    safe_to_sell_kwh = max(0.0, current_battery_energy_kwh - energy_to_keep_kwh)
+    safe_to_sell_kwh = min(safe_to_sell_kwh, available_to_sell_kwh)
+
+    safe_min_soc = 100.0 * energy_to_keep_kwh / max(battery_capacity, 0.1)
+    safe_min_soc = min(100.0, max(night_reserve_soc, safe_min_soc))
+
+    if safe_to_sell_kwh <= 0.2:
+        safe_export_limit_w = 0.0
+    else:
+        safe_export_limit_w = min(10000.0, max(500.0, safe_to_sell_kwh * 1000.0))
+
     night_soc_need = min(100.0, max(0.0, night_need_kwh / max(battery_capacity, 0.1) * 100.0))
-    recommended_soc = max(night_reserve_soc, night_soc_need + 8.0)
+    recommended_soc = max(night_reserve_soc, night_soc_need + 8.0, safe_min_soc)
 
     current_phase = _phase(now.hour)
     current_mode = str(data.get("mode", "NORMAL"))
@@ -194,7 +261,27 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     reason = "Brak mocniejszego sygnału z cen, PV lub profilu zużycia."
     hold_reason = "Brak potrzeby blokowania energii."
 
-    if current_mode == "EMERGENCY_RESERVE":
+    weather_strategy = (
+        f"Jutro: {weather_tomorrow}. Prognoza PV {pv_tomorrow_kwh:.2f} kWh, "
+        f"prognoza zużycia {day_need_kwh:.2f} kWh. "
+        f"Zostawiam {energy_to_keep_kwh:.2f} kWh, bezpiecznie do sprzedaży {safe_to_sell_kwh:.2f} kWh. "
+        f"Najbliższe normalne/tanie dokupienie: {reasonable_buy_window}."
+    )
+
+    if current_mode in ("SELL_BATTERY_HIGH_PRICE", "WAIT_BETTER_SELL_PRICE") and safe_to_sell_kwh <= 0.2:
+        data["mode"] = "WEATHER_HOLD_RESERVE"
+        current_mode = "WEATHER_HOLD_RESERVE"
+        data["reason"] = (
+            "Blokuję sprzedaż, bo prognoza PV na jutro i profil zużycia wymagają zostawienia energii w magazynie"
+        )
+
+    if current_mode == "WEATHER_HOLD_RESERVE":
+        next_action = "Nie sprzedawaj — rezerwa pod pogodę"
+        next_time = "teraz"
+        reason = weather_strategy
+        hold_reason = "Energia w baterii jest potrzebna do kolejnego dnia lub do najbliższego taniego/normalnego zakupu."
+
+    elif current_mode == "EMERGENCY_RESERVE":
         next_action = "Ładowanie awaryjne"
         next_time = "teraz"
         reason = "SOC jest poniżej poziomu awaryjnego."
@@ -204,7 +291,7 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         next_action = "Ładowanie z taniej energii"
         next_time = "teraz"
         reason = f"Aktualna cena zakupu jest w najtańszym oknie 24h: {buy_price_now:.3f} PLN/kWh."
-        recommended_soc = charge_target_soc
+        recommended_soc = max(recommended_soc, charge_target_soc)
 
     elif cheapest_buy + 0.04 < buy_price_now and soc < charge_target_soc:
         next_action = "Czekaj na tańsze ładowanie"
@@ -212,17 +299,23 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         reason = f"Najtańsze okno zakupu jest o {cheapest.get('hour', '-')} przy cenie {cheapest_buy:.3f} PLN/kWh."
         hold_reason = "Nie ładuję teraz, bo w planie jest tańsza energia."
 
-    elif sell_price_now >= best_sell_price - 0.005 and available_to_sell_kwh > 0.3 and soc > discharge_target_soc + 4:
-        next_action = "Sprzedaż nadwyżki"
+    elif sell_price_now >= best_sell_price - 0.005 and safe_to_sell_kwh > 0.3 and soc > safe_min_soc + 1:
+        next_action = "Sprzedaż bezpiecznej nadwyżki"
         next_time = "teraz"
-        reason = f"Teraz jest najlepsza lub prawie najlepsza cena sprzedaży: {sell_price_now:.3f} PLN/kWh."
-        recommended_soc = discharge_target_soc
+        reason = (
+            f"Teraz jest najlepsza lub prawie najlepsza cena sprzedaży: {sell_price_now:.3f} PLN/kWh. "
+            f"Sprzedaż ograniczona do bezpiecznej nadwyżki {safe_to_sell_kwh:.2f} kWh."
+        )
+        recommended_soc = safe_min_soc
 
-    elif best_sell_price > sell_price_now + 0.02 and available_to_sell_kwh > 0.3:
+    elif best_sell_price > sell_price_now + 0.02 and safe_to_sell_kwh > 0.3:
         next_action = "Trzymaj energię do sprzedaży"
         next_time = str(best_sell.get("hour", "-"))
-        reason = f"Lepsza sprzedaż planowana o {best_sell.get('hour', '-')} przy cenie {best_sell_price:.3f} PLN/kWh."
-        hold_reason = "Bateria ma wartość rynkową — warto poczekać na wyższą cenę."
+        reason = (
+            f"Lepsza sprzedaż planowana o {best_sell.get('hour', '-')} przy cenie {best_sell_price:.3f} PLN/kWh. "
+            f"Bezpieczna nadwyżka do sprzedaży: {safe_to_sell_kwh:.2f} kWh."
+        )
+        hold_reason = "Bateria ma wartość rynkową, ale EMS zostawia rezerwę pod pogodę i zużycie."
 
     elif current_phase == "Okno PV" and soc > morning_target_soc:
         next_action = "Zostaw miejsce na PV"
@@ -244,7 +337,8 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
 
     plan_overview = (
         f"{next_action}. Tani zakup: {charge_window}. "
-        f"Sprzedaż: {sell_window}. Noc: {night_need_kwh:.2f} kWh."
+        f"Sprzedaż: {sell_window}. Jutro PV: {pv_tomorrow_kwh:.2f} kWh. "
+        f"Bezpiecznie do sprzedaży: {safe_to_sell_kwh:.2f} kWh."
     )
 
     data.update({
@@ -261,6 +355,15 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         "plan_cheapest_buy_price": round(cheapest_buy, 3),
         "plan_best_sell_price": round(best_sell_price, 3),
         "plan_overview": plan_overview[:240],
+
+        "plan_weather_tomorrow": weather_tomorrow,
+        "plan_pv_tomorrow_kwh": round(pv_tomorrow_kwh, 2),
+        "plan_next_day_energy_balance_kwh": round(next_day_energy_balance_kwh, 2),
+        "plan_energy_to_keep_kwh": round(energy_to_keep_kwh, 2),
+        "plan_safe_to_sell_kwh": round(safe_to_sell_kwh, 2),
+        "plan_safe_export_limit_w": round(safe_export_limit_w, 0),
+        "plan_weather_strategy": weather_strategy[:255],
+        "plan_reasonable_buy_window": reasonable_buy_window,
     })
 
     return data
