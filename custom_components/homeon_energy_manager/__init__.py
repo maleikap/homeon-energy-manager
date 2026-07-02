@@ -7,12 +7,7 @@ from homeassistant.core import HomeAssistant
 from .const import DOMAIN
 from .coordinator import HomeOnEnergyCoordinator
 
-PLATFORMS: list[Platform] = [
-    Platform.SENSOR,
-    Platform.SWITCH,
-    Platform.NUMBER,
-    Platform.SELECT,
-]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.NUMBER]
 
 DEFAULT_RUNTIME_OPTIONS = {
     "enabled": True,
@@ -37,9 +32,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     for key, default in DEFAULT_RUNTIME_OPTIONS.items():
         runtime[key] = entry.options.get(key, default)
-
-    for key, value in entry.options.items():
-        runtime[key] = value
 
     hass.data[DOMAIN][entry.entry_id] = runtime
 

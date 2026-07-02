@@ -33,11 +33,6 @@ from .const import (
     CONF_PV_MEDIUM_FORECAST_KWH,
     CONF_PV_GOOD_FORECAST_KWH,
     CONF_PV_VERY_GOOD_FORECAST_KWH,
-    CONF_INVERTER_GRID_CHARGING_SWITCH,
-    CONF_INVERTER_EXPORT_SURPLUS_SWITCH,
-    CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
-    CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
-    CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
     DEFAULT_BATTERY_CAPACITY_KWH,
     DEFAULT_MIN_SOC,
     DEFAULT_EMERGENCY_SOC,
@@ -83,12 +78,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             return float(value)
         except Exception:
             return float(default)
-
-    def _runtime_entity(self, key: str, default: str) -> str:
-        store = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
-        value = store.get(key, self.entry.options.get(key, self.entry.data.get(key, default)))
-        text = str(value or "").strip()
-        return text if text else default
 
     def _conf_float(self, key: str, default: float) -> float:
         try:
@@ -361,12 +350,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         inverter_control = bool(store.get("inverter_control", False))
         mode = str(data.get("mode", "NORMAL"))
 
-        inverter_grid_charging = self._runtime_entity(CONF_INVERTER_GRID_CHARGING_SWITCH, INVERTER_GRID_CHARGING)
-        inverter_export_surplus = self._runtime_entity(CONF_INVERTER_EXPORT_SURPLUS_SWITCH, INVERTER_EXPORT_SURPLUS)
-        inverter_export_surplus_power = self._runtime_entity(CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER, INVERTER_EXPORT_SURPLUS_POWER)
-        inverter_max_charge_current = self._runtime_entity(CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER, INVERTER_MAX_CHARGE_CURRENT)
-        inverter_max_discharge_current = self._runtime_entity(CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER, INVERTER_MAX_DISCHARGE_CURRENT)
-
         inverter_export_target_w = self._runtime_float("inverter_export_target_w", HOMEON_EXPORT_TARGET_W)
         inverter_charge_current_a = self._runtime_float("inverter_charge_current_a", HOMEON_CHARGE_CURRENT_A)
         inverter_discharge_current_a = self._runtime_float("inverter_discharge_current_a", HOMEON_DISCHARGE_CURRENT_A)
@@ -375,7 +358,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         plan_safe_export_limit_w = self._as_float(data.get("plan_safe_export_limit_w"), inverter_export_target_w)
         plan_safe_to_sell_kwh = self._as_float(data.get("plan_safe_to_sell_kwh"), 0.0)
-        safe_export_limit_w = min(inverter_export_target_w, max(0.0, float(plan_safe_export_limit_w or 0.0)))
+        plan_energy_to_keep_kwh = self._as_float(data.get("plan_energy_to_keep_kwh"), 0.0)
+        plan_weather = str(data.get("plan_weather_tomorrow", "-"))
+        plan_strategy = str(data.get("plan_weather_strategy", "-"))
+
+        safe_export_limit_w = min(
+            inverter_export_target_w,
+            max(0.0, float(plan_safe_export_limit_w or 0.0)),
+        )
 
         weather_lock = bool(
             mode == "WEATHER_HOLD_RESERVE"
@@ -387,12 +377,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["inverter_control_safe_export_limit_w"] = round(safe_export_limit_w, 0)
         data["inverter_control_safe_to_sell_kwh"] = round(plan_safe_to_sell_kwh, 2)
         data["inverter_control_weather_lock"] = "ON" if weather_lock else "OFF"
-
-        data["inverter_entity_grid_charging"] = inverter_grid_charging
-        data["inverter_entity_export_surplus"] = inverter_export_surplus
-        data["inverter_entity_export_surplus_power"] = inverter_export_surplus_power
-        data["inverter_entity_max_charge_current"] = inverter_max_charge_current
-        data["inverter_entity_max_discharge_current"] = inverter_max_discharge_current
 
         if not enabled:
             data["inverter_control_action"] = "HomeOn wyłączony — nie steruję falownikiem"
@@ -419,64 +403,64 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         if weather_lock:
             executor_mode = "WEATHER_HOLD_RESERVE"
             action = "Pogoda/PV: blokuję sprzedaż baterii i zostawiam energię na kolejny dzień"
-            sw(inverter_export_surplus, False)
-            sw(inverter_grid_charging, False)
-            num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+            sw(INVERTER_EXPORT_SURPLUS, False)
+            sw(INVERTER_GRID_CHARGING, False)
+            num(INVERTER_MAX_DISCHARGE_CURRENT, inverter_safe_discharge_current_a)
 
         elif mode == "EMERGENCY_RESERVE":
             action = "Awaryjny SOC — włączam ładowanie z sieci i blokuję eksport"
-            sw(inverter_export_surplus, False)
-            sw(inverter_grid_charging, True)
-            num(inverter_max_charge_current, inverter_charge_current_a)
-            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+            sw(INVERTER_EXPORT_SURPLUS, False)
+            sw(INVERTER_GRID_CHARGING, True)
+            num(INVERTER_MAX_CHARGE_CURRENT, inverter_charge_current_a)
+            num(INVERTER_MAX_DISCHARGE_CURRENT, inverter_block_discharge_current_a)
 
         elif mode in ("NEGATIVE_IMPORT", "CHEAP_CHARGE"):
             action = "Tania energia — ładuję magazyn z sieci, eksport baterii zablokowany"
-            sw(inverter_export_surplus, False)
-            sw(inverter_grid_charging, True)
-            num(inverter_max_charge_current, inverter_charge_current_a)
-            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+            sw(INVERTER_EXPORT_SURPLUS, False)
+            sw(INVERTER_GRID_CHARGING, True)
+            num(INVERTER_MAX_CHARGE_CURRENT, inverter_charge_current_a)
+            num(INVERTER_MAX_DISCHARGE_CURRENT, inverter_block_discharge_current_a)
 
         elif mode == "SELL_BATTERY_HIGH_PRICE" and safe_export_limit_w > 0 and plan_safe_to_sell_kwh > 0.3:
-            action = "Sprzedaż tylko bezpiecznej nadwyżki: %.2f kWh, limit eksportu %.0f W" % (plan_safe_to_sell_kwh, safe_export_limit_w)
-            sw(inverter_grid_charging, False)
-            num(inverter_export_surplus_power, safe_export_limit_w)
-            num(inverter_max_discharge_current, inverter_discharge_current_a)
-            sw(inverter_export_surplus, True)
+            action = f"Sprzedaż tylko bezpiecznej nadwyżki: {plan_safe_to_sell_kwh:.2f} kWh, limit eksportu {safe_export_limit_w:.0f} W"
+            sw(INVERTER_GRID_CHARGING, False)
+            num(INVERTER_EXPORT_SURPLUS_POWER, safe_export_limit_w)
+            num(INVERTER_MAX_DISCHARGE_CURRENT, inverter_discharge_current_a)
+            sw(INVERTER_EXPORT_SURPLUS, True)
 
         elif mode == "SELL_BATTERY_HIGH_PRICE":
             executor_mode = "SELL_BLOCKED_NO_SAFE_SURPLUS"
             action = "Cena sprzedaży dobra, ale brak bezpiecznej nadwyżki — blokuję eksport baterii"
-            sw(inverter_export_surplus, False)
-            sw(inverter_grid_charging, False)
-            num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+            sw(INVERTER_EXPORT_SURPLUS, False)
+            sw(INVERTER_GRID_CHARGING, False)
+            num(INVERTER_MAX_DISCHARGE_CURRENT, inverter_safe_discharge_current_a)
 
         elif mode == "WAIT_BETTER_SELL_PRICE":
             action = "Czekam na lepszą cenę sprzedaży — blokuję sprzedaż baterii"
-            sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+            sw(INVERTER_GRID_CHARGING, False)
+            sw(INVERTER_EXPORT_SURPLUS, False)
+            num(INVERTER_MAX_DISCHARGE_CURRENT, inverter_safe_discharge_current_a)
 
         elif mode == "PV_CHARGE":
             action = "Ładowanie z PV — ładowanie z sieci wyłączone, eksport baterii zablokowany"
-            sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_max_charge_current, inverter_charge_current_a)
-            num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+            sw(INVERTER_GRID_CHARGING, False)
+            sw(INVERTER_EXPORT_SURPLUS, False)
+            num(INVERTER_MAX_CHARGE_CURRENT, inverter_charge_current_a)
+            num(INVERTER_MAX_DISCHARGE_CURRENT, inverter_safe_discharge_current_a)
 
         elif mode == "EXPENSIVE_SELF_USE":
             action = "Droga energia — bateria pracuje na dom, bez sprzedaży do sieci"
-            sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_max_discharge_current, inverter_discharge_current_a)
+            sw(INVERTER_GRID_CHARGING, False)
+            sw(INVERTER_EXPORT_SURPLUS, False)
+            num(INVERTER_MAX_DISCHARGE_CURRENT, inverter_discharge_current_a)
 
         else:
             executor_mode = "NORMAL_SAFE"
             action = "Normalna praca — bez ładowania z sieci i bez wymuszonej sprzedaży"
-            sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_max_charge_current, inverter_charge_current_a)
-            num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+            sw(INVERTER_GRID_CHARGING, False)
+            sw(INVERTER_EXPORT_SURPLUS, False)
+            num(INVERTER_MAX_CHARGE_CURRENT, inverter_charge_current_a)
+            num(INVERTER_MAX_DISCHARGE_CURRENT, inverter_safe_discharge_current_a)
 
         data["inverter_control_executor_mode"] = executor_mode
         data["inverter_control_action"] = action
@@ -486,7 +470,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             if domain == "switch":
                 preview.append(entity_id + ": " + ("ON" if bool(value) else "OFF"))
             else:
-                preview.append(entity_id + ": " + ("%g" % float(value)))
+                preview.append(f"{entity_id}: {float(value):g}")
 
         if dry_run:
             data["inverter_control_last_result"] = "DRY-RUN: " + " | ".join(preview)
@@ -494,7 +478,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             return data
 
         control_hash = "|".join(preview)
-        now_ts = dt_util.now().timestamp()
+        now_ts = dt_util.utcnow().timestamp()
         last_hash = getattr(self, "_homeon_last_control_hash", None)
         last_ts = getattr(self, "_homeon_last_control_ts", 0.0)
 
@@ -533,11 +517,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         pv_medium = self._conf_float(CONF_PV_MEDIUM_FORECAST_KWH, DEFAULT_PV_MEDIUM_FORECAST_KWH)
         pv_good = self._conf_float(CONF_PV_GOOD_FORECAST_KWH, DEFAULT_PV_GOOD_FORECAST_KWH)
         pv_very_good = self._conf_float(CONF_PV_VERY_GOOD_FORECAST_KWH, DEFAULT_PV_VERY_GOOD_FORECAST_KWH)
-    CONF_INVERTER_GRID_CHARGING_SWITCH,
-    CONF_INVERTER_EXPORT_SURPLUS_SWITCH,
-    CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
-    CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
-    CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
 
         battery_discharge_positive = self._conf_bool(CONF_BATTERY_DISCHARGE_POSITIVE, True)
         grid_import_positive = self._conf_bool(CONF_GRID_IMPORT_POSITIVE, True)
