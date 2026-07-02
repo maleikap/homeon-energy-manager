@@ -468,7 +468,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         preview = []
         for domain, entity_id, value in desired:
             if domain == "switch":
-                preview.append(f"{entity_id}: {ON if value else OFF}")
+                preview.append(f"{entity_id}: {'ON' if value else 'OFF'}")
             else:
                 preview.append(f"{entity_id}: {float(value):g}")
 
