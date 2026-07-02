@@ -43,7 +43,7 @@ class HomeOnSwitch(CoordinatorEntity, SwitchEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.0",
+            "sw_version": "0.2.5",
         }
 
     @property
@@ -55,12 +55,18 @@ class HomeOnSwitch(CoordinatorEntity, SwitchEntity):
             )
         )
 
-    async def async_turn_on(self, **kwargs):
-        self.hass.data[DOMAIN][self._entry.entry_id][self._key] = True
+    async def _set_state(self, value: bool):
+        self.hass.data[DOMAIN][self._entry.entry_id][self._key] = value
+
+        options = dict(self._entry.options)
+        options[self._key] = value
+        self.hass.config_entries.async_update_entry(self._entry, options=options)
+
         self.async_write_ha_state()
         await self.coordinator.async_request_refresh()
 
+    async def async_turn_on(self, **kwargs):
+        await self._set_state(True)
+
     async def async_turn_off(self, **kwargs):
-        self.hass.data[DOMAIN][self._entry.entry_id][self._key] = False
-        self.async_write_ha_state()
-        await self.coordinator.async_request_refresh()
+        await self._set_state(False)

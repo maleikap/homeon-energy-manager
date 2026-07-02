@@ -59,6 +59,53 @@ SENSORS = [
     ("free_space_kwh", "Wolne miejsce w magazynie", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-outline"),
     ("energy_to_charge_target_kwh", "Energia do celu ładowania", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-clock"),
     ("energy_above_morning_target_kwh", "Energia ponad cel poranny", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-check"),
+    ("learn_samples", "EMS próbki nauki", None, "mdi:counter"),
+    ("learn_runtime_hours", "EMS czas nauki", "h", "mdi:clock-outline"),
+    ("learn_confidence", "EMS pewność nauki", PERCENT, "mdi:brain"),
+    ("learn_last_update", "EMS ostatnia nauka", None, "mdi:update"),
+
+    ("learn_avg_load_w", "EMS średnie zużycie domu", UnitOfPower.WATT, "mdi:home-lightning-bolt"),
+    ("learn_avg_day_load_w", "EMS średnie zużycie dzień", UnitOfPower.WATT, "mdi:white-balance-sunny"),
+    ("learn_avg_night_load_w", "EMS średnie zużycie noc", UnitOfPower.WATT, "mdi:weather-night"),
+    ("learn_estimated_daily_consumption_kwh", "EMS szacowane zużycie dobowe", UnitOfEnergy.KILO_WATT_HOUR, "mdi:calendar-today"),
+    ("learn_estimated_night_consumption_kwh", "EMS szacowane zużycie nocne", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-night"),
+
+    ("learn_avg_pv_w", "EMS średnia produkcja PV", UnitOfPower.WATT, "mdi:solar-power"),
+    ("learn_avg_grid_import_w", "EMS średni import", UnitOfPower.WATT, "mdi:transmission-tower-import"),
+    ("learn_avg_grid_export_w", "EMS średni eksport", UnitOfPower.WATT, "mdi:transmission-tower-export"),
+    ("learn_avg_battery_charge_w", "EMS średnie ładowanie baterii", UnitOfPower.WATT, "mdi:battery-arrow-up"),
+    ("learn_avg_battery_discharge_w", "EMS średnie rozładowanie baterii", UnitOfPower.WATT, "mdi:battery-arrow-down"),
+    ("learn_avg_deye_self_power_w", "EMS średni pobór falownika", UnitOfPower.WATT, "mdi:power-plug"),
+
+    ("learn_energy_load_kwh", "EMS energia domu", UnitOfEnergy.KILO_WATT_HOUR, "mdi:home-lightning-bolt"),
+    ("learn_energy_pv_kwh", "EMS energia PV", UnitOfEnergy.KILO_WATT_HOUR, "mdi:solar-power"),
+    ("learn_energy_grid_import_kwh", "EMS energia import", UnitOfEnergy.KILO_WATT_HOUR, "mdi:transmission-tower-import"),
+    ("learn_energy_grid_export_kwh", "EMS energia eksport", UnitOfEnergy.KILO_WATT_HOUR, "mdi:transmission-tower-export"),
+    ("learn_energy_battery_charge_kwh", "EMS energia ładowania baterii", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-arrow-up"),
+    ("learn_energy_battery_discharge_kwh", "EMS energia rozładowania baterii", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-arrow-down"),
+    ("learn_energy_deye_self_kwh", "EMS energia poboru falownika", UnitOfEnergy.KILO_WATT_HOUR, "mdi:power-plug"),
+
+    ("learn_avg_buy_price", "EMS średnia cena zakupu", "PLN/kWh", "mdi:cash-plus"),
+    ("learn_avg_sell_price", "EMS średnia cena sprzedaży", "PLN/kWh", "mdi:cash-minus"),
+    ("learn_best_sell_price_seen", "EMS najlepsza zauważona cena sprzedaży", "PLN/kWh", "mdi:cash-star"),
+    ("learn_most_common_mode", "EMS najczęstszy tryb", None, "mdi:state-machine"),
+    ("plan_now_phase", "Plan faza dnia", None, "mdi:weather-partly-clock"),
+    ("plan_recommended_soc", "Plan zalecany SOC", PERCENT, "mdi:battery-check"),
+    ("plan_next_action", "Plan następna akcja", None, "mdi:calendar-arrow-right"),
+    ("plan_next_action_time", "Plan godzina następnej akcji", None, "mdi:clock-outline"),
+    ("plan_next_action_reason", "Plan powód następnej akcji", None, "mdi:text-box-check"),
+    ("plan_charge_window", "Plan okno taniego ładowania", None, "mdi:battery-clock"),
+    ("plan_sell_window", "Plan okno najlepszej sprzedaży", None, "mdi:cash-clock"),
+    ("plan_hold_reason", "Plan powód trzymania energii", None, "mdi:battery-lock"),
+    ("plan_expected_night_consumption_kwh", "Plan prognoza zużycia nocnego", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-night"),
+    ("plan_expected_day_consumption_kwh", "Plan prognoza zużycia 24h", UnitOfEnergy.KILO_WATT_HOUR, "mdi:calendar-today"),
+    ("plan_cheapest_buy_price", "Plan najtańsza cena zakupu", "PLN/kWh", "mdi:cash-plus"),
+    ("plan_best_sell_price", "Plan najlepsza cena sprzedaży", "PLN/kWh", "mdi:cash-minus"),
+    ("plan_overview", "Plan 24h podsumowanie", None, "mdi:clipboard-text-clock"),
+    ("learn_peak_load_hour", "EMS godzina największego zużycia", None, "mdi:chart-bell-curve"),
+    ("learn_peak_load_w", "EMS największe godzinowe zużycie", UnitOfPower.WATT, "mdi:home-lightning-bolt"),
+    ("learn_low_load_hour", "EMS godzina najniższego zużycia", None, "mdi:chart-bell-curve-cumulative"),
+    ("learn_low_load_w", "EMS najniższe godzinowe zużycie", UnitOfPower.WATT, "mdi:home-lightning-bolt-outline"),
 ]
 
 
@@ -88,7 +135,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.0",
+            "sw_version": "0.2.5",
         }
 
     @property
