@@ -119,6 +119,11 @@ SENSORS = [
     ("inverter_control_safe_to_sell_kwh", "Sterowanie bezpieczna energia do sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:cash-check"),
     ("inverter_control_weather_lock", "Sterowanie blokada pogodowa", None, "mdi:weather-cloudy-alert"),
     ("inverter_control_last_run", "Sterowanie ostatnie wykonanie", None, "mdi:clock-check"),
+    ("inverter_entity_grid_charging", "Falownik encja ładowania z sieci", None, "mdi:toggle-switch"),
+    ("inverter_entity_export_surplus", "Falownik encja eksportu nadwyżki", None, "mdi:toggle-switch"),
+    ("inverter_entity_export_surplus_power", "Falownik encja mocy eksportu", None, "mdi:numeric"),
+    ("inverter_entity_max_charge_current", "Falownik encja prądu ładowania", None, "mdi:numeric"),
+    ("inverter_entity_max_discharge_current", "Falownik encja prądu rozładowania", None, "mdi:numeric"),
 ]
 
 
@@ -148,7 +153,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.15",
+            "sw_version": "0.2.16",
         }
 
     @property
