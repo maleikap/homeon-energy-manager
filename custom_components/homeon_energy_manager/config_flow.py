@@ -3,6 +3,7 @@ from __future__ import annotations
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
@@ -66,6 +67,7 @@ class HomeOnEnergyManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     @staticmethod
+    @callback
     def async_get_options_flow(config_entry):
         return HomeOnEnergyManagerOptionsFlow(config_entry)
 
@@ -119,11 +121,11 @@ class HomeOnEnergyManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 class HomeOnEnergyManagerOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry):
-        self.config_entry = config_entry
+        self._homeon_config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
-            options = dict(self.config_entry.options)
+            options = dict(self._homeon_config_entry.options)
             options.update(user_input)
 
             return self.async_create_entry(
@@ -131,34 +133,49 @@ class HomeOnEnergyManagerOptionsFlow(config_entries.OptionsFlow):
                 data=options,
             )
 
-        current = dict(self.config_entry.data)
-        current.update(dict(self.config_entry.options))
+        current = dict(self._homeon_config_entry.data)
+        current.update(dict(self._homeon_config_entry.options))
 
         data_schema = vol.Schema(
             {
                 vol.Required(
                     CONF_INVERTER_GRID_CHARGING_SWITCH,
-                    default=current.get(CONF_INVERTER_GRID_CHARGING_SWITCH, DEFAULT_INVERTER_GRID_CHARGING_SWITCH),
+                    default=current.get(
+                        CONF_INVERTER_GRID_CHARGING_SWITCH,
+                        DEFAULT_INVERTER_GRID_CHARGING_SWITCH,
+                    ),
                 ): SWITCH_SELECTOR,
 
                 vol.Required(
                     CONF_INVERTER_EXPORT_SURPLUS_SWITCH,
-                    default=current.get(CONF_INVERTER_EXPORT_SURPLUS_SWITCH, DEFAULT_INVERTER_EXPORT_SURPLUS_SWITCH),
+                    default=current.get(
+                        CONF_INVERTER_EXPORT_SURPLUS_SWITCH,
+                        DEFAULT_INVERTER_EXPORT_SURPLUS_SWITCH,
+                    ),
                 ): SWITCH_SELECTOR,
 
                 vol.Required(
                     CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
-                    default=current.get(CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER, DEFAULT_INVERTER_EXPORT_SURPLUS_POWER_NUMBER),
+                    default=current.get(
+                        CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
+                        DEFAULT_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
+                    ),
                 ): NUMBER_SELECTOR,
 
                 vol.Required(
                     CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
-                    default=current.get(CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER, DEFAULT_INVERTER_MAX_CHARGE_CURRENT_NUMBER),
+                    default=current.get(
+                        CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
+                        DEFAULT_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
+                    ),
                 ): NUMBER_SELECTOR,
 
                 vol.Required(
                     CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
-                    default=current.get(CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER, DEFAULT_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER),
+                    default=current.get(
+                        CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
+                        DEFAULT_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
+                    ),
                 ): NUMBER_SELECTOR,
             }
         )
