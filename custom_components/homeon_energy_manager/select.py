@@ -89,7 +89,7 @@ class HomeOnInverterEntitySelect(CoordinatorEntity, SelectEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.11",
+            "sw_version": "0.2.12",
         }
 
     @property
