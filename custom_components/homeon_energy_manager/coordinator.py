@@ -772,6 +772,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "charge_target_soc": round(charge_target_soc, 1),
             "discharge_target_soc": round(discharge_target_soc, 1),
 
+            "target_source": target_source,
+            "target_learning_weight": round(learning_weight * 100.0, 0),
+            "target_expected_night_consumption_kwh": round(target_expected_night_consumption_kwh, 2),
+            "target_expected_24h_consumption_kwh": round(target_expected_24h_consumption_kwh, 2),
+            "target_pv_coverage_percent": round(target_pv_coverage_percent, 0),
+            "target_required_reserve_kwh": round(target_required_reserve_kwh, 2),
+            "target_reason": target_reason,
+
             "available_to_sell_kwh": round(available_to_sell_kwh, 2),
             "free_space_kwh": round(free_space_kwh, 2),
             "energy_to_charge_target_kwh": round(energy_to_charge_target_kwh, 2),
