@@ -126,6 +126,13 @@ SENSORS = [
     ("inverter_entity_max_discharge_current", "Falownik encja prądu rozładowania", None, "mdi:numeric"),
     ("inverter_control_config_source", "Falownik źródło konfiguracji", None, "mdi:cog"),
     ("inverter_control_dry_run", "Falownik dry-run", None, "mdi:test-tube"),
+    ("target_source", "Cel źródło obliczeń", None, "mdi:brain"),
+    ("target_learning_weight", "Cel udział nauki", PERCENT, "mdi:percent"),
+    ("target_expected_night_consumption_kwh", "Cel prognoza zużycia nocnego", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-night"),
+    ("target_expected_24h_consumption_kwh", "Cel prognoza zużycia 24h", UnitOfEnergy.KILO_WATT_HOUR, "mdi:calendar-today"),
+    ("target_pv_coverage_percent", "Cel pokrycie PV jutro", PERCENT, "mdi:solar-power"),
+    ("target_required_reserve_kwh", "Cel wymagana rezerwa energii", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-lock"),
+    ("target_reason", "Cel powód obliczeń", None, "mdi:text-box-check"),
 ]
 
 
@@ -155,7 +162,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.17",
+            "sw_version": "0.2.18",
         }
 
     @property

@@ -587,20 +587,113 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             min(100.0, (night_consumption_kwh * night_safety_margin / max(battery_capacity_kwh, 0.1)) * 100.0),
         )
 
-        if pv_tomorrow >= pv_very_good:
-            morning_target_soc = 50.0
-            charge_target_soc = 55.0
-        elif pv_tomorrow >= pv_good:
-            morning_target_soc = 60.0
-            charge_target_soc = 65.0
-        elif pv_tomorrow >= pv_medium:
-            morning_target_soc = 72.0
-            charge_target_soc = 78.0
-        else:
-            morning_target_soc = 90.0
-            charge_target_soc = 92.0
+        # HOMEON_ADAPTIVE_TARGETS_START
+        learn = getattr(self, "_homeon_learning", {})
+        if not isinstance(learn, dict):
+            learn = {}
 
-        discharge_target_soc = night_reserve_soc
+        learning_hours = self._as_float(learn.get("runtime_hours"), 0.0) or 0.0
+        learning_weight = min(1.0, max(0.0, learning_hours / 24.0))
+
+        avg_load_w = self._as_float(learn.get("avg_load_w"), load_power) or load_power
+        avg_night_load_w = self._as_float(learn.get("avg_night_load_w"), avg_load_w) or avg_load_w
+
+        configured_night_kwh = max(0.0, night_consumption_kwh * night_safety_margin)
+        learned_night_kwh = max(0.0, avg_night_load_w * 8.0 / 1000.0 * night_safety_margin)
+
+        target_expected_night_consumption_kwh = (
+            configured_night_kwh * (1.0 - learning_weight)
+            + learned_night_kwh * learning_weight
+        )
+
+        fallback_daily_kwh = max(
+            night_consumption_kwh * 2.4,
+            max(0.0, load_power) * 24.0 / 1000.0,
+        )
+
+        learned_daily_kwh = max(0.0, avg_load_w * 24.0 / 1000.0)
+
+        target_expected_24h_consumption_kwh = (
+            fallback_daily_kwh * (1.0 - learning_weight)
+            + learned_daily_kwh * learning_weight
+        )
+
+        pv_coverage_ratio = pv_tomorrow / max(target_expected_24h_consumption_kwh, 0.1)
+
+        if pv_coverage_ratio >= 1.15:
+            target_weather_class = "PV bardzo dobre"
+            weather_factor = 0.10
+            pv_target_soc = 58.0
+        elif pv_coverage_ratio >= 0.80:
+            target_weather_class = "PV dobre"
+            weather_factor = 0.30
+            pv_target_soc = 68.0
+        elif pv_coverage_ratio >= 0.45:
+            target_weather_class = "PV średnie"
+            weather_factor = 0.60
+            pv_target_soc = 80.0
+        else:
+            target_weather_class = "PV słabe"
+            weather_factor = 1.00
+            pv_target_soc = 90.0
+
+        tomorrow_deficit_kwh = max(0.0, target_expected_24h_consumption_kwh - pv_tomorrow)
+
+        target_required_reserve_kwh = (
+            target_expected_night_consumption_kwh
+            + tomorrow_deficit_kwh * weather_factor
+            + 1.0
+        )
+
+        target_required_reserve_kwh = min(
+            max(target_required_reserve_kwh, 0.0),
+            battery_capacity_kwh,
+        )
+
+        night_reserve_soc = max(
+            min_night_reserve_soc,
+            target_expected_night_consumption_kwh / max(battery_capacity_kwh, 0.1) * 100.0,
+        )
+
+        night_reserve_soc = min(
+            95.0,
+            max(min_soc, night_reserve_soc),
+        )
+
+        target_required_reserve_soc = target_required_reserve_kwh / max(battery_capacity_kwh, 0.1) * 100.0
+
+        discharge_target_soc = min(
+            95.0,
+            max(min_soc, night_reserve_soc, target_required_reserve_soc),
+        )
+
+        morning_target_soc = min(
+            95.0,
+            max(night_reserve_soc, discharge_target_soc),
+        )
+
+        charge_target_soc = min(
+            95.0,
+            max(morning_target_soc + 5.0, pv_target_soc),
+        )
+
+        target_pv_coverage_percent = min(300.0, max(0.0, pv_coverage_ratio * 100.0))
+
+        if learning_weight >= 0.80:
+            target_source = "Nauka EMS"
+        elif learning_weight > 0.05:
+            target_source = "Nauka EMS + konfiguracja"
+        else:
+            target_source = "Konfiguracja startowa"
+
+        target_reason = (
+            f"{target_weather_class}: PV jutro {pv_tomorrow:.1f} kWh, "
+            f"prognoza zużycia {target_expected_24h_consumption_kwh:.1f} kWh, "
+            f"noc {target_expected_night_consumption_kwh:.1f} kWh, "
+            f"rezerwa {target_required_reserve_kwh:.1f} kWh, "
+            f"cel ładowania {charge_target_soc:.0f}%"
+        )[:240]
+        # HOMEON_ADAPTIVE_TARGETS_END
 
         available_to_sell_kwh = max(0.0, battery_capacity_kwh * (soc - discharge_target_soc) / 100.0)
         free_space_kwh = max(0.0, battery_capacity_kwh * (100.0 - soc) / 100.0)
