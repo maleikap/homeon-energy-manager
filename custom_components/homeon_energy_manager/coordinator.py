@@ -33,6 +33,11 @@ from .const import (
     CONF_PV_MEDIUM_FORECAST_KWH,
     CONF_PV_GOOD_FORECAST_KWH,
     CONF_PV_VERY_GOOD_FORECAST_KWH,
+    CONF_INVERTER_GRID_CHARGING_SWITCH,
+    CONF_INVERTER_EXPORT_SURPLUS_SWITCH,
+    CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
+    CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
+    CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
     DEFAULT_BATTERY_CAPACITY_KWH,
     DEFAULT_MIN_SOC,
     DEFAULT_EMERGENCY_SOC,
@@ -361,34 +366,15 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         inverter_control = bool(store.get("inverter_control", False))
         mode = str(data.get("mode", "NORMAL"))
 
-        # HOMEON_INVERTER_HELPERS_START
-        inverter_grid_charging = self._state_text_by_entity(
-            "input_text.homeon_inverter_grid_charging_switch",
-            INVERTER_GRID_CHARGING,
-        )
-        inverter_export_surplus = self._state_text_by_entity(
-            "input_text.homeon_inverter_export_surplus_switch",
-            INVERTER_EXPORT_SURPLUS,
-        )
-        inverter_export_surplus_power = self._state_text_by_entity(
-            "input_text.homeon_inverter_export_surplus_power_number",
-            INVERTER_EXPORT_SURPLUS_POWER,
-        )
-        inverter_max_charge_current = self._state_text_by_entity(
-            "input_text.homeon_inverter_max_charge_current_number",
-            INVERTER_MAX_CHARGE_CURRENT,
-        )
-        inverter_max_discharge_current = self._state_text_by_entity(
-            "input_text.homeon_inverter_max_discharge_current_number",
-            INVERTER_MAX_DISCHARGE_CURRENT,
-        )
+        def conf_entity(key: str, default: str) -> str:
+            text = str(self.entry.data.get(key, default) or "").strip()
+            return text if text else default
 
-        data["inverter_entity_grid_charging"] = inverter_grid_charging
-        data["inverter_entity_export_surplus"] = inverter_export_surplus
-        data["inverter_entity_export_surplus_power"] = inverter_export_surplus_power
-        data["inverter_entity_max_charge_current"] = inverter_max_charge_current
-        data["inverter_entity_max_discharge_current"] = inverter_max_discharge_current
-        # HOMEON_INVERTER_HELPERS_END
+        inverter_grid_charging = conf_entity(CONF_INVERTER_GRID_CHARGING_SWITCH, INVERTER_GRID_CHARGING)
+        inverter_export_surplus = conf_entity(CONF_INVERTER_EXPORT_SURPLUS_SWITCH, INVERTER_EXPORT_SURPLUS)
+        inverter_export_surplus_power = conf_entity(CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER, INVERTER_EXPORT_SURPLUS_POWER)
+        inverter_max_charge_current = conf_entity(CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER, INVERTER_MAX_CHARGE_CURRENT)
+        inverter_max_discharge_current = conf_entity(CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER, INVERTER_MAX_DISCHARGE_CURRENT)
 
         inverter_export_target_w = self._runtime_float("inverter_export_target_w", HOMEON_EXPORT_TARGET_W)
         inverter_charge_current_a = self._runtime_float("inverter_charge_current_a", HOMEON_CHARGE_CURRENT_A)
@@ -398,14 +384,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         plan_safe_export_limit_w = self._as_float(data.get("plan_safe_export_limit_w"), inverter_export_target_w)
         plan_safe_to_sell_kwh = self._as_float(data.get("plan_safe_to_sell_kwh"), 0.0)
-        plan_energy_to_keep_kwh = self._as_float(data.get("plan_energy_to_keep_kwh"), 0.0)
-        plan_weather = str(data.get("plan_weather_tomorrow", "-"))
-        plan_strategy = str(data.get("plan_weather_strategy", "-"))
-
-        safe_export_limit_w = min(
-            inverter_export_target_w,
-            max(0.0, float(plan_safe_export_limit_w or 0.0)),
-        )
+        safe_export_limit_w = min(inverter_export_target_w, max(0.0, float(plan_safe_export_limit_w or 0.0)))
 
         weather_lock = bool(
             mode == "WEATHER_HOLD_RESERVE"
@@ -413,10 +392,18 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         )
 
         data["inverter_control_enabled"] = inverter_control
+        data["inverter_control_dry_run"] = "ON" if dry_run else "OFF"
+        data["inverter_control_config_source"] = "Konfiguracja integracji"
         data["inverter_control_executor_mode"] = mode
         data["inverter_control_safe_export_limit_w"] = round(safe_export_limit_w, 0)
         data["inverter_control_safe_to_sell_kwh"] = round(plan_safe_to_sell_kwh, 2)
         data["inverter_control_weather_lock"] = "ON" if weather_lock else "OFF"
+
+        data["inverter_entity_grid_charging"] = inverter_grid_charging
+        data["inverter_entity_export_surplus"] = inverter_export_surplus
+        data["inverter_entity_export_surplus_power"] = inverter_export_surplus_power
+        data["inverter_entity_max_charge_current"] = inverter_max_charge_current
+        data["inverter_entity_max_discharge_current"] = inverter_max_discharge_current
 
         if not enabled:
             data["inverter_control_action"] = "HomeOn wyłączony — nie steruję falownikiem"
@@ -462,7 +449,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
 
         elif mode == "SELL_BATTERY_HIGH_PRICE" and safe_export_limit_w > 0 and plan_safe_to_sell_kwh > 0.3:
-            action = f"Sprzedaż tylko bezpiecznej nadwyżki: {plan_safe_to_sell_kwh:.2f} kWh, limit eksportu {safe_export_limit_w:.0f} W"
+            action = "Sprzedaż tylko bezpiecznej nadwyżki: %.2f kWh, limit eksportu %.0f W" % (plan_safe_to_sell_kwh, safe_export_limit_w)
             sw(inverter_grid_charging, False)
             num(inverter_export_surplus_power, safe_export_limit_w)
             num(inverter_max_discharge_current, inverter_discharge_current_a)
@@ -510,7 +497,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             if domain == "switch":
                 preview.append(entity_id + ": " + ("ON" if bool(value) else "OFF"))
             else:
-                preview.append(f"{entity_id}: {float(value):g}")
+                preview.append(entity_id + ": " + ("%g" % float(value)))
 
         if dry_run:
             data["inverter_control_last_result"] = "DRY-RUN: " + " | ".join(preview)
@@ -518,7 +505,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             return data
 
         control_hash = "|".join(preview)
-        now_ts = dt_util.utcnow().timestamp()
+        now_ts = dt_util.now().timestamp()
         last_hash = getattr(self, "_homeon_last_control_hash", None)
         last_ts = getattr(self, "_homeon_last_control_ts", 0.0)
 

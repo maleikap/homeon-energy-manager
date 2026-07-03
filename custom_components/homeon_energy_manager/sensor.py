@@ -124,6 +124,8 @@ SENSORS = [
     ("inverter_entity_export_surplus_power", "Falownik encja mocy eksportu", None, "mdi:numeric"),
     ("inverter_entity_max_charge_current", "Falownik encja prądu ładowania", None, "mdi:numeric"),
     ("inverter_entity_max_discharge_current", "Falownik encja prądu rozładowania", None, "mdi:numeric"),
+    ("inverter_control_config_source", "Falownik źródło konfiguracji", None, "mdi:cog"),
+    ("inverter_control_dry_run", "Falownik dry-run", None, "mdi:test-tube"),
 ]
 
 
@@ -153,7 +155,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.16",
+            "sw_version": "0.2.17",
         }
 
     @property

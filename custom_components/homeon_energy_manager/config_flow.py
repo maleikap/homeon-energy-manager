@@ -27,6 +27,11 @@ from .const import (
     CONF_PV_MEDIUM_FORECAST_KWH,
     CONF_PV_GOOD_FORECAST_KWH,
     CONF_PV_VERY_GOOD_FORECAST_KWH,
+    CONF_INVERTER_GRID_CHARGING_SWITCH,
+    CONF_INVERTER_EXPORT_SURPLUS_SWITCH,
+    CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
+    CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
+    CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
     DEFAULT_BATTERY_CAPACITY_KWH,
     DEFAULT_MIN_SOC,
     DEFAULT_EMERGENCY_SOC,
@@ -36,11 +41,24 @@ from .const import (
     DEFAULT_PV_MEDIUM_FORECAST_KWH,
     DEFAULT_PV_GOOD_FORECAST_KWH,
     DEFAULT_PV_VERY_GOOD_FORECAST_KWH,
+    DEFAULT_INVERTER_GRID_CHARGING_SWITCH,
+    DEFAULT_INVERTER_EXPORT_SURPLUS_SWITCH,
+    DEFAULT_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
+    DEFAULT_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
+    DEFAULT_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
 )
 
 
 SENSOR_SELECTOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="sensor")
+)
+
+SWITCH_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="switch")
+)
+
+NUMBER_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="number")
 )
 
 
@@ -85,6 +103,31 @@ class HomeOnEnergyManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_PV_MEDIUM_FORECAST_KWH, default=DEFAULT_PV_MEDIUM_FORECAST_KWH): vol.Coerce(float),
                 vol.Required(CONF_PV_GOOD_FORECAST_KWH, default=DEFAULT_PV_GOOD_FORECAST_KWH): vol.Coerce(float),
                 vol.Required(CONF_PV_VERY_GOOD_FORECAST_KWH, default=DEFAULT_PV_VERY_GOOD_FORECAST_KWH): vol.Coerce(float),
+
+                vol.Required(
+                    CONF_INVERTER_GRID_CHARGING_SWITCH,
+                    default=DEFAULT_INVERTER_GRID_CHARGING_SWITCH,
+                ): SWITCH_SELECTOR,
+
+                vol.Required(
+                    CONF_INVERTER_EXPORT_SURPLUS_SWITCH,
+                    default=DEFAULT_INVERTER_EXPORT_SURPLUS_SWITCH,
+                ): SWITCH_SELECTOR,
+
+                vol.Required(
+                    CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
+                    default=DEFAULT_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
+                ): NUMBER_SELECTOR,
+
+                vol.Required(
+                    CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
+                    default=DEFAULT_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
+                ): NUMBER_SELECTOR,
+
+                vol.Required(
+                    CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
+                    default=DEFAULT_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
+                ): NUMBER_SELECTOR,
             }
         )
 
