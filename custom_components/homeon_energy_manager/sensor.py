@@ -133,6 +133,15 @@ SENSORS = [
     ("target_pv_coverage_percent", "Cel pokrycie PV jutro", PERCENT, "mdi:solar-power"),
     ("target_required_reserve_kwh", "Cel wymagana rezerwa energii", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-lock"),
     ("target_reason", "Cel powód obliczeń", None, "mdi:text-box-check"),
+    ("inverter_deye_plan", "Deye plan komend", None, "mdi:clipboard-list"),
+    ("inverter_deye_current_states", "Deye aktualne stany", None, "mdi:eye-check"),
+    ("inverter_deye_changes", "Deye plan zmian", None, "mdi:compare-horizontal"),
+    ("inverter_deye_changed_only", "Deye tylko realne zmiany", None, "mdi:playlist-check"),
+    ("inverter_deye_services", "Deye usługi HA", None, "mdi:api"),
+    ("inverter_deye_command_count", "Deye liczba komend", None, "mdi:counter"),
+    ("inverter_deye_changed_count", "Deye liczba realnych zmian", None, "mdi:counter"),
+    ("inverter_deye_unchanged_count", "Deye liczba bez zmian", None, "mdi:counter"),
+    ("inverter_deye_test_mode", "Deye tryb testu", None, "mdi:test-tube"),
 ]
 
 
@@ -162,7 +171,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.19",
+            "sw_version": "0.2.26",
         }
 
     @property

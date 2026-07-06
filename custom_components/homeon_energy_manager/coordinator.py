@@ -405,6 +405,16 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["inverter_entity_max_charge_current"] = inverter_max_charge_current
         data["inverter_entity_max_discharge_current"] = inverter_max_discharge_current
 
+        data["inverter_deye_command_count"] = 0
+        data["inverter_deye_changed_count"] = 0
+        data["inverter_deye_unchanged_count"] = 0
+        data["inverter_deye_plan"] = "Brak komend"
+        data["inverter_deye_current_states"] = "Brak komend"
+        data["inverter_deye_changes"] = "Brak komend"
+        data["inverter_deye_changed_only"] = "Brak realnych zmian"
+        data["inverter_deye_services"] = "Brak usług HA"
+        data["inverter_deye_test_mode"] = "OFF"
+
         if not enabled:
             data["inverter_control_action"] = "HomeOn wyłączony — nie steruję falownikiem"
             data["inverter_control_last_result"] = "OFF"
@@ -493,14 +503,102 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["inverter_control_action"] = action
 
         preview = []
-        for domain, entity_id, value in desired:
+        change_preview = []
+        changed_preview = []
+        unchanged_preview = []
+        service_preview = []
+        current_preview = []
+
+        def _short(text: str, limit: int = 240) -> str:
+            text = str(text or "")
+            return text if len(text) <= limit else text[: limit - 3] + "..."
+
+        def _current_state(entity_id: str) -> str:
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                return "BRAK_ENCJI"
+            return str(state.state)
+
+        def _target_state(domain: str, value: Any) -> str:
             if domain == "switch":
-                preview.append(entity_id + ": " + ("ON" if bool(value) else "OFF"))
+                return "on" if bool(value) else "off"
+            try:
+                return "%g" % float(value)
+            except Exception:
+                return str(value)
+
+        def _display_target(domain: str, value: Any) -> str:
+            if domain == "switch":
+                return "ON" if bool(value) else "OFF"
+            try:
+                return "%g" % float(value)
+            except Exception:
+                return str(value)
+
+        def _same_state(domain: str, current: str, value: Any) -> bool:
+            if current == "BRAK_ENCJI":
+                return False
+
+            if domain == "switch":
+                wanted = bool(value)
+                current_bool = str(current).lower() in ("on", "true", "1")
+                return current_bool == wanted
+
+            if domain == "number":
+                try:
+                    return abs(float(str(current).replace(",", ".")) - float(value)) <= 0.05
+                except Exception:
+                    return False
+
+            return False
+
+        for domain, entity_id, value in desired:
+            current = _current_state(entity_id)
+            target = _target_state(domain, value)
+            target_display = _display_target(domain, value)
+            same = _same_state(domain, current, value)
+
+            preview.append(entity_id + ": " + target_display)
+            current_preview.append(entity_id + "=" + current)
+
+            flag = "BEZ ZMIAN" if same else "ZMIANA"
+            line = entity_id + ": " + current + " -> " + target + " (" + flag + ")"
+            change_preview.append(line)
+
+            if same:
+                unchanged_preview.append(line)
             else:
-                preview.append(entity_id + ": " + ("%g" % float(value)))
+                changed_preview.append(line)
+
+            if domain == "switch":
+                service = "switch." + ("turn_on" if bool(value) else "turn_off") + " entity_id=" + entity_id
+            elif domain == "number":
+                service = "number.set_value entity_id=" + entity_id + " value=" + target
+            else:
+                service = domain + " " + entity_id + " " + target
+
+            service_preview.append(service)
+
+        data["inverter_deye_command_count"] = len(desired)
+        data["inverter_deye_changed_count"] = len(changed_preview)
+        data["inverter_deye_unchanged_count"] = len(unchanged_preview)
+
+        data["inverter_deye_plan"] = _short(" | ".join(preview))
+        data["inverter_deye_current_states"] = _short(" | ".join(current_preview))
+        data["inverter_deye_changes"] = _short(" | ".join(change_preview))
+        data["inverter_deye_changed_only"] = _short(
+            " | ".join(changed_preview)
+            if changed_preview
+            else "Brak realnych zmian — Deye ma już takie nastawy"
+        )
+        data["inverter_deye_services"] = _short(" | ".join(service_preview))
 
         if dry_run:
-            data["inverter_control_last_result"] = "DRY-RUN: " + " | ".join(preview)
+            data["inverter_deye_test_mode"] = "DRY-RUN — tylko pokazuję, nic nie zapisuję do Deye"
+        else:
+            data["inverter_deye_test_mode"] = "REAL — komendy mogą być zapisane do Deye"
+        if dry_run:
+            data["inverter_control_last_result"] = "DRY-RUN: " + str(data.get("inverter_deye_changes", " | ".join(preview)))
             data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
             return data
 
