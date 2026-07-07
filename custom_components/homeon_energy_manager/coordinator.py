@@ -57,7 +57,7 @@ INVERTER_EXPORT_SURPLUS_POWER = "number.inverter_export_surplus_power"
 INVERTER_MAX_CHARGE_CURRENT = "number.inverter_battery_max_charging_current"
 INVERTER_MAX_DISCHARGE_CURRENT = "number.inverter_battery_max_discharging_current"
 INVERTER_WORK_MODE_SELECT = "select.inverter_work_mode"
-INVERTER_WORK_MODE_SELL_OPTION = "export first"
+INVERTER_WORK_MODE_SELL_OPTION = "Export First"
 
 HOMEON_EXPORT_TARGET_W = 10000
 HOMEON_CHARGE_CURRENT_A = 80
@@ -368,25 +368,17 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             return
 
         wanted = str(option or "").strip()
-        if not wanted:
-            actions.append(f"{entity_id}: brak opcji select")
-            return
-
-        final_option = wanted
         options = state.attributes.get("options") or []
 
-        if options:
-            matched = None
-            for opt in options:
-                if str(opt).lower() == wanted.lower():
-                    matched = str(opt)
-                    break
+        final_option = wanted
+        for opt in options:
+            if str(opt).strip().lower() == wanted.lower():
+                final_option = str(opt)
+                break
 
-            if matched is None:
-                actions.append(f"{entity_id}: BŁĄD opcja '{wanted}' nie istnieje. Dostępne: {', '.join(map(str, options))}")
-                return
-
-            final_option = matched
+        if options and final_option not in [str(x) for x in options]:
+            actions.append(f"{entity_id}: BŁĄD opcja '{wanted}' nie istnieje. Dostępne: {', '.join(map(str, options))}")
+            return
 
         try:
             await self.hass.services.async_call(
@@ -419,8 +411,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         inverter_export_surplus_power = conf_entity(CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER, INVERTER_EXPORT_SURPLUS_POWER)
         inverter_max_charge_current = conf_entity(CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER, INVERTER_MAX_CHARGE_CURRENT)
         inverter_max_discharge_current = conf_entity(CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER, INVERTER_MAX_DISCHARGE_CURRENT)
-        inverter_work_mode_select = str(self.entry.data.get("inverter_work_mode_select", INVERTER_WORK_MODE_SELECT) or INVERTER_WORK_MODE_SELECT).strip()
-        inverter_work_mode_sell_option = str(self.entry.data.get("inverter_work_mode_sell_option", INVERTER_WORK_MODE_SELL_OPTION) or INVERTER_WORK_MODE_SELL_OPTION).strip()
+        inverter_work_mode_select = INVERTER_WORK_MODE_SELECT
+        inverter_work_mode_sell_option = INVERTER_WORK_MODE_SELL_OPTION
         inverter_work_mode_state = self.hass.states.get(inverter_work_mode_select)
         inverter_work_mode_current = str(inverter_work_mode_state.state) if inverter_work_mode_state is not None else "BRAK_ENCJI"
 
@@ -490,8 +482,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             desired.append(("number", entity_id, float(value)))
 
         def sel(entity_id: str, option: str) -> None:
-            if str(entity_id or "").strip() and str(option or "").strip():
-                desired.append(("select", str(entity_id), str(option)))
+            desired.append(("select", str(entity_id), str(option)))
 
         if weather_lock:
             executor_mode = "WEATHER_HOLD_RESERVE"
@@ -579,9 +570,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         def _target_state(domain: str, value: Any) -> str:
             if domain == "switch":
+                return "on" if bool(value) else "off"
             if domain == "select":
                 return str(value)
-                return "on" if bool(value) else "off"
             try:
                 return "%g" % float(value)
             except Exception:
@@ -589,9 +580,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         def _display_target(domain: str, value: Any) -> str:
             if domain == "switch":
+                return "ON" if bool(value) else "OFF"
             if domain == "select":
                 return str(value)
-                return "ON" if bool(value) else "OFF"
             try:
                 return "%g" % float(value)
             except Exception:
@@ -600,21 +591,17 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         def _same_state(domain: str, current: str, value: Any) -> bool:
             if current == "BRAK_ENCJI":
                 return False
-
             if domain == "switch":
                 wanted = bool(value)
                 current_bool = str(current).lower() in ("on", "true", "1")
                 return current_bool == wanted
-
-            if domain == "number":
             if domain == "select":
                 return str(current).strip().lower() == str(value).strip().lower()
-
+            if domain == "number":
                 try:
                     return abs(float(str(current).replace(",", ".")) - float(value)) <= 0.05
                 except Exception:
                     return False
-
             return False
 
         for domain, entity_id, value in desired:
@@ -639,9 +626,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 service = "switch." + ("turn_on" if bool(value) else "turn_off") + " entity_id=" + entity_id
             elif domain == "number":
                 service = "number.set_value entity_id=" + entity_id + " value=" + target
-            else:
             elif domain == "select":
                 service = "select.select_option entity_id=" + entity_id + " option=" + target
+            else:
                 service = domain + " " + entity_id + " " + target
 
             service_preview.append(service)
@@ -656,10 +643,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["inverter_deye_changed_only"] = _short(
             " | ".join(changed_preview)
             if changed_preview
-            else "Brak realnych zmian — Deye ma już takie nastawy"
+            else "Brak realnych zmian - Deye ma już takie nastawy"
         )
         data["inverter_deye_services"] = _short(" | ".join(service_preview))
 
+        if dry_run:
+            data["inverter_deye_test_mode"] = "DRY-RUN - tylko pokazuje, nic nie zapisuje do Deye"
+        else:
+            data["inverter_deye_test_mode"] = "REAL - komendy moga byc zapisane do Deye"
         if dry_run:
             data["inverter_deye_test_mode"] = "DRY-RUN — tylko pokazuję, nic nie zapisuję do Deye"
         else:
@@ -686,6 +677,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 await self._async_set_switch(entity_id, bool(value), actions)
             elif domain == "number":
                 await self._async_set_number(entity_id, float(value), actions)
+            elif domain == "select":
+                await self._async_set_select(entity_id, str(value), actions)
 
         self._homeon_last_control_hash = control_hash
         self._homeon_last_control_ts = now_ts

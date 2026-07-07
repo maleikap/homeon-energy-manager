@@ -43,7 +43,7 @@ class HomeOnSwitch(CoordinatorEntity, SwitchEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.28",
+            "sw_version": "0.2.29",
         }
 
     @property
