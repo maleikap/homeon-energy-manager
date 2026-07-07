@@ -142,6 +142,10 @@ SENSORS = [
     ("inverter_deye_changed_count", "Deye liczba realnych zmian", None, "mdi:counter"),
     ("inverter_deye_unchanged_count", "Deye liczba bez zmian", None, "mdi:counter"),
     ("inverter_deye_test_mode", "Deye tryb testu", None, "mdi:test-tube"),
+    ("inverter_entity_work_mode", "Deye encja trybu pracy", None, "mdi:form-select"),
+    ("inverter_work_mode_current", "Deye aktualny tryb pracy", None, "mdi:form-select"),
+    ("inverter_work_mode_target", "Deye docelowy tryb pracy", None, "mdi:target"),
+    ("inverter_work_mode_sell_option", "Deye opcja sprzedaży z baterii", None, "mdi:export"),
 ]
 
 
@@ -171,7 +175,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.26",
+            "sw_version": "0.2.28",
         }
 
     @property

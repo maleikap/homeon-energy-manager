@@ -56,6 +56,8 @@ INVERTER_EXPORT_SURPLUS = "switch.inverter_export_surplus"
 INVERTER_EXPORT_SURPLUS_POWER = "number.inverter_export_surplus_power"
 INVERTER_MAX_CHARGE_CURRENT = "number.inverter_battery_max_charging_current"
 INVERTER_MAX_DISCHARGE_CURRENT = "number.inverter_battery_max_discharging_current"
+INVERTER_WORK_MODE_SELECT = "select.inverter_work_mode"
+INVERTER_WORK_MODE_SELL_OPTION = "export first"
 
 HOMEON_EXPORT_TARGET_W = 10000
 HOMEON_CHARGE_CURRENT_A = 80
@@ -358,6 +360,48 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             _LOGGER.exception("HomeOn inverter number control failed: %s", entity_id)
             actions.append(f"{entity_id}: BŁĄD {err}")
 
+
+    async def _async_set_select(self, entity_id: str, option: str, actions: list[str]) -> None:
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            actions.append(f"{entity_id}: brak encji")
+            return
+
+        wanted = str(option or "").strip()
+        if not wanted:
+            actions.append(f"{entity_id}: brak opcji select")
+            return
+
+        final_option = wanted
+        options = state.attributes.get("options") or []
+
+        if options:
+            matched = None
+            for opt in options:
+                if str(opt).lower() == wanted.lower():
+                    matched = str(opt)
+                    break
+
+            if matched is None:
+                actions.append(f"{entity_id}: BŁĄD opcja '{wanted}' nie istnieje. Dostępne: {', '.join(map(str, options))}")
+                return
+
+            final_option = matched
+
+        try:
+            await self.hass.services.async_call(
+                "select",
+                "select_option",
+                {
+                    "entity_id": entity_id,
+                    "option": final_option,
+                },
+                blocking=True,
+            )
+            actions.append(f"{entity_id}: {final_option}")
+        except Exception as err:
+            _LOGGER.exception("HomeOn inverter select control failed: %s", entity_id)
+            actions.append(f"{entity_id}: BŁĄD {err}")
     async def _async_apply_inverter_control(self, data: dict[str, Any]) -> dict[str, Any]:
         store = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
 
@@ -375,6 +419,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         inverter_export_surplus_power = conf_entity(CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER, INVERTER_EXPORT_SURPLUS_POWER)
         inverter_max_charge_current = conf_entity(CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER, INVERTER_MAX_CHARGE_CURRENT)
         inverter_max_discharge_current = conf_entity(CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER, INVERTER_MAX_DISCHARGE_CURRENT)
+        inverter_work_mode_select = str(self.entry.data.get("inverter_work_mode_select", INVERTER_WORK_MODE_SELECT) or INVERTER_WORK_MODE_SELECT).strip()
+        inverter_work_mode_sell_option = str(self.entry.data.get("inverter_work_mode_sell_option", INVERTER_WORK_MODE_SELL_OPTION) or INVERTER_WORK_MODE_SELL_OPTION).strip()
+        inverter_work_mode_state = self.hass.states.get(inverter_work_mode_select)
+        inverter_work_mode_current = str(inverter_work_mode_state.state) if inverter_work_mode_state is not None else "BRAK_ENCJI"
 
         inverter_export_target_w = self._runtime_float("inverter_export_target_w", HOMEON_EXPORT_TARGET_W)
         inverter_charge_current_a = self._runtime_float("inverter_charge_current_a", HOMEON_CHARGE_CURRENT_A)
@@ -404,6 +452,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["inverter_entity_export_surplus_power"] = inverter_export_surplus_power
         data["inverter_entity_max_charge_current"] = inverter_max_charge_current
         data["inverter_entity_max_discharge_current"] = inverter_max_discharge_current
+        data["inverter_entity_work_mode"] = inverter_work_mode_select
+        data["inverter_work_mode_current"] = inverter_work_mode_current
+        data["inverter_work_mode_target"] = "bez zmiany"
+        data["inverter_work_mode_sell_option"] = inverter_work_mode_sell_option
 
         data["inverter_deye_command_count"] = 0
         data["inverter_deye_changed_count"] = 0
@@ -437,6 +489,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         def num(entity_id: str, value: float) -> None:
             desired.append(("number", entity_id, float(value)))
 
+        def sel(entity_id: str, option: str) -> None:
+            if str(entity_id or "").strip() and str(option or "").strip():
+                desired.append(("select", str(entity_id), str(option)))
+
         if weather_lock:
             executor_mode = "WEATHER_HOLD_RESERVE"
             action = "Pogoda/PV: blokuję sprzedaż baterii i zostawiam energię na kolejny dzień"
@@ -460,6 +516,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         elif mode == "SELL_BATTERY_HIGH_PRICE" and safe_export_limit_w > 0 and plan_safe_to_sell_kwh > 0.3:
             action = "Sprzedaż tylko bezpiecznej nadwyżki: %.2f kWh, limit eksportu %.0f W" % (plan_safe_to_sell_kwh, safe_export_limit_w)
+            data["inverter_work_mode_target"] = inverter_work_mode_sell_option
+            sel(inverter_work_mode_select, inverter_work_mode_sell_option)
             sw(inverter_grid_charging, False)
             num(inverter_export_surplus_power, safe_export_limit_w)
             num(inverter_max_discharge_current, inverter_discharge_current_a)
@@ -521,6 +579,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         def _target_state(domain: str, value: Any) -> str:
             if domain == "switch":
+            if domain == "select":
+                return str(value)
                 return "on" if bool(value) else "off"
             try:
                 return "%g" % float(value)
@@ -529,6 +589,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         def _display_target(domain: str, value: Any) -> str:
             if domain == "switch":
+            if domain == "select":
+                return str(value)
                 return "ON" if bool(value) else "OFF"
             try:
                 return "%g" % float(value)
@@ -545,6 +607,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 return current_bool == wanted
 
             if domain == "number":
+            if domain == "select":
+                return str(current).strip().lower() == str(value).strip().lower()
+
                 try:
                     return abs(float(str(current).replace(",", ".")) - float(value)) <= 0.05
                 except Exception:
@@ -575,6 +640,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             elif domain == "number":
                 service = "number.set_value entity_id=" + entity_id + " value=" + target
             else:
+            elif domain == "select":
+                service = "select.select_option entity_id=" + entity_id + " option=" + target
                 service = domain + " " + entity_id + " " + target
 
             service_preview.append(service)
