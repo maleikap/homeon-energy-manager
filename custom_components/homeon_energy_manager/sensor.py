@@ -13,19 +13,16 @@ PERCENT = "%"
 
 
 SENSORS = [
+    # Podstawowe decyzje EMS
     ("mode", "Tryb EMS", None, "mdi:state-machine"),
     ("reason", "Decyzja EMS", None, "mdi:text-box-check"),
 
-    ("inverter_control_enabled", "Sterowanie falownikiem", None, "mdi:power-settings"),
-    ("inverter_control_action", "Akcja falownika", None, "mdi:inverter"),
-    ("inverter_control_last_result", "Wynik sterowania falownikiem", None, "mdi:check-network"),
-
+    # Energia teraz
     ("soc", "SOC magazynu", PERCENT, "mdi:battery"),
     ("battery_status", "Status baterii", None, "mdi:battery-sync"),
     ("battery_power", "Moc baterii", UnitOfPower.WATT, "mdi:battery-charging"),
     ("battery_discharge_w", "Rozładowanie baterii", UnitOfPower.WATT, "mdi:battery-arrow-down"),
     ("battery_charge_w", "Ładowanie baterii", UnitOfPower.WATT, "mdi:battery-arrow-up"),
-
     ("pv_power", "Moc PV", UnitOfPower.WATT, "mdi:solar-power"),
     ("load_power", "Moc domu", UnitOfPower.WATT, "mdi:home-lightning-bolt"),
     ("grid_power", "Moc sieci", UnitOfPower.WATT, "mdi:transmission-tower"),
@@ -34,19 +31,17 @@ SENSORS = [
     ("grid_export_w", "Eksport do sieci", UnitOfPower.WATT, "mdi:transmission-tower-export"),
     ("deye_self_power", "Pobór własny falownika", UnitOfPower.WATT, "mdi:power-plug"),
 
+    # Ceny i prognoza
     ("buy_price", "Cena zakupu", "PLN/kWh", "mdi:cash-plus"),
     ("sell_price", "Cena sprzedaży", "PLN/kWh", "mdi:cash-minus"),
     ("best_sell_price_24h", "Najlepsza cena sprzedaży 24h", "PLN/kWh", "mdi:cash-clock"),
     ("best_sell_time_24h", "Godzina najlepszej sprzedaży", None, "mdi:clock-star-four-points"),
     ("next_better_sell_price", "Następna lepsza cena sprzedaży", "PLN/kWh", "mdi:cash-clock"),
     ("next_better_sell_time", "Godzina następnej lepszej sprzedaży", None, "mdi:clock-fast"),
-    ("sell_prices_found", "Liczba cen sprzedaży", None, "mdi:counter"),
-    ("sell_now_best", "Sprzedaż teraz najlepsza", None, "mdi:check-decagram"),
-    ("sell_price_delta_to_best", "Różnica do najlepszej ceny", "PLN/kWh", "mdi:delta"),
-
     ("pv_forecast_today", "Prognoza PV dziś", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-sunny"),
     ("pv_forecast_tomorrow", "Prognoza PV jutro", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-sunny-alert"),
 
+    # Cele baterii
     ("battery_capacity_kwh", "Pojemność magazynu", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-high"),
     ("min_soc", "Minimalny SOC", PERCENT, "mdi:battery-lock"),
     ("emergency_soc", "Awaryjny SOC", PERCENT, "mdi:battery-alert"),
@@ -54,11 +49,45 @@ SENSORS = [
     ("morning_target_soc", "Cel poranny", PERCENT, "mdi:weather-sunset-up"),
     ("charge_target_soc", "Cel ładowania", PERCENT, "mdi:battery-plus"),
     ("discharge_target_soc", "Cel rozładowania", PERCENT, "mdi:battery-minus"),
-
     ("available_to_sell_kwh", "Energia dostępna do sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:cash-fast"),
     ("free_space_kwh", "Wolne miejsce w magazynie", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-outline"),
-    ("energy_to_charge_target_kwh", "Energia do celu ładowania", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-clock"),
-    ("energy_above_morning_target_kwh", "Energia ponad cel poranny", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-check"),
+
+    # Plan 24h - tylko najważniejsze
+    ("plan_now_phase", "Plan faza dnia", None, "mdi:weather-partly-clock"),
+    ("plan_recommended_soc", "Plan zalecany SOC", PERCENT, "mdi:battery-check"),
+    ("plan_next_action", "Plan następna akcja", None, "mdi:calendar-arrow-right"),
+    ("plan_next_action_time", "Plan godzina następnej akcji", None, "mdi:clock-outline"),
+    ("plan_next_action_reason", "Plan powód następnej akcji", None, "mdi:text-box-check"),
+    ("plan_charge_window", "Plan okno taniego ładowania", None, "mdi:battery-clock"),
+    ("plan_sell_window", "Plan okno najlepszej sprzedaży", None, "mdi:cash-clock"),
+    ("plan_safe_to_sell_kwh", "Plan bezpieczna energia do sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:cash-check"),
+    ("plan_safe_export_limit_w", "Plan bezpieczny limit eksportu", UnitOfPower.WATT, "mdi:transmission-tower-export"),
+    ("plan_weather_strategy", "Plan strategia pogoda", None, "mdi:weather-cloudy-clock"),
+
+    # Sterowanie falownikiem
+    ("inverter_control_enabled", "Sterowanie falownikiem", None, "mdi:power-settings"),
+    ("inverter_control_action", "Akcja falownika", None, "mdi:inverter"),
+    ("inverter_control_last_result", "Wynik sterowania falownikiem", None, "mdi:check-network"),
+    ("inverter_control_executor_mode", "Sterowanie tryb wykonawczy", None, "mdi:state-machine"),
+    ("inverter_control_safe_export_limit_w", "Sterowanie bezpieczny limit eksportu", UnitOfPower.WATT, "mdi:transmission-tower-export"),
+    ("inverter_control_safe_to_sell_kwh", "Sterowanie bezpieczna energia do sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:cash-check"),
+    ("inverter_control_weather_lock", "Sterowanie blokada pogodowa", None, "mdi:weather-cloudy-alert"),
+    ("inverter_control_last_run", "Sterowanie ostatnie wykonanie", None, "mdi:clock-check"),
+    ("inverter_control_dry_run", "Falownik dry-run", None, "mdi:test-tube"),
+
+    # Deye Inspector
+    ("inverter_deye_changes", "Deye plan zmian", None, "mdi:compare-horizontal"),
+    ("inverter_deye_changed_only", "Deye tylko realne zmiany", None, "mdi:playlist-check"),
+    ("inverter_deye_test_mode", "Deye tryb testu", None, "mdi:test-tube"),
+    ("inverter_deye_changed_count", "Deye liczba realnych zmian", None, "mdi:counter"),
+
+    # Deye Work Mode
+    ("inverter_entity_work_mode", "Deye encja trybu pracy", None, "mdi:form-select"),
+    ("inverter_work_mode_current", "Deye aktualny tryb pracy", None, "mdi:form-select"),
+    ("inverter_work_mode_target", "Deye docelowy tryb pracy", None, "mdi:target"),
+    ("inverter_work_mode_sell_option", "Deye opcja sprzedaży z baterii", None, "mdi:export"),
+
+    # Uczenie EMS - widoczne na karcie
     ("learn_samples", "EMS próbki nauki", None, "mdi:counter"),
     ("learn_runtime_hours", "EMS czas nauki", "h", "mdi:clock-outline"),
     ("learn_confidence", "EMS pewność nauki", PERCENT, "mdi:brain"),
@@ -70,13 +99,16 @@ SENSORS = [
     ("learn_estimated_daily_consumption_kwh", "EMS szacowane zużycie dobowe", UnitOfEnergy.KILO_WATT_HOUR, "mdi:calendar-today"),
     ("learn_estimated_night_consumption_kwh", "EMS szacowane zużycie nocne", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-night"),
 
-    ("learn_avg_pv_w", "EMS średnia produkcja PV", UnitOfPower.WATT, "mdi:solar-power"),
-    ("learn_avg_grid_import_w", "EMS średni import", UnitOfPower.WATT, "mdi:transmission-tower-import"),
-    ("learn_avg_grid_export_w", "EMS średni eksport", UnitOfPower.WATT, "mdi:transmission-tower-export"),
-    ("learn_avg_battery_charge_w", "EMS średnie ładowanie baterii", UnitOfPower.WATT, "mdi:battery-arrow-up"),
-    ("learn_avg_battery_discharge_w", "EMS średnie rozładowanie baterii", UnitOfPower.WATT, "mdi:battery-arrow-down"),
-    ("learn_avg_deye_self_power_w", "EMS średni pobór falownika", UnitOfPower.WATT, "mdi:power-plug"),
+    ("learn_peak_load_hour", "EMS godzina największego zużycia", None, "mdi:chart-bell-curve"),
+    ("learn_peak_load_w", "EMS największe godzinowe zużycie", UnitOfPower.WATT, "mdi:home-lightning-bolt"),
+    ("learn_low_load_hour", "EMS godzina najniższego zużycia", None, "mdi:chart-bell-curve-cumulative"),
+    ("learn_low_load_w", "EMS najniższe godzinowe zużycie", UnitOfPower.WATT, "mdi:home-lightning-bolt-outline"),
+    ("learn_most_common_mode", "EMS najczęstszy tryb", None, "mdi:state-machine"),
 
+    ("learn_avg_buy_price", "EMS średnia cena zakupu", "PLN/kWh", "mdi:cash-plus"),
+    ("learn_avg_sell_price", "EMS średnia cena sprzedaży", "PLN/kWh", "mdi:cash-minus"),
+
+    # Bilans od startu nauki - widoczny na karcie
     ("learn_energy_load_kwh", "EMS energia domu", UnitOfEnergy.KILO_WATT_HOUR, "mdi:home-lightning-bolt"),
     ("learn_energy_pv_kwh", "EMS energia PV", UnitOfEnergy.KILO_WATT_HOUR, "mdi:solar-power"),
     ("learn_energy_grid_import_kwh", "EMS energia import", UnitOfEnergy.KILO_WATT_HOUR, "mdi:transmission-tower-import"),
@@ -84,68 +116,13 @@ SENSORS = [
     ("learn_energy_battery_charge_kwh", "EMS energia ładowania baterii", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-arrow-up"),
     ("learn_energy_battery_discharge_kwh", "EMS energia rozładowania baterii", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-arrow-down"),
     ("learn_energy_deye_self_kwh", "EMS energia poboru falownika", UnitOfEnergy.KILO_WATT_HOUR, "mdi:power-plug"),
-
-    ("learn_avg_buy_price", "EMS średnia cena zakupu", "PLN/kWh", "mdi:cash-plus"),
-    ("learn_avg_sell_price", "EMS średnia cena sprzedaży", "PLN/kWh", "mdi:cash-minus"),
-    ("learn_best_sell_price_seen", "EMS najlepsza zauważona cena sprzedaży", "PLN/kWh", "mdi:cash-star"),
-    ("learn_most_common_mode", "EMS najczęstszy tryb", None, "mdi:state-machine"),
-    ("plan_now_phase", "Plan faza dnia", None, "mdi:weather-partly-clock"),
-    ("plan_recommended_soc", "Plan zalecany SOC", PERCENT, "mdi:battery-check"),
-    ("plan_next_action", "Plan następna akcja", None, "mdi:calendar-arrow-right"),
-    ("plan_next_action_time", "Plan godzina następnej akcji", None, "mdi:clock-outline"),
-    ("plan_next_action_reason", "Plan powód następnej akcji", None, "mdi:text-box-check"),
-    ("plan_charge_window", "Plan okno taniego ładowania", None, "mdi:battery-clock"),
-    ("plan_sell_window", "Plan okno najlepszej sprzedaży", None, "mdi:cash-clock"),
-    ("plan_hold_reason", "Plan powód trzymania energii", None, "mdi:battery-lock"),
-    ("plan_expected_night_consumption_kwh", "Plan prognoza zużycia nocnego", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-night"),
-    ("plan_expected_day_consumption_kwh", "Plan prognoza zużycia 24h", UnitOfEnergy.KILO_WATT_HOUR, "mdi:calendar-today"),
-    ("plan_cheapest_buy_price", "Plan najtańsza cena zakupu", "PLN/kWh", "mdi:cash-plus"),
-    ("plan_best_sell_price", "Plan najlepsza cena sprzedaży", "PLN/kWh", "mdi:cash-minus"),
-    ("plan_overview", "Plan 24h podsumowanie", None, "mdi:clipboard-text-clock"),
-    ("learn_peak_load_hour", "EMS godzina największego zużycia", None, "mdi:chart-bell-curve"),
-    ("learn_peak_load_w", "EMS największe godzinowe zużycie", UnitOfPower.WATT, "mdi:home-lightning-bolt"),
-    ("learn_low_load_hour", "EMS godzina najniższego zużycia", None, "mdi:chart-bell-curve-cumulative"),
-    ("learn_low_load_w", "EMS najniższe godzinowe zużycie", UnitOfPower.WATT, "mdi:home-lightning-bolt-outline"),
-    ("plan_weather_tomorrow", "Plan pogoda jutro", None, "mdi:weather-partly-cloudy"),
-    ("plan_pv_tomorrow_kwh", "Plan prognoza PV jutro", UnitOfEnergy.KILO_WATT_HOUR, "mdi:solar-power"),
-    ("plan_next_day_energy_balance_kwh", "Plan bilans energii jutro", UnitOfEnergy.KILO_WATT_HOUR, "mdi:scale-balance"),
-    ("plan_energy_to_keep_kwh", "Plan energia do zostawienia", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-lock"),
-    ("plan_safe_to_sell_kwh", "Plan bezpieczna energia do sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:cash-check"),
-    ("plan_safe_export_limit_w", "Plan bezpieczny limit eksportu", UnitOfPower.WATT, "mdi:transmission-tower-export"),
-    ("plan_weather_strategy", "Plan strategia pogoda", None, "mdi:weather-cloudy-clock"),
-    ("plan_reasonable_buy_window", "Plan okno normalnego zakupu", None, "mdi:cash-clock"),
-    ("inverter_control_executor_mode", "Sterowanie tryb wykonawczy", None, "mdi:state-machine"),
-    ("inverter_control_safe_export_limit_w", "Sterowanie bezpieczny limit eksportu", UnitOfPower.WATT, "mdi:transmission-tower-export"),
-    ("inverter_control_safe_to_sell_kwh", "Sterowanie bezpieczna energia do sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:cash-check"),
-    ("inverter_control_weather_lock", "Sterowanie blokada pogodowa", None, "mdi:weather-cloudy-alert"),
-    ("inverter_control_last_run", "Sterowanie ostatnie wykonanie", None, "mdi:clock-check"),
-    ("inverter_entity_grid_charging", "Falownik encja ładowania z sieci", None, "mdi:toggle-switch"),
-    ("inverter_entity_export_surplus", "Falownik encja eksportu nadwyżki", None, "mdi:toggle-switch"),
-    ("inverter_entity_export_surplus_power", "Falownik encja mocy eksportu", None, "mdi:numeric"),
-    ("inverter_entity_max_charge_current", "Falownik encja prądu ładowania", None, "mdi:numeric"),
-    ("inverter_entity_max_discharge_current", "Falownik encja prądu rozładowania", None, "mdi:numeric"),
-    ("inverter_control_config_source", "Falownik źródło konfiguracji", None, "mdi:cog"),
-    ("inverter_control_dry_run", "Falownik dry-run", None, "mdi:test-tube"),
-    ("target_source", "Cel źródło obliczeń", None, "mdi:brain"),
-    ("target_learning_weight", "Cel udział nauki", PERCENT, "mdi:percent"),
-    ("target_expected_night_consumption_kwh", "Cel prognoza zużycia nocnego", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-night"),
-    ("target_expected_24h_consumption_kwh", "Cel prognoza zużycia 24h", UnitOfEnergy.KILO_WATT_HOUR, "mdi:calendar-today"),
-    ("target_pv_coverage_percent", "Cel pokrycie PV jutro", PERCENT, "mdi:solar-power"),
-    ("target_required_reserve_kwh", "Cel wymagana rezerwa energii", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-lock"),
-    ("target_reason", "Cel powód obliczeń", None, "mdi:text-box-check"),
-    ("inverter_deye_plan", "Deye plan komend", None, "mdi:clipboard-list"),
-    ("inverter_deye_current_states", "Deye aktualne stany", None, "mdi:eye-check"),
-    ("inverter_deye_changes", "Deye plan zmian", None, "mdi:compare-horizontal"),
-    ("inverter_deye_changed_only", "Deye tylko realne zmiany", None, "mdi:playlist-check"),
-    ("inverter_deye_services", "Deye usługi HA", None, "mdi:api"),
-    ("inverter_deye_command_count", "Deye liczba komend", None, "mdi:counter"),
-    ("inverter_deye_changed_count", "Deye liczba realnych zmian", None, "mdi:counter"),
-    ("inverter_deye_unchanged_count", "Deye liczba bez zmian", None, "mdi:counter"),
-    ("inverter_deye_test_mode", "Deye tryb testu", None, "mdi:test-tube"),
-    ("inverter_entity_work_mode", "Deye encja trybu pracy", None, "mdi:form-select"),
-    ("inverter_work_mode_current", "Deye aktualny tryb pracy", None, "mdi:form-select"),
-    ("inverter_work_mode_target", "Deye docelowy tryb pracy", None, "mdi:target"),
-    ("inverter_work_mode_sell_option", "Deye opcja sprzedaży z baterii", None, "mdi:export"),
+    ("learn_avg_pv_w", "EMS średnia produkcja PV", UnitOfPower.WATT, "mdi:solar-power"),
+    ("pv_reality_status", "PV pogoda z produkcji", None, "mdi:weather-sunny-alert"),
+    ("pv_reality_score", "PV realna jakość pogody", PERCENT, "mdi:percent"),
+    ("pv_reality_expected_w", "PV oczekiwana moc przy pogodzie", UnitOfPower.WATT, "mdi:solar-power"),
+    ("pv_reality_lock", "PV blokada rozładowania", None, "mdi:battery-lock"),
+    ("pv_reality_reason", "PV powód oceny pogody", None, "mdi:text-box-check"),
+    ("pv_reality_installed_kwp", "PV moc instalacji", "kWp", "mdi:solar-power-variant"),
 ]
 
 
@@ -175,7 +152,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.29",
+            "sw_version": "0.2.35",
         }
 
     @property

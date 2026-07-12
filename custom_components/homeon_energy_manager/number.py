@@ -61,6 +61,16 @@ NUMBERS = [
         "mdi:battery-remove",
         5,
     ),
+    (
+        "pv_installed_kwp",
+        "Moc instalacji PV kWp",
+        0,
+        200,
+        0.1,
+        "kWp",
+        "mdi:solar-power-variant",
+        0,
+    ),
 ]
 
 
@@ -109,7 +119,7 @@ class HomeOnNumber(CoordinatorEntity, NumberEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.29",
+            "sw_version": "0.2.35",
         }
 
     @property

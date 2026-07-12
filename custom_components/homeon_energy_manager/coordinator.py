@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 import logging
+import math
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -394,6 +395,79 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.exception("HomeOn inverter select control failed: %s", entity_id)
             actions.append(f"{entity_id}: BŁĄD {err}")
+
+    def _pv_reality_data(self, pv_power_w: float) -> dict[str, Any]:
+        pv_kwp = self._runtime_float("pv_installed_kwp", 0.0)
+
+        if pv_kwp <= 0:
+            return {
+                "installed_kwp": 0.0,
+                "expected_w": 0.0,
+                "score": 0.0,
+                "status": "WYŁĄCZONE",
+                "lock": False,
+                "reason": "Ustaw moc instalacji PV kWp, aby HomeOn oceniał pogodę z realnej produkcji",
+            }
+
+        now = dt_util.now()
+        lat = self._as_float(getattr(self.hass.config, "latitude", 52.0), 52.0) or 52.0
+
+        day = int(now.timetuple().tm_yday)
+        hour = float(now.hour) + float(now.minute) / 60.0
+
+        lat_rad = math.radians(lat)
+        decl_rad = math.radians(23.45 * math.sin(math.radians(360.0 * (284.0 + day) / 365.0)))
+        hour_angle_rad = math.radians(15.0 * (hour - 12.0))
+
+        sin_elevation = (
+            math.sin(lat_rad) * math.sin(decl_rad)
+            + math.cos(lat_rad) * math.cos(decl_rad) * math.cos(hour_angle_rad)
+        )
+
+        sun_factor = max(0.0, float(sin_elevation))
+        expected_w = max(0.0, pv_kwp * 1000.0 * (sun_factor ** 1.25) * 0.88)
+
+        min_eval_w = max(350.0, pv_kwp * 1000.0 * 0.08)
+
+        if expected_w < min_eval_w:
+            return {
+                "installed_kwp": round(pv_kwp, 2),
+                "expected_w": round(expected_w, 0),
+                "score": 0.0,
+                "status": "NIE OCENIAM",
+                "lock": False,
+                "reason": f"Słońce jest za nisko albo jest noc. Oczekiwane PV tylko {expected_w:.0f} W",
+            }
+
+        ratio = max(0.0, min(1.5, float(pv_power_w or 0.0) / max(expected_w, 1.0)))
+        score = max(0.0, min(100.0, ratio * 100.0))
+
+        if score >= 75.0:
+            status = "POGODNIE"
+            lock = False
+            reason = f"PV pracuje bardzo dobrze: {pv_power_w:.0f} W z oczekiwanych {expected_w:.0f} W"
+        elif score >= 50.0:
+            status = "DOŚĆ DOBRZE"
+            lock = False
+            reason = f"PV jest OK: {pv_power_w:.0f} W z oczekiwanych {expected_w:.0f} W"
+        elif score >= 35.0:
+            status = "SŁABIEJ"
+            lock = False
+            reason = f"PV słabsze od pogody: {pv_power_w:.0f} W z oczekiwanych {expected_w:.0f} W — ostrożnie"
+        else:
+            status = "SŁABO / ZACHMURZENIE"
+            lock = True
+            reason = f"PV dużo poniżej oczekiwań: {pv_power_w:.0f} W z oczekiwanych {expected_w:.0f} W — blokuję agresywne rozładowanie"
+
+        return {
+            "installed_kwp": round(pv_kwp, 2),
+            "expected_w": round(expected_w, 0),
+            "score": round(score, 0),
+            "status": status,
+            "lock": bool(lock),
+            "reason": reason[:240],
+        }
+
     async def _async_apply_inverter_control(self, data: dict[str, Any]) -> dict[str, Any]:
         store = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
 
@@ -519,6 +593,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             action = "Cena sprzedaży dobra, ale brak bezpiecznej nadwyżki — blokuję eksport baterii"
             sw(inverter_export_surplus, False)
             sw(inverter_grid_charging, False)
+            num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+
+        elif mode == "PV_REALITY_HOLD":
+            action = "Realna produkcja PV jest słaba — blokuję sprzedaż i ograniczam rozładowanie magazynu"
+            sw(inverter_grid_charging, False)
+            sw(inverter_export_surplus, False)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "WAIT_BETTER_SELL_PRICE":
@@ -853,6 +933,30 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         )[:240]
         # HOMEON_ADAPTIVE_TARGETS_END
 
+        # HOMEON_PV_REALITY_START
+        pv_reality = self._pv_reality_data(pv_power)
+        pv_reality_lock = bool(pv_reality.get("lock", False))
+
+        if pv_reality_lock:
+            discharge_target_soc = min(
+                95.0,
+                max(discharge_target_soc, night_reserve_soc, 75.0),
+            )
+            morning_target_soc = min(
+                95.0,
+                max(morning_target_soc, discharge_target_soc),
+            )
+            charge_target_soc = min(
+                95.0,
+                max(charge_target_soc, morning_target_soc + 5.0, 85.0),
+            )
+            target_reason = (
+                target_reason
+                + " | Korekta z realnej produkcji PV: "
+                + str(pv_reality.get("reason", "PV słabe"))
+            )[:240]
+        # HOMEON_PV_REALITY_END
+
         available_to_sell_kwh = max(0.0, battery_capacity_kwh * (soc - discharge_target_soc) / 100.0)
         free_space_kwh = max(0.0, battery_capacity_kwh * (100.0 - soc) / 100.0)
         energy_to_charge_target_kwh = max(0.0, battery_capacity_kwh * (charge_target_soc - soc) / 100.0)
@@ -872,7 +976,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         deye_self_power = max(deye_self_power, 0.0)
 
-        sell_ready = sell_price >= 0.55 and soc > discharge_target_soc + 8
+        sell_ready = sell_price >= 0.55 and soc > discharge_target_soc + 8 and not pv_reality_lock
 
         if not enabled:
             mode = "DISABLED"
@@ -886,6 +990,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif buy_price < 0.30 and soc < charge_target_soc:
             mode = "CHEAP_CHARGE"
             reason = "Tania energia — można ładować magazyn"
+        elif pv_reality_lock and soc > min_soc:
+            mode = "PV_REALITY_HOLD"
+            reason = str(pv_reality.get("reason", "PV realnie słabe — chronię magazyn"))
         elif sell_ready and not sell_stats["sell_now_best"]:
             mode = "WAIT_BETTER_SELL_PRICE"
             reason = sell_stats["sell_wait_reason"]
@@ -937,6 +1044,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "target_pv_coverage_percent": round(target_pv_coverage_percent, 0),
             "target_required_reserve_kwh": round(target_required_reserve_kwh, 2),
             "target_reason": target_reason,
+
+            "pv_reality_status": pv_reality.get("status", "—"),
+            "pv_reality_score": pv_reality.get("score", 0),
+            "pv_reality_expected_w": pv_reality.get("expected_w", 0),
+            "pv_reality_lock": "ON" if pv_reality_lock else "OFF",
+            "pv_reality_reason": pv_reality.get("reason", "—"),
+            "pv_reality_installed_kwp": pv_reality.get("installed_kwp", 0),
 
             "available_to_sell_kwh": round(available_to_sell_kwh, 2),
             "free_space_kwh": round(free_space_kwh, 2),
