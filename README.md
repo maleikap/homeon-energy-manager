@@ -1,45 +1,25 @@
 # HomeOn Energy Manager
 
-HomeOn Energy Manager is a Home Assistant custom integration for PV, battery storage, dynamic energy prices and EMS decision logic.
+Integracja Home Assistant dla HomeOn EMS.
 
-## Features
+## Wersja 0.2.36
 
-- Battery SOC targets
-- Night reserve SOC
-- Morning SOC target based on PV forecast
-- Dynamic buy and sell price logic
-- Best sell price detection from energy price attributes
-- Battery available-to-sell calculation
-- Inverter self-consumption estimation
-- Dry-run switch
-- Local polling
+### Home Battery Priority
 
-## Installation with HACS
+- Dodano przełącznik `HomeOn Tryb handlu baterią`.
+- Domyślnie handel baterią jest wyłączony.
+- Gdy bateria zasila gospodarstwo domowe, HomeOn nie zmienia nastaw Deye ani trybu pracy falownika.
+- Gdy handel baterią jest wyłączony, HomeOn nie ustawia sprzedaży energii z magazynu.
+- Dodano diagnostykę ochrony domu:
+  - tryb handlu baterią,
+  - ochrona domu bateria zasila dom,
+  - moc baterii dla domu,
+  - powód ochrony domu.
 
-1. Open HACS.
-2. Add this repository as a custom repository.
-3. Category: Integration.
-4. Install HomeOn Energy Manager.
-5. Restart Home Assistant.
-6. Add integration from Settings -> Devices and services.
+## Instalacja przez HACS
 
-## Required entities
+Repozytorium niestandardowe:
 
-During setup select:
+`maleikap/homeon-energy-manager`
 
-- Battery SOC sensor
-- Battery power sensor
-- PV power sensor
-- House/load power sensor
-- Grid power sensor
-- Buy price sensor
-- Sell price sensor
-- Optional PV forecast sensors
-
-## Companion card
-
-Use HomeOn Energy Card for the Lovelace dashboard.
-
-## Status
-
-Early development version.
+Typ: Integration
