@@ -473,6 +473,39 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         enabled = bool(store.get("enabled", True))
         dry_run = bool(store.get("dry_run", True))
+
+        # HOMEON_HOME_BATTERY_PRIORITY_EXEC_GUARD
+        if str(data.get("home_battery_protection", "OFF")).upper() == "ON":
+            data["inverter_control_action"] = "Ochrona domu — bateria zasila gospodarstwo, nie zmieniam nastaw Deye"
+            data["inverter_control_executor_mode"] = "BLOCKED_HOME_PRIORITY"
+            data["inverter_control_last_result"] = "Pominięto sterowanie: bateria zasila gospodarstwo domowe. HomeOn nie zmienia trybu Deye ani limitów baterii."
+            data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
+            data["inverter_deye_plan"] = "Zablokowane przez ochronę domu"
+            data["inverter_deye_current_states"] = "Bateria zasila gospodarstwo"
+            data["inverter_deye_changes"] = "Brak zmian — ochrona domu"
+            data["inverter_deye_changed_only"] = "Brak realnych zmian — ochrona domu"
+            data["inverter_deye_services"] = "Nie wykonano usług HA"
+            data["inverter_deye_command_count"] = 0
+            data["inverter_deye_changed_count"] = 0
+            data["inverter_deye_unchanged_count"] = 0
+            data["inverter_deye_test_mode"] = "BLOCKED — bateria zasila dom"
+            return data
+
+        if str(data.get("mode", "")).upper() == "HOME_BATTERY_PRIORITY":
+            data["inverter_control_action"] = "Ochrona domu — tryb handlu baterią wyłączony, nie ustawiam Export First"
+            data["inverter_control_executor_mode"] = "BLOCKED_BATTERY_TRADE_OFF"
+            data["inverter_control_last_result"] = "Pominięto sterowanie: handel baterią jest wyłączony. HomeOn nie ustawia Export First ani sprzedaży z magazynu."
+            data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
+            data["inverter_deye_plan"] = "Zablokowane — handel baterią OFF"
+            data["inverter_deye_current_states"] = "Handel baterią wyłączony"
+            data["inverter_deye_changes"] = "Brak zmian — handel baterią OFF"
+            data["inverter_deye_changed_only"] = "Brak realnych zmian — handel baterią OFF"
+            data["inverter_deye_services"] = "Nie wykonano usług HA"
+            data["inverter_deye_command_count"] = 0
+            data["inverter_deye_changed_count"] = 0
+            data["inverter_deye_unchanged_count"] = 0
+            data["inverter_deye_test_mode"] = "BLOCKED — handel baterią OFF"
+            return data
         inverter_control = bool(store.get("inverter_control", False))
         mode = str(data.get("mode", "NORMAL"))
 
@@ -772,6 +805,39 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         enabled = bool(store.get("enabled", True))
         dry_run = bool(store.get("dry_run", True))
 
+        # HOMEON_HOME_BATTERY_PRIORITY_EXEC_GUARD
+        if str(data.get("home_battery_protection", "OFF")).upper() == "ON":
+            data["inverter_control_action"] = "Ochrona domu — bateria zasila gospodarstwo, nie zmieniam nastaw Deye"
+            data["inverter_control_executor_mode"] = "BLOCKED_HOME_PRIORITY"
+            data["inverter_control_last_result"] = "Pominięto sterowanie: bateria zasila gospodarstwo domowe. HomeOn nie zmienia trybu Deye ani limitów baterii."
+            data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
+            data["inverter_deye_plan"] = "Zablokowane przez ochronę domu"
+            data["inverter_deye_current_states"] = "Bateria zasila gospodarstwo"
+            data["inverter_deye_changes"] = "Brak zmian — ochrona domu"
+            data["inverter_deye_changed_only"] = "Brak realnych zmian — ochrona domu"
+            data["inverter_deye_services"] = "Nie wykonano usług HA"
+            data["inverter_deye_command_count"] = 0
+            data["inverter_deye_changed_count"] = 0
+            data["inverter_deye_unchanged_count"] = 0
+            data["inverter_deye_test_mode"] = "BLOCKED — bateria zasila dom"
+            return data
+
+        if str(data.get("mode", "")).upper() == "HOME_BATTERY_PRIORITY":
+            data["inverter_control_action"] = "Ochrona domu — tryb handlu baterią wyłączony, nie ustawiam Export First"
+            data["inverter_control_executor_mode"] = "BLOCKED_BATTERY_TRADE_OFF"
+            data["inverter_control_last_result"] = "Pominięto sterowanie: handel baterią jest wyłączony. HomeOn nie ustawia Export First ani sprzedaży z magazynu."
+            data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
+            data["inverter_deye_plan"] = "Zablokowane — handel baterią OFF"
+            data["inverter_deye_current_states"] = "Handel baterią wyłączony"
+            data["inverter_deye_changes"] = "Brak zmian — handel baterią OFF"
+            data["inverter_deye_changed_only"] = "Brak realnych zmian — handel baterią OFF"
+            data["inverter_deye_services"] = "Nie wykonano usług HA"
+            data["inverter_deye_command_count"] = 0
+            data["inverter_deye_changed_count"] = 0
+            data["inverter_deye_unchanged_count"] = 0
+            data["inverter_deye_test_mode"] = "BLOCKED — handel baterią OFF"
+            return data
+
         battery_capacity_kwh = self._conf_float(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH)
         min_soc = self._conf_float(CONF_MIN_SOC, DEFAULT_MIN_SOC)
         emergency_soc = self._conf_float(CONF_EMERGENCY_SOC, DEFAULT_EMERGENCY_SOC)
@@ -819,6 +885,21 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             grid_import_w = max(-grid_power, 0.0)
             grid_export_w = max(grid_power, 0.0)
             grid_status = "Import" if grid_power < -20 else "Eksport" if grid_power > 20 else "Zero"
+
+        # HOMEON_HOME_BATTERY_PRIORITY_START
+        battery_trade_enabled = bool(store.get("battery_trade", False))
+        home_battery_load_w = min(max(load_power, 0.0), max(battery_discharge_w, 0.0))
+        home_battery_protection_active = bool(home_battery_load_w > 250.0 and load_power > 300.0)
+        if home_battery_protection_active:
+            home_battery_protection_reason = (
+                f"Bateria aktualnie zasila gospodarstwo domowe: około {home_battery_load_w:.0f} W. "
+                "HomeOn nie zmienia nastaw baterii ani trybu Deye, aby nie zaburzyć autokonsumpcji."
+            )
+        elif not battery_trade_enabled:
+            home_battery_protection_reason = "Tryb handlu baterią jest wyłączony — HomeOn nie będzie sprzedawał energii z magazynu."
+        else:
+            home_battery_protection_reason = "Ochrona domu nie blokuje sterowania — bateria nie zasila teraz istotnie gospodarstwa albo handel baterią jest świadomie włączony."
+        # HOMEON_HOME_BATTERY_PRIORITY_END
 
         night_reserve_soc = max(
             min_night_reserve_soc,
@@ -976,7 +1057,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         deye_self_power = max(deye_self_power, 0.0)
 
-        sell_ready = sell_price >= 0.55 and soc > discharge_target_soc + 8 and not pv_reality_lock
+        sell_ready = sell_price >= 0.55 and soc > discharge_target_soc + 8 and not pv_reality_lock and battery_trade_enabled and not home_battery_protection_active
 
         if not enabled:
             mode = "DISABLED"
@@ -990,6 +1071,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif buy_price < 0.30 and soc < charge_target_soc:
             mode = "CHEAP_CHARGE"
             reason = "Tania energia — można ładować magazyn"
+        elif home_battery_protection_active:
+            mode = "HOME_BATTERY_PRIORITY"
+            reason = home_battery_protection_reason
+        elif not battery_trade_enabled and sell_price >= 0.55 and soc > discharge_target_soc + 8:
+            mode = "HOME_BATTERY_PRIORITY"
+            reason = "Tryb handlu baterią jest wyłączony — nie sprzedaję energii z magazynu, bateria zostaje dla domu"
         elif pv_reality_lock and soc > min_soc:
             mode = "PV_REALITY_HOLD"
             reason = str(pv_reality.get("reason", "PV realnie słabe — chronię magazyn"))
@@ -1062,6 +1149,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "battery_charge_w": round(battery_charge_w, 0),
             "grid_import_w": round(grid_import_w, 0),
             "grid_export_w": round(grid_export_w, 0),
+
+            "battery_trade_enabled": "ON" if battery_trade_enabled else "OFF",
+            "home_battery_protection": "ON" if home_battery_protection_active else "OFF",
+            "home_battery_load_w": round(home_battery_load_w, 0),
+            "home_battery_protection_reason": home_battery_protection_reason[:240],
         }
 
         data.update(sell_stats)

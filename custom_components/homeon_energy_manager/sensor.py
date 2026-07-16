@@ -123,6 +123,10 @@ SENSORS = [
     ("pv_reality_lock", "PV blokada rozładowania", None, "mdi:battery-lock"),
     ("pv_reality_reason", "PV powód oceny pogody", None, "mdi:text-box-check"),
     ("pv_reality_installed_kwp", "PV moc instalacji", "kWp", "mdi:solar-power-variant"),
+    ("battery_trade_enabled", "Tryb handlu baterią", None, "mdi:cash-sync"),
+    ("home_battery_protection", "Ochrona domu bateria zasila dom", None, "mdi:home-battery"),
+    ("home_battery_load_w", "Moc baterii dla domu", UnitOfPower.WATT, "mdi:home-lightning-bolt"),
+    ("home_battery_protection_reason", "Powód ochrony domu", None, "mdi:text-box-check"),
 ]
 
 
@@ -152,7 +156,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.35",
+            "sw_version": "0.2.36",
         }
 
     @property

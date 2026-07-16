@@ -13,6 +13,7 @@ SWITCHES = [
     ("enabled", "Włączony", "mdi:power", True),
     ("dry_run", "Tryb testowy dry-run", "mdi:test-tube", True),
     ("inverter_control", "Sterowanie falownikiem", "mdi:power-settings", False),
+    ("battery_trade", "Tryb handlu baterią", "mdi:cash-sync", False),
 ]
 
 
@@ -43,7 +44,7 @@ class HomeOnSwitch(CoordinatorEntity, SwitchEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.35",
+            "sw_version": "0.2.36",
         }
 
     @property
