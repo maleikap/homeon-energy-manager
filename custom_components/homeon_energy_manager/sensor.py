@@ -127,6 +127,16 @@ SENSORS = [
     ("home_battery_protection", "Ochrona domu bateria zasila dom", None, "mdi:home-battery"),
     ("home_battery_load_w", "Moc baterii dla domu", UnitOfPower.WATT, "mdi:home-lightning-bolt"),
     ("home_battery_protection_reason", "Powód ochrony domu", None, "mdi:text-box-check"),
+    ("negative_price_window_status", "Okno ceny ujemnej", None, "mdi:cash-clock"),
+    ("negative_price_window_start", "Start ceny ujemnej", None, "mdi:clock-start"),
+    ("negative_price_window_end", "Koniec ceny ujemnej", None, "mdi:clock-end"),
+    ("negative_price_min_buy_price", "Najniższa cena zakupu w oknie", "PLN/kWh", "mdi:cash-minus"),
+    ("negative_price_energy_to_free_kwh", "Energia do zwolnienia przed ceną ujemną", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-arrow-down"),
+    ("negative_price_required_free_kwh", "Wymagane wolne miejsce na cenę ujemną", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-outline"),
+    ("negative_price_target_soc_before", "Docelowy SOC przed ceną ujemną", PERCENT, "mdi:battery-sync"),
+    ("negative_price_prepare_export_w", "Zalecana moc zwalniania magazynu", UnitOfPower.WATT, "mdi:transmission-tower-export"),
+    ("negative_price_strategy", "Strategia ceny ujemnej", None, "mdi:strategy"),
+    ("negative_price_reason", "Powód strategii ceny ujemnej", None, "mdi:text-box-check"),
 ]
 
 
@@ -156,7 +166,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.37",
+            "sw_version": "0.2.38",
         }
 
     @property

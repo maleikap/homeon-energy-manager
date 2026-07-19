@@ -1,36 +1,39 @@
 # HomeOn Energy Manager
 
-HomeOn Energy Manager is a Home Assistant integration for advanced energy management in buildings equipped with photovoltaic generation, battery storage, hybrid inverters and dynamic electricity tariffs.
+HomeOn Energy Manager is a Home Assistant integration for advanced energy management in photovoltaic and battery storage systems using dynamic electricity tariffs.
 
-The integration analyses energy flow, battery state of charge, PV production, grid import/export, market prices and household consumption patterns. Based on this data it calculates safe operating targets for the battery and provides transparent diagnostics for supervised or automated energy management.
+The integration analyses PV production, household consumption, battery state of charge, grid import/export, market prices and learned consumption patterns. It calculates battery targets, reserve levels and inverter actions with a conservative household-priority strategy.
 
 ## Key features
 
-- Real-time monitoring of PV production, household consumption, battery power and grid exchange.
+- Real-time monitoring of PV production, household load, battery power and grid exchange.
 - Dynamic battery target calculation based on consumption, PV forecast and learned household behaviour.
-- Support for dynamic electricity prices and preferred charging or selling windows.
-- Battery reserve planning for night consumption and next-day energy balance.
 - PV Reality Check based on actual PV output, installed PV capacity, date and time of day.
 - Home Battery Priority protection for household self-consumption.
+- Negative Price Window Planner for preparing battery capacity before negative-price periods.
 - Optional inverter control with dry-run mode.
-- Diagnostic sensors for planned actions, inverter state and EMS decision reasons.
+- Diagnostic sensors for strategy, planned actions and inverter state.
+
+## Negative Price Window Planner
+
+Version 0.2.38 adds planning for negative electricity price windows.
+
+The planner detects upcoming negative buy-price periods from the price sensor attributes. When conditions are favourable, HomeOn can prepare the battery before the negative-price window by freeing storage capacity. During the negative-price period, the system prioritises charging the battery and blocking export-oriented battery actions. After the negative-price period, stored energy can be used by the household or sold later when market conditions are favourable.
+
+Typical sequence:
+
+1. Detect an upcoming negative buy-price window.
+2. If PV conditions are good and battery trading is enabled, free part of the battery before the window.
+3. During the negative-price window, charge the battery and block export-oriented battery actions.
+4. After the window, hold or sell energy depending on price, reserve and household demand.
+
+Battery trading remains disabled by default. The user must explicitly enable battery trading before HomeOn is allowed to free storage capacity for market optimisation.
 
 ## Safety philosophy
 
 The household has priority over energy trading.
 
-By default, HomeOn does not use the battery for active market trading. Battery trading must be enabled explicitly. When the battery is supplying the household, HomeOn can block inverter setting changes to avoid interrupting normal self-consumption.
-
-## Version 0.2.37
-
-This release fixes the Home Battery Priority execution guard introduced in the previous version.
-
-Changes:
-
-- Moved the protection guard to the inverter control stage, where EMS data is already available.
-- Ensured Home Battery Priority is calculated after grid and battery flow values are available.
-- Prevented `UnboundLocalError` during coordinator refresh.
-- Kept battery trading protection and household-priority logic unchanged.
+By default, HomeOn does not use the battery for active market trading. Battery trading must be enabled intentionally by the user. When household protection is active and battery trading is disabled, HomeOn blocks inverter setting changes related to battery export.
 
 ## Installation with HACS
 
