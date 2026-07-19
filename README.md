@@ -11,29 +11,32 @@ The integration analyses PV production, household consumption, battery state of 
 - PV Reality Check based on actual PV output, installed PV capacity, date and time of day.
 - Home Battery Priority protection for household self-consumption.
 - Negative Price Window Planner for preparing battery capacity before negative-price periods.
+- Data quality diagnostics and SAFE_MODE protection.
 - Optional inverter control with dry-run mode.
 - Diagnostic sensors for strategy, planned actions and inverter state.
 
-## Negative Price Window Planner
+## Version 0.2.39
 
-Version 0.2.38 adds planning for negative electricity price windows.
+This release adds data quality diagnostics and SAFE_MODE.
 
-The planner detects upcoming negative buy-price periods from the price sensor attributes. When conditions are favourable, HomeOn can prepare the battery before the negative-price window by freeing storage capacity. During the negative-price period, the system prioritises charging the battery and blocking export-oriented battery actions. After the negative-price period, stored energy can be used by the household or sold later when market conditions are favourable.
+SAFE_MODE is activated when required sensors are missing, unavailable, invalid or outside safe operating ranges. In SAFE_MODE the integration blocks battery trading decisions and only allows conservative inverter limits when real inverter control is enabled.
 
-Typical sequence:
+New diagnostics include:
 
-1. Detect an upcoming negative buy-price window.
-2. If PV conditions are good and battery trading is enabled, free part of the battery before the window.
-3. During the negative-price window, charge the battery and block export-oriented battery actions.
-4. After the window, hold or sell energy depending on price, reserve and household demand.
-
-Battery trading remains disabled by default. The user must explicitly enable battery trading before HomeOn is allowed to free storage capacity for market optimisation.
+- data quality status,
+- data quality score,
+- data errors,
+- data warnings,
+- last valid data timestamp,
+- SAFE_MODE state,
+- SAFE_MODE reason,
+- SAFE_MODE action.
 
 ## Safety philosophy
 
 The household has priority over energy trading.
 
-By default, HomeOn does not use the battery for active market trading. Battery trading must be enabled intentionally by the user. When household protection is active and battery trading is disabled, HomeOn blocks inverter setting changes related to battery export.
+By default, HomeOn does not use the battery for active market trading. Battery trading must be enabled intentionally by the user. Dry-run mode is enabled by default and inverter control is disabled by default.
 
 ## Installation with HACS
 
