@@ -2,25 +2,21 @@
 
 HomeOn Energy Manager is a Home Assistant integration for advanced energy management in photovoltaic and battery storage systems using dynamic electricity tariffs.
 
+## Version 0.2.41
+
+This release connects the economic threshold number entities to the EMS selling logic.
+
+Changes:
+
+- battery selling readiness is now calculated from configurable economic thresholds,
+- estimated selling profit is calculated from available sellable energy and battery cycle cost,
+- battery trading remains blocked when household protection is active,
+- selling is blocked when estimated profit is below the configured minimum arbitrage profit,
+- new diagnostic sensors show estimated sell profit, sell readiness and sell reason.
+
 ## Version 0.2.40
 
-This release adds configurable economic threshold number entities.
-
-This is a safe numbers-only release. It does not yet change the EMS decision logic in coordinator.py.
-
-New number entities include:
-
-- good selling price,
-- cheap charging price,
-- negative buy-price threshold,
-- negative sell-price threshold,
-- expensive buy-price threshold,
-- minimum selling price for preparing battery space,
-- minimum energy to free before a negative-price window,
-- maximum preparation time before a negative-price window,
-- maximum SOC after charging during negative-price periods,
-- battery cycle cost,
-- minimum arbitrage profit.
+Version 0.2.40 added configurable economic threshold number entities.
 
 ## Version 0.2.39
 

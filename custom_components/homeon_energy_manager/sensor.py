@@ -145,6 +145,10 @@ SENSORS = [
     ("safe_mode", "SAFE MODE", None, "mdi:shield-alert"),
     ("safe_mode_reason", "Powód SAFE MODE", None, "mdi:text-box-alert"),
     ("safe_mode_action", "Akcja SAFE MODE", None, "mdi:shield-check"),
+    ("economic_estimated_sell_profit", "Szacowany zysk sprzedaży", "PLN", "mdi:cash-check"),
+    ("economic_sell_ready", "Gotowość sprzedaży ekonomicznej", None, "mdi:battery-arrow-up"),
+    ("economic_sell_reason", "Powód ekonomii sprzedaży", None, "mdi:text-box-check"),
+    ("economic_battery_cycle_cost", "Koszt cyklu baterii", "PLN/kWh", "mdi:battery-sync"),
 ]
 
 
@@ -174,7 +178,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.40",
+            "sw_version": "0.2.41",
         }
 
     @property
