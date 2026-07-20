@@ -2,17 +2,21 @@
 
 HomeOn Energy Manager is a Home Assistant integration for advanced energy management in photovoltaic and battery storage systems using dynamic electricity tariffs.
 
-## Version 0.2.42
+## Version 0.2.43
 
-This release adds EMS mode hysteresis and minimum mode hold time.
+This release adds a safer Deye execution layer.
 
 Changes:
 
-- adds configurable minimum EMS mode hold time,
-- adds mode candidate diagnostics,
-- adds mode hysteresis diagnostics,
-- prevents unnecessary rapid switching between EMS modes,
-- urgent safety modes can still override hysteresis.
+- adds configurable minimum interval between Deye command runs,
+- adds configurable maximum number of real Deye changes per cycle,
+- adds Deye driver safety diagnostics,
+- blocks real execution if too many inverter changes would be sent in one cycle,
+- keeps dry-run and household protection safety behaviour.
+
+## Version 0.2.42
+
+Version 0.2.42 added EMS mode hysteresis and minimum mode hold time.
 
 ## Version 0.2.41
 

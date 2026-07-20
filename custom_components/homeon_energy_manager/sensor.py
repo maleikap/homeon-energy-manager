@@ -154,6 +154,12 @@ SENSORS = [
     ("mode_hysteresis_reason", "Powód histerezy trybu", None, "mdi:text-box-clock"),
     ("mode_hold_remaining_minutes", "Pozostały czas trybu EMS", "min", "mdi:timer-sand"),
     ("mode_min_hold_minutes", "Minimalny czas trybu EMS", "min", "mdi:timer-lock"),
+    ("deye_driver_safety_status", "Deye driver status bezpieczeństwa", None, "mdi:shield-check"),
+    ("deye_driver_block_reason", "Deye driver powód blokady", None, "mdi:shield-alert"),
+    ("deye_driver_min_interval_seconds", "Deye minimalny odstęp komend", "s", "mdi:timer-cog"),
+    ("deye_driver_max_changes_per_run", "Deye maksymalna liczba zmian", "zmian", "mdi:shield-counter"),
+    ("deye_driver_changed_count_runtime", "Deye liczba zmian w cyklu", "zmian", "mdi:counter"),
+    ("deye_driver_last_control_hash", "Deye ostatni plan komend", None, "mdi:fingerprint"),
 ]
 
 
@@ -183,7 +189,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.42",
+            "sw_version": "0.2.43",
         }
 
     @property

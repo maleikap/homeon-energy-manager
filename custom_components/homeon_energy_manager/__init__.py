@@ -30,6 +30,8 @@ DEFAULT_RUNTIME_OPTIONS = {
     "economic_battery_cycle_cost": 0.15,
     "economic_min_arbitrage_profit": 1.0,
     "mode_min_hold_minutes": 10.0,
+    "deye_min_command_interval_seconds": 120.0,
+    "deye_max_changes_per_run": 6.0,
 }
 
 

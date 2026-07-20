@@ -987,6 +987,26 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["inverter_deye_changed_count"] = len(changed_preview)
         data["inverter_deye_unchanged_count"] = len(unchanged_preview)
 
+        # HOMEON_DEYE_SAFE_DRIVER_START
+        deye_min_command_interval_seconds = max(
+            0.0,
+            self._runtime_float("deye_min_command_interval_seconds", 120.0),
+        )
+        deye_max_changes_per_run = max(
+            1.0,
+            self._runtime_float("deye_max_changes_per_run", 6.0),
+        )
+        deye_driver_changed_count_runtime = len(changed_preview)
+        deye_driver_last_control_hash = "|".join(preview)
+
+        data["deye_driver_safety_status"] = "DRY_RUN" if dry_run else "READY"
+        data["deye_driver_block_reason"] = "Brak blokady"
+        data["deye_driver_min_interval_seconds"] = round(deye_min_command_interval_seconds, 0)
+        data["deye_driver_max_changes_per_run"] = round(deye_max_changes_per_run, 0)
+        data["deye_driver_changed_count_runtime"] = deye_driver_changed_count_runtime
+        data["deye_driver_last_control_hash"] = _short(deye_driver_last_control_hash)
+        # HOMEON_DEYE_SAFE_DRIVER_END
+
         data["inverter_deye_plan"] = _short(" | ".join(preview))
         data["inverter_deye_current_states"] = _short(" | ".join(current_preview))
         data["inverter_deye_changes"] = _short(" | ".join(change_preview))
@@ -1020,6 +1040,19 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
             return data
 
+
+        # HOMEON_DEYE_SAFE_DRIVER_EXEC_START
+        if deye_driver_changed_count_runtime > int(deye_max_changes_per_run):
+            data["deye_driver_safety_status"] = "BLOCKED_TOO_MANY_CHANGES"
+            data["deye_driver_block_reason"] = (
+                f"Zablokowano realne komendy Deye: {deye_driver_changed_count_runtime} zmian "
+                f"przekracza limit {int(deye_max_changes_per_run)} zmian w jednym cyklu."
+            )[:240]
+            data["inverter_control_last_result"] = data["deye_driver_block_reason"]
+            data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
+            data["inverter_deye_test_mode"] = "BLOCKED — za dużo zmian w jednym cyklu"
+            return data
+        # HOMEON_DEYE_SAFE_DRIVER_EXEC_END
         actions: list[str] = []
 
         for domain, entity_id, value in desired:

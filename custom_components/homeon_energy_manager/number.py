@@ -83,6 +83,8 @@ NUMBERS = [
     ("economic_battery_cycle_cost", "Koszt cyklu baterii", 0, 5, 0.01, "PLN/kWh", "mdi:battery-sync", 0.15),
     ("economic_min_arbitrage_profit", "Minimalny zysk arbitrażu", 0, 200, 0.1, "PLN", "mdi:cash-check", 1.0),
     ("mode_min_hold_minutes", "Minimalny czas trybu EMS", 0, 60, 1, "min", "mdi:timer-lock", 10),
+    ("deye_min_command_interval_seconds", "Minimalny odstęp komend Deye", 0, 1800, 5, "s", "mdi:timer-cog", 120),
+    ("deye_max_changes_per_run", "Maksymalna liczba zmian Deye", 1, 10, 1, "zmian", "mdi:shield-counter", 6),
 ]
 
 
@@ -131,7 +133,7 @@ class HomeOnNumber(CoordinatorEntity, NumberEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.42",
+            "sw_version": "0.2.43",
         }
 
     @property
