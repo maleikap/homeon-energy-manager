@@ -1467,11 +1467,87 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             mode = "NORMAL"
             reason = "Normalna praca systemu"
 
+
+        # HOMEON_MODE_HYSTERESIS_START
+        mode_candidate = mode
+        mode_min_hold_minutes = max(0.0, self._runtime_float("mode_min_hold_minutes", 10.0))
+        mode_hysteresis_active = False
+        mode_hold_remaining_minutes = 0.0
+        mode_hysteresis_reason = "Brak blokady zmiany trybu"
+
+        mode_priority = {
+            "DISABLED": 100,
+            "SAFE_MODE": 95,
+            "EMERGENCY_RESERVE": 90,
+            "NEGATIVE_IMPORT": 85,
+            "NEGATIVE_PRICE_EXPORT_BLOCK": 82,
+            "PREPARE_NEGATIVE_PRICE_WINDOW": 80,
+            "HOME_BATTERY_PRIORITY": 75,
+            "PV_REALITY_HOLD": 70,
+            "SELL_BATTERY_HIGH_PRICE": 60,
+            "WAIT_BETTER_SELL_PRICE": 55,
+            "CHEAP_CHARGE": 50,
+            "EXPENSIVE_SELF_USE": 45,
+            "PV_CHARGE": 35,
+            "NORMAL": 10,
+        }
+
+        urgent_modes = {
+            "DISABLED",
+            "SAFE_MODE",
+            "EMERGENCY_RESERVE",
+            "NEGATIVE_IMPORT",
+            "NEGATIVE_PRICE_EXPORT_BLOCK",
+        }
+
+        now_ts = dt_util.now().timestamp()
+        last_mode = getattr(self, "_homeon_last_mode", None)
+        last_mode_ts = float(getattr(self, "_homeon_last_mode_ts", 0.0) or 0.0)
+        elapsed_minutes = (now_ts - last_mode_ts) / 60.0 if last_mode_ts > 0 else 9999.0
+
+        if (
+            last_mode
+            and str(last_mode) != str(mode)
+            and mode_min_hold_minutes > 0
+            and elapsed_minutes < mode_min_hold_minutes
+            and str(last_mode) not in urgent_modes
+            and str(mode) not in urgent_modes
+        ):
+            last_priority = int(mode_priority.get(str(last_mode), 10))
+            new_priority = int(mode_priority.get(str(mode), 10))
+
+            if new_priority <= last_priority + 10:
+                mode_hysteresis_active = True
+                mode_hold_remaining_minutes = max(0.0, mode_min_hold_minutes - elapsed_minutes)
+                mode_hysteresis_reason = (
+                    f"Utrzymuję tryb {last_mode} jeszcze około {mode_hold_remaining_minutes:.1f} min. "
+                    f"Nowy kandydat: {mode_candidate}. Powód kandydata: {reason}"
+                )[:240]
+                mode = str(last_mode)
+                reason = mode_hysteresis_reason
+            else:
+                mode_hysteresis_reason = (
+                    f"Zmiana z {last_mode} na {mode_candidate} dopuszczona, bo nowy tryb ma wyższy priorytet."
+                )[:240]
+
+        if str(getattr(self, "_homeon_last_mode", "")) != str(mode):
+            self._homeon_last_mode = str(mode)
+            self._homeon_last_mode_ts = now_ts
+            self._homeon_last_mode_reason = str(reason)
+        elif not getattr(self, "_homeon_last_mode_ts", None):
+            self._homeon_last_mode_ts = now_ts
+            self._homeon_last_mode_reason = str(reason)
+        # HOMEON_MODE_HYSTERESIS_END
         data = {
             "enabled": enabled,
             "dry_run": dry_run,
             "mode": mode,
             "reason": reason,
+            "mode_candidate": mode_candidate,
+            "mode_hysteresis": "ON" if mode_hysteresis_active else "OFF",
+            "mode_hysteresis_reason": mode_hysteresis_reason,
+            "mode_hold_remaining_minutes": round(mode_hold_remaining_minutes, 1),
+            "mode_min_hold_minutes": round(mode_min_hold_minutes, 1),
 
             "data_quality_status": data_quality_status,
             "data_quality_score": round(data_quality_score, 0),

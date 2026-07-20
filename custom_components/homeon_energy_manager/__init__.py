@@ -29,6 +29,7 @@ DEFAULT_RUNTIME_OPTIONS = {
     "economic_max_soc_after_negative_charge": 100.0,
     "economic_battery_cycle_cost": 0.15,
     "economic_min_arbitrage_profit": 1.0,
+    "mode_min_hold_minutes": 10.0,
 }
 
 

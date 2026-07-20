@@ -2,17 +2,21 @@
 
 HomeOn Energy Manager is a Home Assistant integration for advanced energy management in photovoltaic and battery storage systems using dynamic electricity tariffs.
 
-## Version 0.2.41
+## Version 0.2.42
 
-This release connects the economic threshold number entities to the EMS selling logic.
+This release adds EMS mode hysteresis and minimum mode hold time.
 
 Changes:
 
-- battery selling readiness is now calculated from configurable economic thresholds,
-- estimated selling profit is calculated from available sellable energy and battery cycle cost,
-- battery trading remains blocked when household protection is active,
-- selling is blocked when estimated profit is below the configured minimum arbitrage profit,
-- new diagnostic sensors show estimated sell profit, sell readiness and sell reason.
+- adds configurable minimum EMS mode hold time,
+- adds mode candidate diagnostics,
+- adds mode hysteresis diagnostics,
+- prevents unnecessary rapid switching between EMS modes,
+- urgent safety modes can still override hysteresis.
+
+## Version 0.2.41
+
+Version 0.2.41 connected economic threshold number entities to the EMS selling logic.
 
 ## Version 0.2.40
 

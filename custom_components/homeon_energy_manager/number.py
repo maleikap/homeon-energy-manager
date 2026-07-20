@@ -82,6 +82,7 @@ NUMBERS = [
     ("economic_max_soc_after_negative_charge", "Maksymalny SOC po cenie ujemnej", 50, 100, 1, "%", "mdi:battery-check", 100),
     ("economic_battery_cycle_cost", "Koszt cyklu baterii", 0, 5, 0.01, "PLN/kWh", "mdi:battery-sync", 0.15),
     ("economic_min_arbitrage_profit", "Minimalny zysk arbitrażu", 0, 200, 0.1, "PLN", "mdi:cash-check", 1.0),
+    ("mode_min_hold_minutes", "Minimalny czas trybu EMS", 0, 60, 1, "min", "mdi:timer-lock", 10),
 ]
 
 
@@ -130,7 +131,7 @@ class HomeOnNumber(CoordinatorEntity, NumberEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.41",
+            "sw_version": "0.2.42",
         }
 
     @property
