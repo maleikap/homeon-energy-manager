@@ -18,6 +18,17 @@ DEFAULT_RUNTIME_OPTIONS = {
     "inverter_discharge_current_a": 120,
     "inverter_safe_discharge_current_a": 20,
     "inverter_block_discharge_current_a": 5,
+    "economic_good_sell_price": 0.55,
+    "economic_cheap_charge_price": 0.30,
+    "economic_negative_buy_price": 0.0,
+    "economic_negative_sell_price": 0.0,
+    "economic_expensive_buy_price": 0.55,
+    "economic_min_sell_price_prepare": 0.05,
+    "economic_min_energy_to_free_kwh": 0.5,
+    "economic_negative_prepare_hours": 6.0,
+    "economic_max_soc_after_negative_charge": 100.0,
+    "economic_battery_cycle_cost": 0.15,
+    "economic_min_arbitrage_profit": 1.0,
 }
 
 

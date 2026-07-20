@@ -2,33 +2,29 @@
 
 HomeOn Energy Manager is a Home Assistant integration for advanced energy management in photovoltaic and battery storage systems using dynamic electricity tariffs.
 
+## Version 0.2.40
+
+This release adds configurable economic threshold number entities.
+
+This is a safe numbers-only release. It does not yet change the EMS decision logic in coordinator.py.
+
+New number entities include:
+
+- good selling price,
+- cheap charging price,
+- negative buy-price threshold,
+- negative sell-price threshold,
+- expensive buy-price threshold,
+- minimum selling price for preparing battery space,
+- minimum energy to free before a negative-price window,
+- maximum preparation time before a negative-price window,
+- maximum SOC after charging during negative-price periods,
+- battery cycle cost,
+- minimum arbitrage profit.
+
 ## Version 0.2.39
 
-This release adds data quality diagnostics and SAFE_MODE.
-
-SAFE_MODE is activated when required sensors are missing, unavailable, invalid or outside safe operating ranges. In SAFE_MODE the integration blocks risky EMS decisions and allows only conservative inverter safety limits when real inverter control is enabled.
-
-New diagnostics include:
-
-- data quality status,
-- data quality score,
-- data errors,
-- data warnings,
-- last valid data timestamp,
-- SAFE_MODE state,
-- SAFE_MODE reason,
-- SAFE_MODE action.
-
-## Key features
-
-- PV, battery, grid and household monitoring.
-- Adaptive battery target calculation.
-- PV Reality Check.
-- Home Battery Priority.
-- Negative Price Window Planner.
-- Deye inverter diagnostics.
-- Data quality diagnostics and SAFE_MODE.
-- Optional inverter control with dry-run mode.
+Version 0.2.39 added data quality diagnostics and SAFE_MODE.
 
 ## Safety
 
