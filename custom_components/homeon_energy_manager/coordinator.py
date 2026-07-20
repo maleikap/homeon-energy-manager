@@ -800,7 +800,15 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         def sel(entity_id: str, option: str) -> None:
             desired.append(("select", str(entity_id), str(option)))
 
-        if weather_lock:
+        if mode == "SAFE_MODE":
+            executor_mode = "SAFE_MODE"
+            action = "SAFE_MODE — błąd danych, blokuję handel i ustawiam bezpieczne ograniczenia"
+            sw(inverter_export_surplus, False)
+            sw(inverter_grid_charging, False)
+            num(inverter_export_surplus_power, 0)
+            num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+
+        elif weather_lock:
             executor_mode = "WEATHER_HOLD_RESERVE"
             action = "Pogoda/PV: blokuję sprzedaż baterii i zostawiam energię na kolejny dzień"
             sw(inverter_export_surplus, False)
@@ -1085,6 +1093,100 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
 
 
+
+        # HOMEON_DATA_QUALITY_START
+        data_quality_errors: list[str] = []
+        data_quality_warnings: list[str] = []
+
+        def _check_required_number(label: str, key: str, min_v: float | None = None, max_v: float | None = None) -> float | None:
+            entity_id = self.entry.data.get(key)
+
+            if not entity_id:
+                data_quality_errors.append(f"{label}: brak konfiguracji encji")
+                return None
+
+            state = self.hass.states.get(entity_id)
+
+            if state is None:
+                data_quality_errors.append(f"{label}: brak encji {entity_id}")
+                return None
+
+            raw = state.state
+
+            if raw in (None, "", "unknown", "unavailable", "none", "None", "null"):
+                data_quality_errors.append(f"{label}: stan {raw}")
+                return None
+
+            value = self._as_float(raw, None)
+
+            if value is None:
+                data_quality_errors.append(f"{label}: nie jest liczbą ({raw})")
+                return None
+
+            if min_v is not None and value < min_v:
+                data_quality_errors.append(f"{label}: za mało {value:g} < {min_v:g}")
+                return value
+
+            if max_v is not None and value > max_v:
+                data_quality_errors.append(f"{label}: za dużo {value:g} > {max_v:g}")
+                return value
+
+            return value
+
+        _check_required_number("SOC", CONF_SOC_SENSOR, 0.0, 100.0)
+        _check_required_number("Moc baterii", CONF_BATTERY_POWER_SENSOR, -200000.0, 200000.0)
+        _check_required_number("Moc PV", CONF_PV_POWER_SENSOR, -1000.0, 200000.0)
+        _check_required_number("Moc domu", CONF_LOAD_POWER_SENSOR, 0.0, 200000.0)
+        _check_required_number("Moc sieci", CONF_GRID_POWER_SENSOR, -200000.0, 200000.0)
+        _check_required_number("Cena zakupu", CONF_BUY_PRICE_SENSOR, -5.0, 5.0)
+        _check_required_number("Cena sprzedaży", CONF_SELL_PRICE_SENSOR, -5.0, 5.0)
+
+        if battery_capacity_kwh <= 0:
+            data_quality_errors.append(f"Pojemność magazynu jest niepoprawna: {battery_capacity_kwh:g} kWh")
+
+        if min_soc < 0 or min_soc > 100:
+            data_quality_errors.append(f"Minimalny SOC poza zakresem: {min_soc:g}%")
+
+        if emergency_soc < 0 or emergency_soc > 100:
+            data_quality_errors.append(f"Awaryjny SOC poza zakresem: {emergency_soc:g}%")
+
+        if emergency_soc > min_soc:
+            data_quality_warnings.append("Awaryjny SOC jest wyższy niż minimalny SOC")
+
+        if pv_power < -100:
+            data_quality_warnings.append(f"Moc PV jest ujemna: {pv_power:.0f} W")
+
+        if buy_price == 0 and sell_price == 0:
+            data_quality_warnings.append("Cena zakupu i sprzedaży wynosi 0 — sprawdź sensor taryfy")
+
+        data_quality_score = max(
+            0.0,
+            min(
+                100.0,
+                100.0 - len(data_quality_errors) * 25.0 - len(data_quality_warnings) * 8.0,
+            ),
+        )
+
+        safe_mode_active = bool(data_quality_errors)
+
+        if safe_mode_active:
+            data_quality_status = "BŁĄD"
+            safe_mode_reason = " | ".join(data_quality_errors)[:240]
+            safe_mode_action = "Blokuję handel baterią i wymuszone sterowanie. Dozwolone tylko bezpieczne ograniczenia falownika."
+        elif data_quality_warnings:
+            data_quality_status = "OSTRZEŻENIE"
+            safe_mode_reason = "Brak aktywnego SAFE_MODE"
+            safe_mode_action = "Dane działają, ale wymagają kontroli: " + " | ".join(data_quality_warnings)[:180]
+        else:
+            data_quality_status = "OK"
+            safe_mode_reason = "Brak błędów danych"
+            safe_mode_action = "Normalna praca EMS"
+
+        if not safe_mode_active:
+            self._homeon_last_data_ok = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        data_quality_last_ok = getattr(self, "_homeon_last_data_ok", "-")
+        # HOMEON_DATA_QUALITY_END
         # HOMEON_HOME_BATTERY_PRIORITY_START
         battery_trade_enabled = bool(store.get("battery_trade", False))
         home_battery_load_w = min(max(load_power, 0.0), max(battery_discharge_w, 0.0))
@@ -1281,6 +1383,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         if not enabled:
             mode = "DISABLED"
             reason = "HomeOn EMS jest wyłączony"
+        elif safe_mode_active:
+            mode = "SAFE_MODE"
+            reason = safe_mode_reason
         elif soc <= emergency_soc:
             mode = "EMERGENCY_RESERVE"
             reason = "SOC jest poniżej poziomu awaryjnego"
@@ -1329,6 +1434,15 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "dry_run": dry_run,
             "mode": mode,
             "reason": reason,
+
+            "data_quality_status": data_quality_status,
+            "data_quality_score": round(data_quality_score, 0),
+            "data_quality_errors": " | ".join(data_quality_errors)[:240] if data_quality_errors else "Brak",
+            "data_quality_warnings": " | ".join(data_quality_warnings)[:240] if data_quality_warnings else "Brak",
+            "data_quality_last_ok": data_quality_last_ok,
+            "safe_mode": "ON" if safe_mode_active else "OFF",
+            "safe_mode_reason": safe_mode_reason,
+            "safe_mode_action": safe_mode_action,
 
             "soc": round(soc, 1),
             "battery_power": round(battery_power, 0),
