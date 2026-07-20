@@ -455,11 +455,18 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
     ) -> dict[str, Any]:
         now = dt_util.now()
         points = self._price_points_for_entity(buy_price_entity, buy_price, horizon_hours=12)
+        economic_negative_buy_price = self._runtime_float("economic_negative_buy_price", 0.0)
+        economic_negative_sell_price = self._runtime_float("economic_negative_sell_price", 0.0)
+        economic_min_sell_price_prepare = self._runtime_float("economic_min_sell_price_prepare", 0.05)
+        economic_min_energy_to_free_kwh = self._runtime_float("economic_min_energy_to_free_kwh", 0.5)
+        economic_negative_prepare_hours = self._runtime_float("economic_negative_prepare_hours", 6.0)
+        economic_battery_cycle_cost = self._runtime_float("economic_battery_cycle_cost", 0.15)
+        economic_min_arbitrage_profit = self._runtime_float("economic_min_arbitrage_profit", 1.0)
 
         negative_points = [
             p for p in points
             if self._as_float(p.get("price"), 999.0) is not None
-            and float(p.get("price")) <= 0.0
+            and float(p.get("price")) <= economic_negative_buy_price
         ]
 
         result = {
@@ -475,11 +482,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "reason": "Nie znaleziono nadchodzącego okna ceny ujemnej w atrybutach ceny zakupu.",
             "prepare": False,
             "now": False,
-            "sell_block": bool(sell_price <= 0.0),
+            "sell_block": bool(sell_price <= economic_negative_sell_price),
         }
 
         if not negative_points:
-            if buy_price <= 0.0:
+            if buy_price <= economic_negative_buy_price:
                 result.update({
                     "status": "TERAZ",
                     "start": "teraz",
@@ -489,7 +496,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                     "reason": "Aktualna cena zakupu jest ujemna lub zerowa — priorytetem jest ładowanie magazynu i brak sprzedaży.",
                     "now": True,
                 })
-            elif sell_price <= 0.0:
+            elif sell_price <= economic_negative_sell_price:
                 result.update({
                     "status": "BLOKUJ EKSPORT",
                     "strategy": "Cena sprzedaży jest ujemna — blokuj oddawanie energii do sieci.",
@@ -515,7 +522,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         end_dt = group[-1]["dt"] + timedelta(hours=1)
         min_price = min(float(x["price"]) for x in group)
 
-        now_active = bool((buy_price <= 0.0) or (start_dt <= now + timedelta(minutes=10) and end_dt > now))
+        now_active = bool((buy_price <= economic_negative_buy_price) or (start_dt <= now + timedelta(minutes=10) and end_dt > now))
         hours_to_start = max(0.0, (start_dt - now).total_seconds() / 3600.0)
         duration_h = max(1.0, (end_dt - start_dt).total_seconds() / 3600.0)
 
@@ -542,13 +549,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             prepare_export_w = max(500.0, min(float(HOMEON_EXPORT_TARGET_W), prepare_export_w))
 
         best_sell_price = self._as_float(sell_stats.get("best_sell_price_24h"), sell_price) or sell_price
-        sell_is_reasonable_now = bool(sell_price > 0.05 and sell_price >= min(best_sell_price, sell_price) - 0.20)
+        sell_is_reasonable_now = bool(sell_price > economic_min_sell_price_prepare and sell_price >= min(best_sell_price, sell_price) - 0.20)
 
         prepare = bool(
             not now_active
             and battery_trade_enabled
-            and hours_to_start <= 6.0
-            and energy_to_free_kwh >= 0.5
+            and hours_to_start <= economic_negative_prepare_hours
+            and energy_to_free_kwh >= economic_min_energy_to_free_kwh
             and soc > target_soc_before + 3.0
             and sell_is_reasonable_now
         )
@@ -573,9 +580,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             strategy = "Wykryto cenę ujemną, ale nie ma warunków do wcześniejszej sprzedaży z magazynu."
             if not battery_trade_enabled:
                 reason = "Cena ujemna jest w planie, ale tryb handlu baterią jest OFF — HomeOn nie opróżnia magazynu handlowo."
-            elif energy_to_free_kwh < 0.5:
+            elif energy_to_free_kwh < economic_min_energy_to_free_kwh:
                 reason = "Cena ujemna jest w planie, ale w magazynie jest już wystarczająco wolnego miejsca."
-            elif sell_price <= 0.05:
+            elif sell_price <= economic_negative_sell_price5:
                 reason = "Cena ujemna jest w planie, ale obecna cena sprzedaży jest za niska na opłacalne zwalnianie magazynu."
             else:
                 reason = "Cena ujemna jest w planie, ale okno jest za daleko albo SOC nie pozwala na sensowne zwolnienie magazynu."
@@ -593,7 +600,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "reason": reason[:240],
             "prepare": prepare,
             "now": now_active,
-            "sell_block": bool(sell_price <= 0.0),
+            "sell_block": bool(sell_price <= economic_negative_sell_price),
         })
 
         return result
@@ -675,6 +682,15 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         enabled = bool(store.get("enabled", True))
         dry_run = bool(store.get("dry_run", True))
+
+        # HOMEON_ECONOMIC_THRESHOLDS_START
+        economic_good_sell_price = self._runtime_float("economic_good_sell_price", 0.55)
+        economic_cheap_charge_price = self._runtime_float("economic_cheap_charge_price", 0.30)
+        economic_negative_buy_price = self._runtime_float("economic_negative_buy_price", 0.0)
+        economic_negative_sell_price = self._runtime_float("economic_negative_sell_price", 0.0)
+        economic_expensive_buy_price = self._runtime_float("economic_expensive_buy_price", 0.55)
+        economic_max_soc_after_negative_charge = self._runtime_float("economic_max_soc_after_negative_charge", 100.0)
+        # HOMEON_ECONOMIC_THRESHOLDS_END
 
         # HOMEON_HOME_BATTERY_PRIORITY_EXEC_GUARD
         if str(data.get("home_battery_protection", "OFF")).upper() == "ON" and not bool(store.get("battery_trade", False)):
@@ -1378,7 +1394,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         deye_self_power = max(deye_self_power, 0.0)
 
-        sell_ready = sell_price >= 0.55 and soc > discharge_target_soc + 8 and not pv_reality_lock and battery_trade_enabled and not negative_price_plan.get("now", False) and sell_price > 0.0
+        sell_ready = sell_price >= economic_good_sell_price and soc > discharge_target_soc + 8 and not pv_reality_lock and battery_trade_enabled and not negative_price_plan.get("now", False) and sell_price > economic_negative_sell_price
 
         if not enabled:
             mode = "DISABLED"
@@ -1389,7 +1405,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif soc <= emergency_soc:
             mode = "EMERGENCY_RESERVE"
             reason = "SOC jest poniżej poziomu awaryjnego"
-        elif negative_price_plan.get("now", False) and soc < 100:
+        elif negative_price_plan.get("now", False) and soc < economic_max_soc_after_negative_charge:
             mode = "NEGATIVE_IMPORT"
             reason = str(negative_price_plan.get("reason", "Cena ujemna — ładuję magazyn i blokuję eksport"))
         elif negative_price_plan.get("prepare", False):
@@ -1398,16 +1414,16 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif negative_price_plan.get("sell_block", False):
             mode = "NEGATIVE_PRICE_EXPORT_BLOCK"
             reason = str(negative_price_plan.get("reason", "Cena sprzedaży ujemna — blokuję eksport"))
-        elif buy_price <= 0 and soc < 100:
+        elif buy_price <= economic_negative_buy_price and soc < economic_max_soc_after_negative_charge:
             mode = "NEGATIVE_IMPORT"
             reason = "Cena zakupu jest ujemna lub zerowa — opłaca się ładować"
-        elif buy_price < 0.30 and soc < charge_target_soc:
+        elif buy_price < economic_cheap_charge_price and soc < charge_target_soc:
             mode = "CHEAP_CHARGE"
             reason = "Tania energia — można ładować magazyn"
         elif home_battery_protection_active:
             mode = "HOME_BATTERY_PRIORITY"
             reason = home_battery_protection_reason
-        elif not battery_trade_enabled and sell_price >= 0.55 and soc > discharge_target_soc + 8:
+        elif not battery_trade_enabled and sell_price >= economic_good_sell_price and soc > discharge_target_soc + 8:
             mode = "HOME_BATTERY_PRIORITY"
             reason = "Tryb handlu baterią jest wyłączony — nie sprzedaję energii z magazynu, bateria zostaje dla domu"
         elif pv_reality_lock and soc > min_soc:
@@ -1422,7 +1438,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif pv_power > 1000 and soc < charge_target_soc:
             mode = "PV_CHARGE"
             reason = "Produkcja PV ładuje magazyn"
-        elif buy_price >= 0.55 and soc > min_soc:
+        elif buy_price >= economic_expensive_buy_price and soc > min_soc:
             mode = "EXPENSIVE_SELF_USE"
             reason = "Droga energia — używam baterii na dom"
         else:

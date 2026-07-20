@@ -12,25 +12,29 @@ The integration analyses PV production, household consumption, battery state of 
 - Home Battery Priority protection for household self-consumption.
 - Negative Price Window Planner for preparing battery capacity before negative-price periods.
 - Data quality diagnostics and SAFE_MODE protection.
+- Configurable economic thresholds as Home Assistant number entities.
 - Optional inverter control with dry-run mode.
 - Diagnostic sensors for strategy, planned actions and inverter state.
 
-## Version 0.2.39
+## Version 0.2.40
 
-This release adds data quality diagnostics and SAFE_MODE.
+This release moves economic decision thresholds from hard-coded values to configurable Home Assistant number entities.
 
-SAFE_MODE is activated when required sensors are missing, unavailable, invalid or outside safe operating ranges. In SAFE_MODE the integration blocks battery trading decisions and only allows conservative inverter limits when real inverter control is enabled.
+New configurable thresholds include:
 
-New diagnostics include:
+- good selling price,
+- cheap charging price,
+- negative buy-price threshold,
+- negative sell-price threshold,
+- expensive buy-price threshold,
+- minimum selling price for preparing battery space,
+- minimum energy to free before a negative-price window,
+- maximum preparation time before a negative-price window,
+- maximum SOC after charging during negative-price periods,
+- battery cycle cost,
+- minimum arbitrage profit.
 
-- data quality status,
-- data quality score,
-- data errors,
-- data warnings,
-- last valid data timestamp,
-- SAFE_MODE state,
-- SAFE_MODE reason,
-- SAFE_MODE action.
+These values allow the EMS strategy to be tuned to the actual tariff, battery cost and user preference without modifying the code.
 
 ## Safety philosophy
 
