@@ -137,14 +137,6 @@ SENSORS = [
     ("negative_price_prepare_export_w", "Zalecana moc zwalniania magazynu", UnitOfPower.WATT, "mdi:transmission-tower-export"),
     ("negative_price_strategy", "Strategia ceny ujemnej", None, "mdi:strategy"),
     ("negative_price_reason", "Powód strategii ceny ujemnej", None, "mdi:text-box-check"),
-    ("data_quality_status", "Status danych", None, "mdi:database-check"),
-    ("data_quality_score", "Wynik jakości danych", PERCENT, "mdi:gauge"),
-    ("data_quality_errors", "Błędy danych", None, "mdi:database-alert"),
-    ("data_quality_warnings", "Ostrzeżenia danych", None, "mdi:database-eye"),
-    ("data_quality_last_ok", "Ostatni poprawny odczyt", None, "mdi:clock-check"),
-    ("safe_mode", "SAFE MODE", None, "mdi:shield-alert"),
-    ("safe_mode_reason", "Powód SAFE MODE", None, "mdi:text-box-alert"),
-    ("safe_mode_action", "Akcja SAFE MODE", None, "mdi:shield-check"),
 ]
 
 
@@ -174,7 +166,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.40.1",
+            "sw_version": "0.2.38",
         }
 
     @property

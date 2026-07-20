@@ -2,22 +2,19 @@
 
 HomeOn Energy Manager is a Home Assistant integration for advanced energy management in photovoltaic and battery storage systems using dynamic electricity tariffs.
 
-## Version 0.2.40.1
+## Stable restore
 
-Hotfix for version 0.2.40.
+This main branch was restored to the stable v0.2.38 integration after a broken release produced an empty coordinator.py file.
 
-This release fixes the economic threshold variables scope inside the EMS update cycle. The configurable economic number entities remain unchanged.
+The restored version includes:
 
-## Key features
-
-- PV, battery, grid and household energy monitoring.
-- Dynamic EMS decisions.
-- PV Reality Check.
-- Home Battery Priority.
-- Negative Price Window Planner.
-- Data quality diagnostics and SAFE_MODE.
-- Configurable economic thresholds.
-- Optional Deye inverter control with dry-run mode.
+- PV, battery, grid and household monitoring,
+- adaptive battery targets,
+- PV Reality Check,
+- Home Battery Priority,
+- Negative Price Window Planner,
+- Deye inverter diagnostics,
+- optional inverter control with dry-run mode.
 
 ## Safety
 
