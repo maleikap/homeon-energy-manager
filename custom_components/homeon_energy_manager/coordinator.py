@@ -1178,7 +1178,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data_quality_errors: list[str] = []
         data_quality_warnings: list[str] = []
 
-        def _check_required_number(label: str, key: str, min_v: float | None = None, max_v: float | None = None) -> float | None:
+        def _check_required_number(
+            label: str,
+            key: str,
+            min_v: float | None = None,
+            max_v: float | None = None,
+            max_age_seconds: float | None = None,
+        ) -> float | None:
             entity_id = self.entry.data.get(key)
 
             if not entity_id:
@@ -1190,6 +1196,17 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             if state is None:
                 data_quality_errors.append(f"{label}: brak encji {entity_id}")
                 return None
+
+            if max_age_seconds is not None:
+                age_seconds = max(
+                    0.0,
+                    (dt_util.utcnow() - state.last_updated).total_seconds(),
+                )
+                if age_seconds > max_age_seconds:
+                    data_quality_errors.append(
+                        f"{label}: dane nieaktualne ({age_seconds / 60.0:.1f} min)"
+                    )
+                    return None
 
             raw = state.state
 
@@ -1213,13 +1230,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
             return value
 
-        _check_required_number("SOC", CONF_SOC_SENSOR, 0.0, 100.0)
-        _check_required_number("Moc baterii", CONF_BATTERY_POWER_SENSOR, -200000.0, 200000.0)
-        _check_required_number("Moc PV", CONF_PV_POWER_SENSOR, -1000.0, 200000.0)
-        _check_required_number("Moc domu", CONF_LOAD_POWER_SENSOR, 0.0, 200000.0)
-        _check_required_number("Moc sieci", CONF_GRID_POWER_SENSOR, -200000.0, 200000.0)
-        _check_required_number("Cena zakupu", CONF_BUY_PRICE_SENSOR, -5.0, 5.0)
-        _check_required_number("Cena sprzedaży", CONF_SELL_PRICE_SENSOR, -5.0, 5.0)
+        _check_required_number("SOC", CONF_SOC_SENSOR, 0.0, 100.0, 300.0)
+        _check_required_number("Moc baterii", CONF_BATTERY_POWER_SENSOR, -200000.0, 200000.0, 180.0)
+        _check_required_number("Moc PV", CONF_PV_POWER_SENSOR, -1000.0, 200000.0, 180.0)
+        _check_required_number("Moc domu", CONF_LOAD_POWER_SENSOR, 0.0, 200000.0, 180.0)
+        _check_required_number("Moc sieci", CONF_GRID_POWER_SENSOR, -200000.0, 200000.0, 180.0)
+        _check_required_number("Cena zakupu", CONF_BUY_PRICE_SENSOR, -5.0, 5.0, 7200.0)
+        _check_required_number("Cena sprzedaży", CONF_SELL_PRICE_SENSOR, -5.0, 5.0, 7200.0)
 
         if battery_capacity_kwh <= 0:
             data_quality_errors.append(f"Pojemność magazynu jest niepoprawna: {battery_capacity_kwh:g} kWh")
