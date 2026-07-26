@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 import logging
 import math
@@ -309,11 +310,41 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "sell_wait_reason": wait_reason,
         }
 
-    async def _async_set_switch(self, entity_id: str, turn_on: bool, actions: list[str]) -> None:
+    async def _async_wait_for_state(
+        self,
+        entity_id: str,
+        expected: Any,
+        domain: str,
+        timeout: float = 3.0,
+    ) -> bool:
+        """Wait briefly for Home Assistant to expose the requested state."""
+        deadline = dt_util.utcnow().timestamp() + timeout
+
+        while dt_util.utcnow().timestamp() < deadline:
+            state = self.hass.states.get(entity_id)
+
+            if state is not None:
+                if domain == "switch":
+                    wanted = "on" if bool(expected) else "off"
+                    if state.state == wanted:
+                        return True
+                elif domain == "number":
+                    current = self._as_float(state.state, None)
+                    step = self._as_float(state.attributes.get("step"), 0.1) or 0.1
+                    if current is not None and abs(float(current) - float(expected)) <= max(float(step), 0.1):
+                        return True
+                elif domain == "select" and str(state.state).strip().lower() == str(expected).strip().lower():
+                    return True
+
+            await asyncio.sleep(0.2)
+
+        return False
+
+    async def _async_set_switch(self, entity_id: str, turn_on: bool, actions: list[str]) -> bool:
         state = self.hass.states.get(entity_id)
         if state is None:
             actions.append(f"{entity_id}: brak encji")
-            return
+            return False
 
         service = "turn_on" if turn_on else "turn_off"
 
@@ -324,25 +355,29 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 {"entity_id": entity_id},
                 blocking=True,
             )
+            confirmed = await self._async_wait_for_state(entity_id, turn_on, "switch")
+            if not confirmed:
+                actions.append(f"{entity_id}: BRAK POTWIERDZENIA {'ON' if turn_on else 'OFF'}")
+                return False
             actions.append(f"{entity_id}: {'ON' if turn_on else 'OFF'}")
+            return True
         except Exception as err:
             _LOGGER.exception("HomeOn inverter switch control failed: %s", entity_id)
             actions.append(f"{entity_id}: BŁĄD {err}")
+            return False
 
-    async def _async_set_number(self, entity_id: str, value: float, actions: list[str]) -> None:
+    async def _async_set_number(self, entity_id: str, value: float, actions: list[str]) -> bool:
         state = self.hass.states.get(entity_id)
         if state is None:
             actions.append(f"{entity_id}: brak encji")
-            return
+            return False
 
         min_v = self._as_float(state.attributes.get("min"), None)
         max_v = self._as_float(state.attributes.get("max"), None)
-
         final_value = float(value)
 
         if min_v is not None:
             final_value = max(final_value, float(min_v))
-
         if max_v is not None:
             final_value = min(final_value, float(max_v))
 
@@ -350,28 +385,30 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             await self.hass.services.async_call(
                 "number",
                 "set_value",
-                {
-                    "entity_id": entity_id,
-                    "value": final_value,
-                },
+                {"entity_id": entity_id, "value": final_value},
                 blocking=True,
             )
+            confirmed = await self._async_wait_for_state(entity_id, final_value, "number")
+            if not confirmed:
+                actions.append(f"{entity_id}: BRAK POTWIERDZENIA {final_value:g}")
+                return False
             actions.append(f"{entity_id}: {final_value:g}")
+            return True
         except Exception as err:
             _LOGGER.exception("HomeOn inverter number control failed: %s", entity_id)
             actions.append(f"{entity_id}: BŁĄD {err}")
+            return False
 
-
-    async def _async_set_select(self, entity_id: str, option: str, actions: list[str]) -> None:
+    async def _async_set_select(self, entity_id: str, option: str, actions: list[str]) -> bool:
         state = self.hass.states.get(entity_id)
         if state is None:
             actions.append(f"{entity_id}: brak encji")
-            return
+            return False
 
         wanted = str(option or "").strip()
         options = state.attributes.get("options") or []
-
         final_option = wanted
+
         for opt in options:
             if str(opt).strip().lower() == wanted.lower():
                 final_option = str(opt)
@@ -379,22 +416,25 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         if options and final_option not in [str(x) for x in options]:
             actions.append(f"{entity_id}: BŁĄD opcja '{wanted}' nie istnieje. Dostępne: {', '.join(map(str, options))}")
-            return
+            return False
 
         try:
             await self.hass.services.async_call(
                 "select",
                 "select_option",
-                {
-                    "entity_id": entity_id,
-                    "option": final_option,
-                },
+                {"entity_id": entity_id, "option": final_option},
                 blocking=True,
             )
+            confirmed = await self._async_wait_for_state(entity_id, final_option, "select")
+            if not confirmed:
+                actions.append(f"{entity_id}: BRAK POTWIERDZENIA {final_option}")
+                return False
             actions.append(f"{entity_id}: {final_option}")
+            return True
         except Exception as err:
             _LOGGER.exception("HomeOn inverter select control failed: %s", entity_id)
             actions.append(f"{entity_id}: BŁĄD {err}")
+            return False
 
 
     def _price_points_for_entity(
@@ -1035,8 +1075,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         last_hash = getattr(self, "_homeon_last_control_hash", None)
         last_ts = getattr(self, "_homeon_last_control_ts", 0.0)
 
-        if control_hash == last_hash and now_ts - float(last_ts or 0.0) < 120:
-            data["inverter_control_last_result"] = "Bez zmian — ostatnie komendy były już wysłane mniej niż 120 s temu: " + control_hash
+        if control_hash == last_hash and now_ts - float(last_ts or 0.0) < deye_min_command_interval_seconds:
+            data["inverter_control_last_result"] = f"Bez zmian — ostatnie komendy były już wysłane mniej niż {deye_min_command_interval_seconds:.0f} s temu: {control_hash}"
             data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
             return data
 
@@ -1054,19 +1094,26 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             return data
         # HOMEON_DEYE_SAFE_DRIVER_EXEC_END
         actions: list[str] = []
+        command_results: list[bool] = []
 
         for domain, entity_id, value in desired:
             if domain == "switch":
-                await self._async_set_switch(entity_id, bool(value), actions)
+                command_results.append(await self._async_set_switch(entity_id, bool(value), actions))
             elif domain == "number":
-                await self._async_set_number(entity_id, float(value), actions)
+                command_results.append(await self._async_set_number(entity_id, float(value), actions))
             elif domain == "select":
-                await self._async_set_select(entity_id, str(value), actions)
+                command_results.append(await self._async_set_select(entity_id, str(value), actions))
 
-        self._homeon_last_control_hash = control_hash
-        self._homeon_last_control_ts = now_ts
+        all_commands_ok = bool(command_results) and all(command_results)
 
-        data["inverter_control_last_result"] = " | ".join(actions) if actions else "Brak wykonanych akcji"
+        if all_commands_ok:
+            self._homeon_last_control_hash = control_hash
+            self._homeon_last_control_ts = now_ts
+            data["inverter_control_last_result"] = "OK: " + " | ".join(actions)
+        elif command_results:
+            data["inverter_control_last_result"] = "CZĘŚCIOWY BŁĄD — ponowię niepotwierdzone zmiany: " + " | ".join(actions)
+        else:
+            data["inverter_control_last_result"] = "Brak wykonanych akcji"
         data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
         return data
 
