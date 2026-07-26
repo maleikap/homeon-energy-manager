@@ -1,0 +1,47 @@
+name: Publish manager beta
+
+on:
+  push:
+    branches:
+      - "test/**"
+    paths:
+      - custom_components/homeon_energy_manager/**
+      - tests/**
+      - .github/workflows/test.yml
+      - .github/workflows/publish-beta.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  beta:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run safety tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          version="$(python -c 'import json; print(json.load(open("custom_components/homeon_energy_manager/manifest.json"))["version"])')"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Prerelease $tag already exists"
+            exit 0
+          fi
+          gh release create "$tag" --target "$GITHUB_SHA" --prerelease --title "HomeOn Energy Manager $VERSION" --generate-notes
