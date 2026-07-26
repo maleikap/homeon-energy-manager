@@ -1,4 +1,5 @@
 DOMAIN = "homeon_energy_manager"
+VERSION = "0.2.44-beta.1"
 
 CONF_SOC_SENSOR = "soc_sensor"
 CONF_BATTERY_POWER_SENSOR = "battery_power_sensor"
