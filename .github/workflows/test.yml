@@ -1,0 +1,30 @@
+name: Test HomeOn Manager
+
+on:
+  push:
+    branches:
+      - main
+      - "test/**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Run safety tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Validate JSON
+        run: python -m json.tool custom_components/homeon_energy_manager/manifest.json >/dev/null
