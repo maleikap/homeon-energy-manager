@@ -41,7 +41,7 @@ jobs:
           set -euo pipefail
           tag="v$VERSION"
           if gh release view "$tag" >/dev/null 2>&1; then
-            echo "Prerelease $tag already exists"
-            exit 0
+            gh release edit "$tag" --prerelease=false --latest=false --title "HomeOn Energy Manager $VERSION (test)"
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --latest=false --title "HomeOn Energy Manager $VERSION (test)" --generate-notes
           fi
-          gh release create "$tag" --target "$GITHUB_SHA" --prerelease --title "HomeOn Energy Manager $VERSION" --generate-notes
