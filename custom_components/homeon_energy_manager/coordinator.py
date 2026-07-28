@@ -889,6 +889,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
 
+        elif mode == "DISCHARGE_TARGET_HOLD":
+            action = "Cel rozładowania osiągnięty — blokuję dalsze rozładowanie bez drogiego ładowania z sieci"
+            sw(inverter_export_surplus, False)
+            sw(inverter_grid_charging, False)
+            num(inverter_export_surplus_power, 0)
+            num(inverter_max_charge_current, inverter_charge_current_a)
+            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+
         elif mode == "SELL_BATTERY_HIGH_PRICE" and safe_export_limit_w > 0 and plan_safe_to_sell_kwh > 0.3:
             action = "Sprzedaż tylko bezpiecznej nadwyżki: %.2f kWh, limit eksportu %.0f W" % (plan_safe_to_sell_kwh, safe_export_limit_w)
             data["inverter_work_mode_target"] = inverter_work_mode_sell_option
@@ -1539,6 +1547,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif buy_price < economic_cheap_charge_price and soc < charge_target_soc:
             mode = "CHEAP_CHARGE"
             reason = "Tania energia — można ładować magazyn"
+        elif soc <= discharge_target_soc:
+            mode = "DISCHARGE_TARGET_HOLD"
+            reason = (
+                f"Osiągnięto cel rozładowania {discharge_target_soc:.1f}% — "
+                "blokuję dalsze rozładowanie i nie ładuję z sieci przy drogiej cenie"
+            )
         elif home_battery_protection_active:
             mode = "HOME_BATTERY_PRIORITY"
             reason = home_battery_protection_reason
@@ -1557,7 +1571,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif pv_power > 1000 and soc < charge_target_soc:
             mode = "PV_CHARGE"
             reason = "Produkcja PV ładuje magazyn"
-        elif buy_price >= economic_expensive_buy_price and soc > min_soc:
+        elif buy_price >= economic_expensive_buy_price and soc > discharge_target_soc:
             mode = "EXPENSIVE_SELF_USE"
             reason = "Droga energia — używam baterii na dom"
         else:
@@ -1576,6 +1590,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "DISABLED": 100,
             "SAFE_MODE": 95,
             "EMERGENCY_RESERVE": 90,
+            "DISCHARGE_TARGET_HOLD": 88,
             "NEGATIVE_IMPORT": 85,
             "NEGATIVE_PRICE_EXPORT_BLOCK": 82,
             "PREPARE_NEGATIVE_PRICE_WINDOW": 80,
@@ -1593,6 +1608,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "DISABLED",
             "SAFE_MODE",
             "EMERGENCY_RESERVE",
+            "DISCHARGE_TARGET_HOLD",
             "NEGATIVE_IMPORT",
             "NEGATIVE_PRICE_EXPORT_BLOCK",
         }
