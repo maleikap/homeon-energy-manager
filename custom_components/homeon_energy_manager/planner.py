@@ -286,7 +286,13 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     if safe_to_sell_kwh <= 0.2:
         safe_export_limit_w = 0.0
     else:
-        safe_export_limit_w = min(10000.0, max(500.0, safe_to_sell_kwh * 1000.0))
+        # Najlepsze okno cenowe jest ograniczone czasowo: eksportuj z pełną
+        # skonfigurowaną mocą, a ilość energii ograniczaj przez safe_to_sell_kwh
+        # i docelowy SOC sprawdzane w każdym cyklu koordynatora.
+        safe_export_limit_w = max(
+            0.0,
+            coordinator._runtime_float("inverter_export_target_w", 10000.0),
+        )
 
     night_soc_need = min(100.0, max(0.0, night_need_kwh / max(battery_capacity, 0.1) * 100.0))
     recommended_soc = max(night_reserve_soc, night_soc_need + 8.0, safe_min_soc)
