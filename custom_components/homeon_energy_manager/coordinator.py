@@ -716,45 +716,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         enabled = bool(store.get("enabled", True))
         dry_run = bool(store.get("dry_run", True))
 
-        # HOMEON_HOME_BATTERY_PRIORITY_EXEC_GUARD
-        if str(data.get("home_battery_protection", "OFF")).upper() == "ON" and not bool(store.get("battery_trade", False)):
-            data["inverter_control_action"] = "Ochrona domu — bateria zasila gospodarstwo, nie zmieniam nastaw Deye"
-            data["inverter_control_executor_mode"] = "BLOCKED_HOME_PRIORITY"
-            data["inverter_control_last_result"] = (
-                "Pominięto sterowanie: bateria zasila gospodarstwo domowe. "
-                "HomeOn nie zmienia trybu Deye ani limitów baterii."
-            )
-            data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
-            data["inverter_deye_plan"] = "Zablokowane przez ochronę domu"
-            data["inverter_deye_current_states"] = "Bateria zasila gospodarstwo"
-            data["inverter_deye_changes"] = "Brak zmian — ochrona domu"
-            data["inverter_deye_changed_only"] = "Brak realnych zmian — ochrona domu"
-            data["inverter_deye_services"] = "Nie wykonano usług HA"
-            data["inverter_deye_command_count"] = 0
-            data["inverter_deye_changed_count"] = 0
-            data["inverter_deye_unchanged_count"] = 0
-            data["inverter_deye_test_mode"] = "BLOCKED — bateria zasila dom"
-            return data
-
-        if str(data.get("mode", "")).upper() == "HOME_BATTERY_PRIORITY":
-            data["inverter_control_action"] = "Ochrona domu — tryb handlu baterią wyłączony, nie ustawiam Export First"
-            data["inverter_control_executor_mode"] = "BLOCKED_BATTERY_TRADE_OFF"
-            data["inverter_control_last_result"] = (
-                "Pominięto sterowanie: handel baterią jest wyłączony. "
-                "HomeOn nie ustawia Export First ani sprzedaży z magazynu."
-            )
-            data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
-            data["inverter_deye_plan"] = "Zablokowane — handel baterią OFF"
-            data["inverter_deye_current_states"] = "Handel baterią wyłączony"
-            data["inverter_deye_changes"] = "Brak zmian — handel baterią OFF"
-            data["inverter_deye_changed_only"] = "Brak realnych zmian — handel baterią OFF"
-            data["inverter_deye_services"] = "Nie wykonano usług HA"
-            data["inverter_deye_command_count"] = 0
-            data["inverter_deye_changed_count"] = 0
-            data["inverter_deye_unchanged_count"] = 0
-            data["inverter_deye_test_mode"] = "BLOCKED — handel baterią OFF"
-            return data
-
+        # Nie kończ sterowania przed wysłaniem komend wyłączających eksport.
+        # HOME_BATTERY_PRIORITY musi aktywnie przywrócić bezpieczne nastawy Deye.
         inverter_control = bool(store.get("inverter_control", False))
         mode = str(data.get("mode", "NORMAL"))
 
@@ -852,15 +815,26 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             executor_mode = "WEATHER_HOLD_RESERVE"
             action = "Pogoda/PV: blokuję sprzedaż baterii i zostawiam energię na kolejny dzień"
             sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
             sw(inverter_grid_charging, False)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "EMERGENCY_RESERVE":
             action = "Awaryjny SOC — włączam ładowanie z sieci i blokuję eksport"
             sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
             sw(inverter_grid_charging, True)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+
+        elif mode == "HOME_BATTERY_PRIORITY":
+            executor_mode = "HOME_BATTERY_PRIORITY"
+            action = "Handel baterią wyłączony lub bateria zasila dom — aktywnie wyłączam sprzedaż do sieci"
+            sw(inverter_export_surplus, False)
+            sw(inverter_grid_charging, False)
+            num(inverter_export_surplus_power, 0)
+            num(inverter_max_charge_current, inverter_charge_current_a)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         elif mode == "PREPARE_NEGATIVE_PRICE_WINDOW":
             neg_energy_to_free_kwh = self._as_float(data.get("negative_price_energy_to_free_kwh"), 0.0) or 0.0
@@ -885,6 +859,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif mode in ("NEGATIVE_IMPORT", "CHEAP_CHARGE"):
             action = "Tania energia — ładuję magazyn z sieci, eksport baterii zablokowany"
             sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
             sw(inverter_grid_charging, True)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
@@ -911,6 +886,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             executor_mode = "SELL_BLOCKED_NO_SAFE_SURPLUS"
             action = "Cena sprzedaży dobra, ale brak bezpiecznej nadwyżki — blokuję eksport baterii"
             sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
             sw(inverter_grid_charging, False)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
@@ -918,18 +894,21 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             action = "Realna produkcja PV jest słaba — blokuję sprzedaż i ograniczam rozładowanie magazynu"
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "WAIT_BETTER_SELL_PRICE":
             action = "Czekam na lepszą cenę sprzedaży — blokuję sprzedaż baterii"
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "PV_CHARGE":
             action = "Ładowanie z PV — ładowanie z sieci wyłączone, eksport baterii zablokowany"
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
@@ -937,6 +916,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             action = "Droga energia — bateria pracuje na dom, bez sprzedaży do sieci"
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
             num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         else:
@@ -944,6 +924,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             action = "Normalna praca — bez ładowania z sieci i bez wymuszonej sprzedaży"
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
