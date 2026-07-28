@@ -17,8 +17,8 @@ class TestHomeOnManagerBeta(unittest.TestCase):
     def test_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
         const = (COMPONENT / "const.py").read_text(encoding="utf-8")
-        self.assertEqual(manifest["version"], "0.2.44-beta.6")
-        self.assertIn('VERSION = "0.2.44-beta.6"', const)
+        self.assertEqual(manifest["version"], "0.2.44-beta.7")
+        self.assertIn('VERSION = "0.2.44-beta.7"', const)
 
     def test_pv_installed_power_is_available_and_persistent(self) -> None:
         init_source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
@@ -83,6 +83,21 @@ class TestHomeOnManagerBeta(unittest.TestCase):
         self.assertIn("sw(inverter_grid_charging, False)", executor)
         self.assertIn("sw(inverter_export_surplus, True)", executor)
         self.assertIn("safe_export_limit_w", executor)
+
+    def test_stopping_trade_actively_turns_off_deye_export(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        self.assertNotIn("HOMEON_HOME_BATTERY_PRIORITY_EXEC_GUARD", source)
+        self.assertIn('elif mode == "HOME_BATTERY_PRIORITY":', source)
+        block = source.split('elif mode == "HOME_BATTERY_PRIORITY":', 1)[1].split(
+            'elif mode == "PREPARE_NEGATIVE_PRICE_WINDOW":', 1
+        )[0]
+        self.assertIn("sw(inverter_export_surplus, False)", block)
+        self.assertIn("num(inverter_export_surplus_power, 0)", block)
+        normal = source.split('action = "Normalna praca — bez ładowania z sieci i bez wymuszonej sprzedaży"', 1)[1].split(
+            'data["inverter_control_executor_mode"]', 1
+        )[0]
+        self.assertIn("sw(inverter_export_surplus, False)", normal)
+        self.assertIn("num(inverter_export_surplus_power, 0)", normal)
 
     def test_runtime_command_interval_is_used(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
