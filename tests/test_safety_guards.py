@@ -17,8 +17,18 @@ class TestHomeOnManagerBeta(unittest.TestCase):
     def test_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
         const = (COMPONENT / "const.py").read_text(encoding="utf-8")
-        self.assertEqual(manifest["version"], "0.2.44-beta.1")
-        self.assertIn('VERSION = "0.2.44-beta.1"', const)
+        self.assertEqual(manifest["version"], "0.2.44-beta.2")
+        self.assertIn('VERSION = "0.2.44-beta.2"', const)
+
+    def test_pv_installed_power_is_available_and_persistent(self) -> None:
+        init_source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
+        number_source = (COMPONENT / "number.py").read_text(encoding="utf-8")
+        coordinator_source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        self.assertIn('"pv_installed_kwp": 0.0', init_source)
+        self.assertIn('"pv_installed_kwp"', number_source)
+        self.assertIn('"Moc paneli PV – suma kWp"', number_source)
+        self.assertIn('options[self._key] = final_value', number_source)
+        self.assertIn('self._runtime_float("pv_installed_kwp", 0.0)', coordinator_source)
 
     def test_runtime_command_interval_is_used(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
