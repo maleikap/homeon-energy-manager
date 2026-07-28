@@ -17,8 +17,8 @@ class TestHomeOnManagerBeta(unittest.TestCase):
     def test_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
         const = (COMPONENT / "const.py").read_text(encoding="utf-8")
-        self.assertEqual(manifest["version"], "0.2.44-beta.5")
-        self.assertIn('VERSION = "0.2.44-beta.5"', const)
+        self.assertEqual(manifest["version"], "0.2.44-beta.6")
+        self.assertIn('VERSION = "0.2.44-beta.6"', const)
 
     def test_pv_installed_power_is_available_and_persistent(self) -> None:
         init_source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
@@ -58,6 +58,31 @@ class TestHomeOnManagerBeta(unittest.TestCase):
             '_check_required_number("Moc PV", CONF_PV_POWER_SENSOR, -1000.0, 200000.0, 600.0)',
             source,
         )
+
+    def test_battery_trade_preference_survives_restart(self) -> None:
+        init_source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
+        switch_source = (COMPONENT / "switch.py").read_text(encoding="utf-8")
+        self.assertIn('"battery_trade": False', init_source)
+        self.assertIn('options[self._key] = value', switch_source)
+        self.assertIn('entry.options.get(key, default)', init_source)
+
+    def test_morning_pv_headroom_sale_is_bounded_and_guarded(self) -> None:
+        planner = (COMPONENT / "planner.py").read_text(encoding="utf-8")
+        coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        self.assertIn('morning_window = 5.0 <= local_hour < 13.0', planner)
+        self.assertIn('"economic_min_sell_price_prepare"', planner)
+        self.assertIn("morning_headroom_sell_kwh = min(", planner)
+        self.assertIn("morning_headroom_to_free_kwh,", planner)
+        self.assertIn("available_to_sell_kwh,", planner)
+        self.assertIn('str(data.get("safe_mode", "OFF")).upper() != "ON"', planner)
+        self.assertIn('current_mode = "MORNING_PV_HEADROOM"', planner)
+        self.assertIn('elif mode == "MORNING_PV_HEADROOM"', coordinator)
+        executor = coordinator.split('elif mode == "MORNING_PV_HEADROOM"', 1)[1].split(
+            'elif mode == "SELL_BATTERY_HIGH_PRICE"', 1
+        )[0]
+        self.assertIn("sw(inverter_grid_charging, False)", executor)
+        self.assertIn("sw(inverter_export_surplus, True)", executor)
+        self.assertIn("safe_export_limit_w", executor)
 
     def test_runtime_command_interval_is_used(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
