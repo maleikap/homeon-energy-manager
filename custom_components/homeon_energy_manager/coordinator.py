@@ -1186,6 +1186,19 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data_quality_errors: list[str] = []
         data_quality_warnings: list[str] = []
 
+        sun_state = self.hass.states.get("sun.sun")
+        sun_elevation = self._as_float(
+            sun_state.attributes.get("elevation") if sun_state is not None else None,
+            90.0,
+        )
+        pv_dark_period = bool(
+            sun_state is not None
+            and (
+                str(sun_state.state) == "below_horizon"
+                or float(sun_elevation or 90.0) <= 3.0
+            )
+        )
+
         def _check_required_number(
             label: str,
             key: str,
@@ -1205,18 +1218,29 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 data_quality_errors.append(f"{label}: brak encji {entity_id}")
                 return None
 
+            raw = state.state
+
             if max_age_seconds is not None:
+                last_seen = getattr(state, "last_reported", None) or state.last_updated
                 age_seconds = max(
                     0.0,
-                    (dt_util.utcnow() - state.last_updated).total_seconds(),
+                    (dt_util.utcnow() - last_seen).total_seconds(),
                 )
-                if age_seconds > max_age_seconds:
+
+                stale_zero_pv_is_expected = False
+                if key == CONF_PV_POWER_SENSOR and pv_dark_period:
+                    try:
+                        stale_zero_pv_is_expected = abs(
+                            float(str(raw).replace(",", "."))
+                        ) <= 10.0
+                    except (TypeError, ValueError):
+                        stale_zero_pv_is_expected = False
+
+                if age_seconds > max_age_seconds and not stale_zero_pv_is_expected:
                     data_quality_errors.append(
                         f"{label}: dane nieaktualne ({age_seconds / 60.0:.1f} min)"
                     )
                     return None
-
-            raw = state.state
 
             if raw in (None, "", "unknown", "unavailable", "none", "None", "null"):
                 data_quality_errors.append(f"{label}: stan {raw}")
@@ -1240,7 +1264,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         _check_required_number("SOC", CONF_SOC_SENSOR, 0.0, 100.0, 300.0)
         _check_required_number("Moc baterii", CONF_BATTERY_POWER_SENSOR, -200000.0, 200000.0, 180.0)
-        _check_required_number("Moc PV", CONF_PV_POWER_SENSOR, -1000.0, 200000.0, 180.0)
+        _check_required_number("Moc PV", CONF_PV_POWER_SENSOR, -1000.0, 200000.0, 600.0)
         _check_required_number("Moc domu", CONF_LOAD_POWER_SENSOR, 0.0, 200000.0, 180.0)
         _check_required_number("Moc sieci", CONF_GRID_POWER_SENSOR, -200000.0, 200000.0, 180.0)
         _check_required_number("Cena zakupu", CONF_BUY_PRICE_SENSOR, -5.0, 5.0, 7200.0)
