@@ -17,8 +17,8 @@ class TestHomeOnManagerBeta(unittest.TestCase):
     def test_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
         const = (COMPONENT / "const.py").read_text(encoding="utf-8")
-        self.assertEqual(manifest["version"], "0.2.44-beta.3")
-        self.assertIn('VERSION = "0.2.44-beta.3"', const)
+        self.assertEqual(manifest["version"], "0.2.44-beta.4")
+        self.assertIn('VERSION = "0.2.44-beta.4"', const)
 
     def test_pv_installed_power_is_available_and_persistent(self) -> None:
         init_source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
@@ -52,6 +52,18 @@ class TestHomeOnManagerBeta(unittest.TestCase):
         )
         urgent_block = source.split("urgent_modes = {", 1)[1].split("}", 1)[0]
         self.assertIn('"DISCHARGE_TARGET_HOLD"', urgent_block)
+
+    def test_zero_pv_at_night_does_not_trigger_stale_safe_mode(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        self.assertIn('self.hass.states.get("sun.sun")', source)
+        self.assertIn('str(sun_state.state) == "below_horizon"', source)
+        self.assertIn('getattr(state, "last_reported", None) or state.last_updated', source)
+        self.assertIn("stale_zero_pv_is_expected", source)
+        self.assertIn("age_seconds > max_age_seconds and not stale_zero_pv_is_expected", source)
+        self.assertIn(
+            '_check_required_number("Moc PV", CONF_PV_POWER_SENSOR, -1000.0, 200000.0, 600.0)',
+            source,
+        )
 
     def test_runtime_command_interval_is_used(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
