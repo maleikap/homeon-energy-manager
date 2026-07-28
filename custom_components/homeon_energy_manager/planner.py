@@ -125,6 +125,7 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     night_reserve_soc = _f(data.get("night_reserve_soc"), 30.0)
     morning_target_soc = _f(data.get("morning_target_soc"), 60.0)
     available_to_sell_kwh = _f(data.get("available_to_sell_kwh"), 0.0)
+    pv_today_kwh = _f(data.get("pv_forecast_today"), 0.0)
     pv_tomorrow_kwh = _f(data.get("pv_forecast_tomorrow"), 0.0)
 
     buy_series = _series_from_entity(
@@ -184,12 +185,17 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
 
     night_need_kwh = 0.0
     day_need_kwh = 0.0
+    remaining_today_load_kwh = 0.0
 
     for item in hours:
         h = int(item["clock_hour"])
         load_kwh = _f(item.get("load_w"), avg_load_w) / 1000.0
 
         day_need_kwh += load_kwh
+
+        item_dt = item.get("dt")
+        if item_dt is not None and item_dt.date() == now.date():
+            remaining_today_load_kwh += load_kwh
 
         if h >= 22 or h < 6:
             night_need_kwh += load_kwh
@@ -239,6 +245,41 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     safe_to_sell_kwh = max(0.0, current_battery_energy_kwh - energy_to_keep_kwh)
     safe_to_sell_kwh = min(safe_to_sell_kwh, available_to_sell_kwh)
 
+    current_free_space_kwh = max(0.0, battery_capacity - current_battery_energy_kwh)
+    local_hour = now.hour + now.minute / 60.0
+    morning_window = 5.0 <= local_hour < 13.0
+    remaining_pv_factor = (
+        min(0.95, max(0.35, (18.5 - local_hour) / 12.5))
+        if morning_window
+        else 0.0
+    )
+    expected_remaining_pv_kwh = max(0.0, pv_today_kwh * remaining_pv_factor)
+    required_pv_headroom_kwh = max(
+        0.0,
+        expected_remaining_pv_kwh - remaining_today_load_kwh,
+    )
+    morning_headroom_to_free_kwh = max(
+        0.0,
+        required_pv_headroom_kwh - current_free_space_kwh,
+    )
+    morning_headroom_sell_kwh = min(
+        morning_headroom_to_free_kwh,
+        available_to_sell_kwh,
+    )
+    min_prepare_sell_price = coordinator._runtime_float(
+        "economic_min_sell_price_prepare",
+        0.05,
+    )
+    battery_trade_enabled = str(data.get("battery_trade_enabled", "OFF")).upper() == "ON"
+    morning_headroom_active = bool(
+        morning_window
+        and battery_trade_enabled
+        and str(data.get("safe_mode", "OFF")).upper() != "ON"
+        and pv_today_kwh > remaining_today_load_kwh
+        and morning_headroom_sell_kwh > 0.3
+        and sell_price_now >= min_prepare_sell_price
+    )
+
     safe_min_soc = 100.0 * energy_to_keep_kwh / max(battery_capacity, 0.1)
     safe_min_soc = min(100.0, max(night_reserve_soc, safe_min_soc))
 
@@ -252,6 +293,26 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
 
     current_phase = _phase(now.hour)
     current_mode = str(data.get("mode", "NORMAL"))
+
+    if morning_headroom_active and current_mode not in (
+        "DISABLED",
+        "SAFE_MODE",
+        "EMERGENCY_RESERVE",
+        "NEGATIVE_IMPORT",
+        "CHEAP_CHARGE",
+        "NEGATIVE_PRICE_EXPORT_BLOCK",
+    ):
+        current_mode = "MORNING_PV_HEADROOM"
+        data["mode"] = current_mode
+        data["reason"] = (
+            f"Rano zwalniam {morning_headroom_sell_kwh:.2f} kWh miejsca "
+            f"na prognozowane PV {expected_remaining_pv_kwh:.2f} kWh"
+        )
+        safe_to_sell_kwh = morning_headroom_sell_kwh
+        safe_export_limit_w = min(
+            10000.0,
+            max(500.0, morning_headroom_sell_kwh * 1000.0),
+        )
 
     charge_window = f"{cheapest.get('hour', '-')} ({cheapest_buy:.3f} PLN/kWh)"
     sell_window = f"{best_sell.get('hour', '-')} ({best_sell_price:.3f} PLN/kWh)"
@@ -275,7 +336,17 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
             "Blokuję sprzedaż, bo prognoza PV na jutro i profil zużycia wymagają zostawienia energii w magazynie"
         )
 
-    if current_mode == "WEATHER_HOLD_RESERVE":
+    if current_mode == "MORNING_PV_HEADROOM":
+        next_action = "Zwolnij miejsce na dzisiejsze PV"
+        next_time = "teraz"
+        reason = (
+            f"Prognozowane pozostałe PV {expected_remaining_pv_kwh:.2f} kWh, "
+            f"zużycie domu do końca dnia {remaining_today_load_kwh:.2f} kWh, "
+            f"brakujące miejsce {morning_headroom_sell_kwh:.2f} kWh."
+        )
+        hold_reason = "Sprzedaję tylko wyliczoną nadwyżkę ponad cel rozładowania."
+
+    elif current_mode == "WEATHER_HOLD_RESERVE":
         next_action = "Nie sprzedawaj — rezerwa pod pogodę"
         next_time = "teraz"
         reason = weather_strategy
@@ -364,6 +435,10 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         "plan_safe_export_limit_w": round(safe_export_limit_w, 0),
         "plan_weather_strategy": weather_strategy[:255],
         "plan_reasonable_buy_window": reasonable_buy_window,
+        "morning_pv_headroom_status": "ON" if morning_headroom_active else "OFF",
+        "morning_pv_remaining_kwh": round(expected_remaining_pv_kwh, 2),
+        "morning_pv_required_headroom_kwh": round(required_pv_headroom_kwh, 2),
+        "morning_pv_energy_to_free_kwh": round(morning_headroom_sell_kwh, 2),
     })
 
     return data
