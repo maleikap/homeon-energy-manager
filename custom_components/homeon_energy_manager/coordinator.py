@@ -1195,7 +1195,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sun_state is not None
             and (
                 str(sun_state.state) == "below_horizon"
-                or float(sun_elevation or 90.0) <= 3.0
+                or float(sun_elevation if sun_elevation is not None else 90.0) <= 3.0
             )
         )
 
