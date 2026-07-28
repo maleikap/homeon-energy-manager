@@ -17,8 +17,8 @@ class TestHomeOnManagerBeta(unittest.TestCase):
     def test_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
         const = (COMPONENT / "const.py").read_text(encoding="utf-8")
-        self.assertEqual(manifest["version"], "0.2.44-beta.2")
-        self.assertIn('VERSION = "0.2.44-beta.2"', const)
+        self.assertEqual(manifest["version"], "0.2.44-beta.3")
+        self.assertIn('VERSION = "0.2.44-beta.3"', const)
 
     def test_pv_installed_power_is_available_and_persistent(self) -> None:
         init_source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
@@ -29,6 +29,29 @@ class TestHomeOnManagerBeta(unittest.TestCase):
         self.assertIn('"Moc paneli PV – suma kWp"', number_source)
         self.assertIn('options[self._key] = final_value', number_source)
         self.assertIn('self._runtime_float("pv_installed_kwp", 0.0)', coordinator_source)
+
+    def test_discharge_target_is_a_hard_floor(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        self.assertIn('elif soc <= discharge_target_soc:', source)
+        self.assertIn('mode = "DISCHARGE_TARGET_HOLD"', source)
+        self.assertIn(
+            'buy_price >= economic_expensive_buy_price and soc > discharge_target_soc',
+            source,
+        )
+        self.assertNotIn(
+            'buy_price >= economic_expensive_buy_price and soc > min_soc',
+            source,
+        )
+        hold_executor = source.split('elif mode == "DISCHARGE_TARGET_HOLD":', 1)[1].split(
+            'elif mode == "SELL_BATTERY_HIGH_PRICE"', 1
+        )[0]
+        self.assertIn("sw(inverter_grid_charging, False)", hold_executor)
+        self.assertIn(
+            "num(inverter_max_discharge_current, inverter_block_discharge_current_a)",
+            hold_executor,
+        )
+        urgent_block = source.split("urgent_modes = {", 1)[1].split("}", 1)[0]
+        self.assertIn('"DISCHARGE_TARGET_HOLD"', urgent_block)
 
     def test_runtime_command_interval_is_used(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
