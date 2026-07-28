@@ -63,7 +63,7 @@ NUMBERS = [
     ),
     (
         "pv_installed_kwp",
-        "Moc instalacji PV kWp",
+        "Moc paneli PV – suma kWp",
         0,
         200,
         0.1,
