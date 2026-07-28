@@ -12,6 +12,7 @@ PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.NUMBER]
 DEFAULT_RUNTIME_OPTIONS = {
     "enabled": True,
     "dry_run": True,
+    "pv_installed_kwp": 0.0,
     "inverter_control": False,
     "inverter_export_target_w": 10000,
     "inverter_charge_current_a": 80,
