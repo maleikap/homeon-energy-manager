@@ -17,8 +17,8 @@ class TestHomeOnManagerBeta(unittest.TestCase):
     def test_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
         const = (COMPONENT / "const.py").read_text(encoding="utf-8")
-        self.assertEqual(manifest["version"], "0.2.44-beta.7")
-        self.assertIn('VERSION = "0.2.44-beta.7"', const)
+        self.assertEqual(manifest["version"], "0.2.44-beta.8")
+        self.assertIn('VERSION = "0.2.44-beta.8"', const)
 
     def test_pv_installed_power_is_available_and_persistent(self) -> None:
         init_source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
@@ -98,6 +98,17 @@ class TestHomeOnManagerBeta(unittest.TestCase):
         )[0]
         self.assertIn("sw(inverter_export_surplus, False)", normal)
         self.assertIn("num(inverter_export_surplus_power, 0)", normal)
+
+    def test_best_price_sale_uses_full_configured_export_power(self) -> None:
+        planner = (COMPONENT / "planner.py").read_text(encoding="utf-8")
+        full_power_block = planner.split(
+            "if safe_to_sell_kwh <= 0.2:", 1
+        )[1].split("night_soc_need =", 1)[0]
+        self.assertIn(
+            'coordinator._runtime_float("inverter_export_target_w", 10000.0)',
+            full_power_block,
+        )
+        self.assertNotIn("safe_to_sell_kwh * 1000.0", full_power_block)
 
     def test_runtime_command_interval_is_used(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
