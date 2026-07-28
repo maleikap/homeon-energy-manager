@@ -889,6 +889,15 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
 
+        elif mode == "MORNING_PV_HEADROOM" and safe_export_limit_w > 0 and plan_safe_to_sell_kwh > 0.3:
+            action = "Rano zwalniam miejsce na PV: %.2f kWh, limit eksportu %.0f W" % (plan_safe_to_sell_kwh, safe_export_limit_w)
+            data["inverter_work_mode_target"] = inverter_work_mode_sell_option
+            sel(inverter_work_mode_select, inverter_work_mode_sell_option)
+            sw(inverter_grid_charging, False)
+            num(inverter_export_surplus_power, safe_export_limit_w)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
+            sw(inverter_export_surplus, True)
+
         elif mode == "SELL_BATTERY_HIGH_PRICE" and safe_export_limit_w > 0 and plan_safe_to_sell_kwh > 0.3:
             action = "Sprzedaż tylko bezpiecznej nadwyżki: %.2f kWh, limit eksportu %.0f W" % (plan_safe_to_sell_kwh, safe_export_limit_w)
             data["inverter_work_mode_target"] = inverter_work_mode_sell_option
