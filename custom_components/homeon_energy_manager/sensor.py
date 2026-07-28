@@ -63,6 +63,10 @@ SENSORS = [
     ("plan_safe_to_sell_kwh", "Plan bezpieczna energia do sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:cash-check"),
     ("plan_safe_export_limit_w", "Plan bezpieczny limit eksportu", UnitOfPower.WATT, "mdi:transmission-tower-export"),
     ("plan_weather_strategy", "Plan strategia pogoda", None, "mdi:weather-cloudy-clock"),
+    ("morning_pv_headroom_status", "Poranne zwalnianie miejsca PV", None, "mdi:weather-sunset-up"),
+    ("morning_pv_remaining_kwh", "Pozostała prognoza PV dziś", UnitOfEnergy.KILO_WATT_HOUR, "mdi:solar-power"),
+    ("morning_pv_required_headroom_kwh", "Wymagane miejsce na PV dziś", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-outline"),
+    ("morning_pv_energy_to_free_kwh", "Energia do zwolnienia na PV", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-arrow-down"),
 
     # Sterowanie falownikiem
     ("inverter_control_enabled", "Sterowanie falownikiem", None, "mdi:power-settings"),
