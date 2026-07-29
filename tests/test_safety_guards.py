@@ -17,7 +17,7 @@ class TestHomeOnManagerBeta(unittest.TestCase):
     def test_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
         const = (COMPONENT / "const.py").read_text(encoding="utf-8")
-        self.assertEqual(manifest["version"], "0.2.44-beta.9")
+        self.assertEqual(manifest["version"], "0.2.44-beta.10")
         self.assertIn('VERSION = "0.2.44-beta.9"', const)
 
     def test_pv_installed_power_is_available_and_persistent(self) -> None:
