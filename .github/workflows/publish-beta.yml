@@ -32,7 +32,7 @@ jobs:
           test -n "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Publish prerelease
+      - name: Publish release once
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
@@ -40,8 +40,38 @@ jobs:
         run: |
           set -euo pipefail
           tag="v$VERSION"
+
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release edit "$tag" --prerelease=false --latest=false --title "HomeOn Energy Manager $VERSION (test)"
+            echo "Release $tag already exists; leaving its date and assets unchanged."
           else
-            gh release create "$tag" --target "$GITHUB_SHA" --latest=false --title "HomeOn Energy Manager $VERSION (test)" --generate-notes
+            gh release create "$tag" \
+              --target "$GITHUB_SHA" \
+              --latest=false \
+              --title "HomeOn Energy Manager $VERSION (test)" \
+              --generate-notes
           fi
+
+      - name: Keep only two newest beta releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t beta_tags < <(
+            gh release list --limit 100 --json tagName --jq '.[].tagName' |
+              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$' |
+              sort -V -r
+          )
+
+          echo "Beta releases in version order: ${beta_tags[*]:-none}"
+
+          if (( ${#beta_tags[@]} <= 2 )); then
+            exit 0
+          fi
+
+          for ((i = 2; i < ${#beta_tags[@]}; i++)); do
+            old_tag="${beta_tags[$i]}"
+            echo "Removing old beta release and tag: $old_tag"
+            gh release delete "$old_tag" --cleanup-tag --yes
+          done
