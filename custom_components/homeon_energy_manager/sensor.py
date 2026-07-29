@@ -84,6 +84,7 @@ SENSORS = [
     ("inverter_control_safe_export_limit_w", "Sterowanie bezpieczny limit eksportu", UnitOfPower.WATT, "mdi:transmission-tower-export"),
     ("inverter_control_safe_to_sell_kwh", "Sterowanie bezpieczna energia do sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:cash-check"),
     ("inverter_control_weather_lock", "Sterowanie blokada pogodowa", None, "mdi:weather-cloudy-alert"),
+    ("inverter_control_pv_surplus_export", "Eksport bieżącej nadwyżki PV", None, "mdi:solar-power-variant"),
     ("inverter_control_last_run", "Sterowanie ostatnie wykonanie", None, "mdi:clock-check"),
     ("inverter_control_dry_run", "Falownik dry-run", None, "mdi:test-tube"),
 
