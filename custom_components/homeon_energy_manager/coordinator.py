@@ -750,6 +750,33 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             or (mode in ("SELL_BATTERY_HIGH_PRICE", "WAIT_BETTER_SELL_PRICE") and plan_safe_to_sell_kwh <= 0.2)
         )
 
+        # Eksport nadwyżki PV nie jest handlem energią z baterii. Gdy magazyn
+        # jest pełny, wyłączenie Solar Sell powoduje ograniczenie produkcji PV.
+        soc_now = float(self._as_float(data.get("soc"), 0.0) or 0.0)
+        pv_power_now_w = max(0.0, float(self._as_float(data.get("pv_power"), 0.0) or 0.0))
+        load_power_now_w = max(0.0, float(self._as_float(data.get("load_power"), 0.0) or 0.0))
+        charge_target_now = float(self._as_float(data.get("charge_target_soc"), 95.0) or 95.0)
+        sell_price_now = float(self._as_float(data.get("sell_price"), 0.0) or 0.0)
+        negative_sell_limit = self._runtime_float("economic_negative_sell_price", 0.0)
+        sun_state = self.hass.states.get("sun.sun")
+        sun_elevation = (
+            float(self._as_float(sun_state.attributes.get("elevation"), -90.0) or -90.0)
+            if sun_state is not None
+            else -90.0
+        )
+        sun_is_up = bool(
+            sun_state is not None
+            and (str(sun_state.state) == "above_horizon" or sun_elevation > 3.0)
+        )
+        battery_nearly_full = soc_now >= min(99.0, max(90.0, charge_target_now - 1.0))
+        live_pv_surplus = pv_power_now_w > load_power_now_w + 100.0
+        pv_surplus_export_allowed = bool(
+            sell_price_now > negative_sell_limit
+            and sun_is_up
+            and (battery_nearly_full or live_pv_surplus)
+            and mode not in ("SAFE_MODE", "EMERGENCY_RESERVE", "NEGATIVE_IMPORT", "NEGATIVE_PRICE_EXPORT_BLOCK")
+        )
+
         data["inverter_control_enabled"] = inverter_control
         data["inverter_control_dry_run"] = "ON" if dry_run else "OFF"
         data["inverter_control_config_source"] = "Konfiguracja integracji"
@@ -757,6 +784,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["inverter_control_safe_export_limit_w"] = round(safe_export_limit_w, 0)
         data["inverter_control_safe_to_sell_kwh"] = round(plan_safe_to_sell_kwh, 2)
         data["inverter_control_weather_lock"] = "ON" if weather_lock else "OFF"
+        data["inverter_control_pv_surplus_export"] = "ON" if pv_surplus_export_allowed else "OFF"
 
         data["inverter_entity_grid_charging"] = inverter_grid_charging
         data["inverter_entity_export_surplus"] = inverter_export_surplus
@@ -812,10 +840,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif weather_lock:
-            executor_mode = "WEATHER_HOLD_RESERVE"
-            action = "Pogoda/PV: blokuję sprzedaż baterii i zostawiam energię na kolejny dzień"
-            sw(inverter_export_surplus, False)
-            num(inverter_export_surplus_power, 0)
+            executor_mode = "PV_SURPLUS_EXPORT" if pv_surplus_export_allowed else "WEATHER_HOLD_RESERVE"
+            action = (
+                "Pogoda/PV: chronię baterię, ale eksportuję bieżącą nadwyżkę PV"
+                if pv_surplus_export_allowed
+                else "Pogoda/PV: blokuję sprzedaż baterii i zostawiam energię na kolejny dzień"
+            )
+            sw(inverter_export_surplus, pv_surplus_export_allowed)
+            num(inverter_export_surplus_power, inverter_export_target_w if pv_surplus_export_allowed else 0)
             sw(inverter_grid_charging, False)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
@@ -828,11 +860,15 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
 
         elif mode == "HOME_BATTERY_PRIORITY":
-            executor_mode = "HOME_BATTERY_PRIORITY"
-            action = "Handel baterią wyłączony lub bateria zasila dom — aktywnie wyłączam sprzedaż do sieci"
-            sw(inverter_export_surplus, False)
+            executor_mode = "PV_SURPLUS_EXPORT" if pv_surplus_export_allowed else "HOME_BATTERY_PRIORITY"
+            action = (
+                "Handel baterią wyłączony — bateria zostaje dla domu, nadwyżka PV idzie do sieci"
+                if pv_surplus_export_allowed
+                else "Handel baterią wyłączony — bateria zostaje dla domu"
+            )
+            sw(inverter_export_surplus, pv_surplus_export_allowed)
             sw(inverter_grid_charging, False)
-            num(inverter_export_surplus_power, 0)
+            num(inverter_export_surplus_power, inverter_export_target_w if pv_surplus_export_allowed else 0)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_discharge_current_a)
 
@@ -891,40 +927,64 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "PV_REALITY_HOLD":
-            action = "Realna produkcja PV jest słaba — blokuję sprzedaż i ograniczam rozładowanie magazynu"
+            executor_mode = "PV_SURPLUS_EXPORT" if pv_surplus_export_allowed else "PV_REALITY_HOLD"
+            action = (
+                "Chronię baterię, ale eksportuję bieżącą nadwyżkę PV"
+                if pv_surplus_export_allowed
+                else "Realna produkcja PV jest słaba — blokuję sprzedaż i ograniczam rozładowanie magazynu"
+            )
             sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_export_surplus_power, 0)
+            sw(inverter_export_surplus, pv_surplus_export_allowed)
+            num(inverter_export_surplus_power, inverter_export_target_w if pv_surplus_export_allowed else 0)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "WAIT_BETTER_SELL_PRICE":
-            action = "Czekam na lepszą cenę sprzedaży — blokuję sprzedaż baterii"
+            executor_mode = "PV_SURPLUS_EXPORT" if pv_surplus_export_allowed else "WAIT_BETTER_SELL_PRICE"
+            action = (
+                "Czekam ze sprzedażą baterii, ale eksportuję bieżącą nadwyżkę PV"
+                if pv_surplus_export_allowed
+                else "Czekam na lepszą cenę sprzedaży — blokuję sprzedaż baterii"
+            )
             sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_export_surplus_power, 0)
+            sw(inverter_export_surplus, pv_surplus_export_allowed)
+            num(inverter_export_surplus_power, inverter_export_target_w if pv_surplus_export_allowed else 0)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "PV_CHARGE":
-            action = "Ładowanie z PV — ładowanie z sieci wyłączone, eksport baterii zablokowany"
+            executor_mode = "PV_SURPLUS_EXPORT" if pv_surplus_export_allowed else "PV_CHARGE"
+            action = (
+                "Magazyn ma wystarczający SOC — eksportuję bieżącą nadwyżkę PV"
+                if pv_surplus_export_allowed
+                else "Ładowanie z PV — nadwyżka trafi do sieci po osiągnięciu celu SOC"
+            )
             sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_export_surplus_power, 0)
+            sw(inverter_export_surplus, pv_surplus_export_allowed)
+            num(inverter_export_surplus_power, inverter_export_target_w if pv_surplus_export_allowed else 0)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "EXPENSIVE_SELF_USE":
-            action = "Droga energia — bateria pracuje na dom, bez sprzedaży do sieci"
+            executor_mode = "PV_SURPLUS_EXPORT" if pv_surplus_export_allowed else "EXPENSIVE_SELF_USE"
+            action = (
+                "Droga energia — bateria zasila dom, a nadwyżka PV idzie do sieci"
+                if pv_surplus_export_allowed
+                else "Droga energia — bateria pracuje na dom, bez wymuszonej sprzedaży"
+            )
             sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_export_surplus_power, 0)
+            sw(inverter_export_surplus, pv_surplus_export_allowed)
+            num(inverter_export_surplus_power, inverter_export_target_w if pv_surplus_export_allowed else 0)
             num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         else:
-            executor_mode = "NORMAL_SAFE"
-            action = "Normalna praca — bez ładowania z sieci i bez wymuszonej sprzedaży"
+            executor_mode = "PV_SURPLUS_EXPORT" if pv_surplus_export_allowed else "NORMAL_SAFE"
+            action = (
+                "Normalna praca — eksportuję bieżącą nadwyżkę PV bez wymuszonej sprzedaży baterii"
+                if pv_surplus_export_allowed
+                else "Normalna praca — bez ładowania z sieci i bez wymuszonej sprzedaży"
+            )
             sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_export_surplus_power, 0)
+            sw(inverter_export_surplus, pv_surplus_export_allowed)
+            num(inverter_export_surplus_power, inverter_export_target_w if pv_surplus_export_allowed else 0)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
