@@ -67,6 +67,10 @@ SENSORS = [
     ("morning_pv_remaining_kwh", "Pozostała prognoza PV dziś", UnitOfEnergy.KILO_WATT_HOUR, "mdi:solar-power"),
     ("morning_pv_required_headroom_kwh", "Wymagane miejsce na PV dziś", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-outline"),
     ("morning_pv_energy_to_free_kwh", "Energia do zwolnienia na PV", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-arrow-down"),
+    ("morning_pv_floor_soc", "Minimalny SOC porannego zwalniania", PERCENT, "mdi:battery-lock"),
+    ("morning_pv_export_hours_needed", "Czas potrzebny na zwolnienie miejsca", "h", "mdi:timer-sand"),
+    ("morning_pv_hours_to_start", "Czas do rozpoczęcia PV", "h", "mdi:weather-sunset-up"),
+    ("morning_pv_must_start", "Wymuszenie startu przed PV", None, "mdi:clock-alert"),
 
     # Sterowanie falownikiem
     ("inverter_control_enabled", "Sterowanie falownikiem", None, "mdi:power-settings"),
