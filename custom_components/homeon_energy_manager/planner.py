@@ -122,6 +122,7 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
 
     charge_target_soc = _f(data.get("charge_target_soc"), 75.0)
     discharge_target_soc = _f(data.get("discharge_target_soc"), 25.0)
+    min_soc = _f(data.get("min_soc"), 15.0)
     night_reserve_soc = _f(data.get("night_reserve_soc"), 30.0)
     morning_target_soc = _f(data.get("morning_target_soc"), 60.0)
     available_to_sell_kwh = _f(data.get("available_to_sell_kwh"), 0.0)
@@ -247,9 +248,10 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
 
     current_free_space_kwh = max(0.0, battery_capacity - current_battery_energy_kwh)
     local_hour = now.hour + now.minute / 60.0
-    morning_window = 5.0 <= local_hour < 13.0
+    morning_window = 4.0 <= local_hour < 10.0
+    pv_power_now = max(0.0, _f(data.get("pv_power"), 0.0))
     remaining_pv_factor = (
-        min(0.95, max(0.35, (18.5 - local_hour) / 12.5))
+        min(0.98, max(0.55, (18.5 - local_hour) / 12.5))
         if morning_window
         else 0.0
     )
@@ -262,22 +264,78 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         0.0,
         required_pv_headroom_kwh - current_free_space_kwh,
     )
+
+    # Przed rozpoczęciem PV wolno zejść niżej niż zwykły próg sprzedaży,
+    # ale nigdy poniżej minimalnego SOC + 5 punktów marginesu.
+    morning_floor_soc = min(95.0, max(min_soc + 5.0, 10.0))
+    morning_discharge_available_kwh = max(
+        0.0,
+        current_battery_energy_kwh
+        - battery_capacity * morning_floor_soc / 100.0,
+    )
     morning_headroom_sell_kwh = min(
         morning_headroom_to_free_kwh,
-        available_to_sell_kwh,
+        morning_discharge_available_kwh,
     )
+
+    configured_export_limit_w = max(
+        500.0,
+        coordinator._runtime_float("inverter_export_target_w", 10000.0),
+    )
+    export_hours_needed = (
+        morning_headroom_sell_kwh
+        / max(configured_export_limit_w / 1000.0, 0.5)
+    )
+
+    future_pv_hours = [
+        item for item in hours
+        if item.get("dt") is not None
+        and item["dt"].date() == now.date()
+        and item["dt"] >= now
+        and _f(item.get("pv_w"), 0.0) >= 500.0
+    ]
+    if future_pv_hours:
+        expected_pv_start_dt = future_pv_hours[0]["dt"]
+    else:
+        expected_pv_start_dt = now.replace(
+            hour=8,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+
+    hours_to_pv_start = max(
+        0.0,
+        (expected_pv_start_dt - now).total_seconds() / 3600.0,
+    )
+    must_start_for_headroom = bool(
+        hours_to_pv_start <= export_hours_needed + 0.25
+    )
+
     min_prepare_sell_price = coordinator._runtime_float(
         "economic_min_sell_price_prepare",
         0.05,
     )
+    good_sell_price = coordinator._runtime_float(
+        "economic_good_sell_price",
+        0.55,
+    )
+    attractive_price_threshold = max(
+        min_prepare_sell_price,
+        min(good_sell_price, best_sell_price - 0.01),
+    )
+    attractive_price_now = sell_price_now >= attractive_price_threshold
+
     battery_trade_enabled = str(data.get("battery_trade_enabled", "OFF")).upper() == "ON"
     morning_headroom_active = bool(
         morning_window
+        and pv_power_now < 1000.0
         and battery_trade_enabled
         and str(data.get("safe_mode", "OFF")).upper() != "ON"
         and pv_today_kwh > remaining_today_load_kwh
         and morning_headroom_sell_kwh > 0.3
         and sell_price_now >= min_prepare_sell_price
+        and (attractive_price_now or must_start_for_headroom)
     )
 
     safe_min_soc = 100.0 * energy_to_keep_kwh / max(battery_capacity, 0.1)
@@ -315,10 +373,7 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
             f"na prognozowane PV {expected_remaining_pv_kwh:.2f} kWh"
         )
         safe_to_sell_kwh = morning_headroom_sell_kwh
-        safe_export_limit_w = min(
-            10000.0,
-            max(500.0, morning_headroom_sell_kwh * 1000.0),
-        )
+        safe_export_limit_w = configured_export_limit_w
 
     charge_window = f"{cheapest.get('hour', '-')} ({cheapest_buy:.3f} PLN/kWh)"
     sell_window = f"{best_sell.get('hour', '-')} ({best_sell_price:.3f} PLN/kWh)"
@@ -445,6 +500,10 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         "morning_pv_remaining_kwh": round(expected_remaining_pv_kwh, 2),
         "morning_pv_required_headroom_kwh": round(required_pv_headroom_kwh, 2),
         "morning_pv_energy_to_free_kwh": round(morning_headroom_sell_kwh, 2),
+        "morning_pv_floor_soc": round(morning_floor_soc, 1),
+        "morning_pv_export_hours_needed": round(export_hours_needed, 2),
+        "morning_pv_hours_to_start": round(hours_to_pv_start, 2),
+        "morning_pv_must_start": "ON" if must_start_for_headroom else "OFF",
     })
 
     return data
