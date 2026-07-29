@@ -127,6 +127,19 @@ class TestHomeOnManagerBeta(unittest.TestCase):
         self.assertIn("safe_export_limit_w = configured_export_limit_w", morning_override)
         self.assertNotIn("morning_headroom_sell_kwh * 1000.0", morning_override)
 
+    def test_detailed_pv_forecast_has_safe_fallback(self) -> None:
+        planner = (COMPONENT / "planner.py").read_text(encoding="utf-8")
+        sensor = (COMPONENT / "sensor.py").read_text(encoding="utf-8")
+        self.assertIn("def _detailed_pv_forecast", planner)
+        self.assertIn('"sensor.solcast_pv_forecast_pozostala_prognoza_na_dzis"', planner)
+        self.assertIn('"sensor.energy_production_today_remaining"', planner)
+        self.assertIn('"sensor.solcast_pv_forecast_moc_w_1_godzine"', planner)
+        self.assertIn('"sensor.power_production_next_hour"', planner)
+        self.assertIn('if detailed_remaining_kwh is not None:', planner)
+        self.assertIn('pv_today_kwh * remaining_pv_factor', planner)
+        self.assertIn('"morning_pv_forecast_source"', planner)
+        self.assertIn('"morning_pv_forecast_source"', sensor)
+
     def test_runtime_command_interval_is_used(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
         self.assertIn(
