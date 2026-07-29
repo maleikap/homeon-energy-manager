@@ -22,6 +22,83 @@ def _f(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _entity_number(coordinator, entity_ids: tuple[str, ...], quantity: str) -> tuple[float | None, str | None]:
+    """Return the first available forecast value converted to kWh or W."""
+    for entity_id in entity_ids:
+        state = coordinator.hass.states.get(entity_id)
+        if state is None or state.state in (None, "", "unknown", "unavailable"):
+            continue
+
+        value = _f(state.state, None)
+        if value is None:
+            continue
+
+        unit = str(state.attributes.get("unit_of_measurement", "")).strip().lower()
+        if quantity == "energy":
+            if unit == "wh":
+                value /= 1000.0
+            elif unit == "mwh":
+                value *= 1000.0
+        elif quantity == "power" and unit == "kw":
+            value *= 1000.0
+
+        return max(0.0, float(value)), entity_id
+
+    return None, None
+
+
+def _detailed_pv_forecast(coordinator) -> dict[str, Any]:
+    """Auto-detect optional Solcast or Forecast.Solar detail sensors."""
+    remaining_kwh, remaining_entity = _entity_number(
+        coordinator,
+        (
+            "sensor.solcast_pv_forecast_pozostala_prognoza_na_dzis",
+            "sensor.energy_production_today_remaining",
+        ),
+        "energy",
+    )
+    power_now_w, power_now_entity = _entity_number(
+        coordinator,
+        (
+            "sensor.solcast_pv_forecast_aktualna_moc",
+            "sensor.power_production_now",
+        ),
+        "power",
+    )
+    power_next_hour_w, next_hour_entity = _entity_number(
+        coordinator,
+        (
+            "sensor.solcast_pv_forecast_moc_w_1_godzine",
+            "sensor.power_production_next_hour",
+        ),
+        "power",
+    )
+
+    peak_entity = "sensor.solcast_pv_forecast_czas_szczytowej_mocy_dzisiaj"
+    peak_state = coordinator.hass.states.get(peak_entity)
+    peak_dt = None
+    if peak_state is not None and peak_state.state not in (None, "", "unknown", "unavailable"):
+        peak_dt = dt_util.parse_datetime(str(peak_state.state))
+        if peak_dt is not None:
+            peak_dt = dt_util.as_local(peak_dt)
+
+    source_entity = remaining_entity or power_now_entity or next_hour_entity
+    if source_entity and source_entity.startswith("sensor.solcast_"):
+        source = "Solcast PV Forecast"
+    elif source_entity:
+        source = "Forecast.Solar"
+    else:
+        source = "Profil uczony / prognoza dzienna"
+
+    return {
+        "remaining_kwh": remaining_kwh,
+        "power_now_w": power_now_w,
+        "power_next_hour_w": power_next_hour_w,
+        "peak_dt": peak_dt,
+        "source": source,
+    }
+
+
 def _hour_label(dt) -> str:
     return dt_util.as_local(dt).strftime("%H:00")
 
@@ -250,12 +327,17 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     local_hour = now.hour + now.minute / 60.0
     morning_window = 4.0 <= local_hour < 10.0
     pv_power_now = max(0.0, _f(data.get("pv_power"), 0.0))
+    detailed_pv = _detailed_pv_forecast(coordinator)
     remaining_pv_factor = (
         min(0.98, max(0.55, (18.5 - local_hour) / 12.5))
         if morning_window
         else 0.0
     )
-    expected_remaining_pv_kwh = max(0.0, pv_today_kwh * remaining_pv_factor)
+    detailed_remaining_kwh = detailed_pv.get("remaining_kwh")
+    if detailed_remaining_kwh is not None:
+        expected_remaining_pv_kwh = max(0.0, float(detailed_remaining_kwh))
+    else:
+        expected_remaining_pv_kwh = max(0.0, pv_today_kwh * remaining_pv_factor)
     required_pv_headroom_kwh = max(
         0.0,
         expected_remaining_pv_kwh - remaining_today_load_kwh,
@@ -287,6 +369,8 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         / max(configured_export_limit_w / 1000.0, 0.5)
     )
 
+    forecast_power_now_w = _f(detailed_pv.get("power_now_w"), 0.0)
+    forecast_power_next_hour_w = _f(detailed_pv.get("power_next_hour_w"), 0.0)
     future_pv_hours = [
         item for item in hours
         if item.get("dt") is not None
@@ -294,7 +378,11 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         and item["dt"] >= now
         and _f(item.get("pv_w"), 0.0) >= 500.0
     ]
-    if future_pv_hours:
+    if forecast_power_now_w >= 500.0:
+        expected_pv_start_dt = now
+    elif forecast_power_next_hour_w >= 500.0:
+        expected_pv_start_dt = now + timedelta(hours=1)
+    elif future_pv_hours:
         expected_pv_start_dt = future_pv_hours[0]["dt"]
     else:
         expected_pv_start_dt = now.replace(
@@ -497,6 +585,14 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         "plan_weather_strategy": weather_strategy[:255],
         "plan_reasonable_buy_window": reasonable_buy_window,
         "morning_pv_headroom_status": "ON" if morning_headroom_active else "OFF",
+        "morning_pv_forecast_source": detailed_pv.get("source", "Profil uczony / prognoza dzienna"),
+        "morning_pv_forecast_power_now_w": round(forecast_power_now_w, 0),
+        "morning_pv_forecast_power_next_hour_w": round(forecast_power_next_hour_w, 0),
+        "morning_pv_forecast_peak_time": (
+            detailed_pv["peak_dt"].strftime("%H:%M")
+            if detailed_pv.get("peak_dt") is not None
+            else "-"
+        ),
         "morning_pv_remaining_kwh": round(expected_remaining_pv_kwh, 2),
         "morning_pv_required_headroom_kwh": round(required_pv_headroom_kwh, 2),
         "morning_pv_energy_to_free_kwh": round(morning_headroom_sell_kwh, 2),
