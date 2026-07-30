@@ -90,7 +90,7 @@ These are examples, not fixed requirements. Home Assistant may generate differen
 
 ## Current test release
 
-The `test/0.2.44-beta.1` branch currently contains the 0.2.44 beta series. Beta.12 also prevents battery microcycles around the safe SOC during a high-price PV window: the manager holds the battery at its safe target, supplies the household from PV, exports only current PV surplus, and postpones charging until the sell price drops clearly. Stable installations should remain on the latest stable HACS release until testing is complete.
+The `test/0.2.44-beta.1` branch currently contains the 0.2.44 beta series. Beta.13 explicitly restores Deye to `Zero Export To CT` in every non-selling mode, including `PV_CHARGE`. `Export First` is now limited to deliberate battery-sale modes, preventing PV charging from accidentally discharging the battery after a sale window. Stable installations should remain on the latest stable HACS release until testing is complete.
 
 ## Support
 
