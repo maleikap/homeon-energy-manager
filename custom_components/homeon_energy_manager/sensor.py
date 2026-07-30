@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 
 PERCENT = "%"
 
@@ -63,6 +63,23 @@ SENSORS = [
     ("plan_safe_to_sell_kwh", "Plan bezpieczna energia do sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:cash-check"),
     ("plan_safe_export_limit_w", "Plan bezpieczny limit eksportu", UnitOfPower.WATT, "mdi:transmission-tower-export"),
     ("plan_weather_strategy", "Plan strategia pogoda", None, "mdi:weather-cloudy-clock"),
+    ("high_price_pv_export_hold_status", "Wysoka cena PV — utrzymanie SOC", None, "mdi:cash-clock"),
+    ("high_price_pv_export_hold_soc", "SOC utrzymywany przy wysokiej cenie", PERCENT, "mdi:battery-lock"),
+    ("high_price_pv_export_price_now", "Cena eksportu PV teraz", None, "mdi:cash-fast"),
+    ("high_price_pv_export_later_min_price", "Późniejsza minimalna cena eksportu PV", None, "mdi:cash-minus"),
+    ("high_price_pv_export_price_advantage", "Przewaga obecnej ceny eksportu PV", None, "mdi:chart-line"),
+    ("morning_pv_headroom_status", "Poranne zwalnianie miejsca PV", None, "mdi:weather-sunset-up"),
+    ("morning_pv_forecast_source", "Źródło szczegółowej prognozy PV", None, "mdi:weather-partly-cloudy"),
+    ("morning_pv_forecast_power_now_w", "Prognozowana moc PV teraz", UnitOfPower.WATT, "mdi:solar-power-variant"),
+    ("morning_pv_forecast_power_next_hour_w", "Prognozowana moc PV za godzinę", UnitOfPower.WATT, "mdi:solar-power-variant-outline"),
+    ("morning_pv_forecast_peak_time", "Prognozowana godzina szczytu PV", None, "mdi:weather-sunny-alert"),
+    ("morning_pv_remaining_kwh", "Pozostała prognoza PV dziś", UnitOfEnergy.KILO_WATT_HOUR, "mdi:solar-power"),
+    ("morning_pv_required_headroom_kwh", "Wymagane miejsce na PV dziś", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-outline"),
+    ("morning_pv_energy_to_free_kwh", "Energia do zwolnienia na PV", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-arrow-down"),
+    ("morning_pv_floor_soc", "Minimalny SOC porannego zwalniania", PERCENT, "mdi:battery-lock"),
+    ("morning_pv_export_hours_needed", "Czas potrzebny na zwolnienie miejsca", "h", "mdi:timer-sand"),
+    ("morning_pv_hours_to_start", "Czas do rozpoczęcia PV", "h", "mdi:weather-sunset-up"),
+    ("morning_pv_must_start", "Wymuszenie startu przed PV", None, "mdi:clock-alert"),
 
     # Sterowanie falownikiem
     ("inverter_control_enabled", "Sterowanie falownikiem", None, "mdi:power-settings"),
@@ -72,6 +89,7 @@ SENSORS = [
     ("inverter_control_safe_export_limit_w", "Sterowanie bezpieczny limit eksportu", UnitOfPower.WATT, "mdi:transmission-tower-export"),
     ("inverter_control_safe_to_sell_kwh", "Sterowanie bezpieczna energia do sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:cash-check"),
     ("inverter_control_weather_lock", "Sterowanie blokada pogodowa", None, "mdi:weather-cloudy-alert"),
+    ("inverter_control_pv_surplus_export", "Eksport bieżącej nadwyżki PV", None, "mdi:solar-power-variant"),
     ("inverter_control_last_run", "Sterowanie ostatnie wykonanie", None, "mdi:clock-check"),
     ("inverter_control_dry_run", "Falownik dry-run", None, "mdi:test-tube"),
 
@@ -189,7 +207,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.43",
+            "sw_version": VERSION,
         }
 
     @property
