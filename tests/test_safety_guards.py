@@ -17,8 +17,8 @@ class TestHomeOnManagerBeta(unittest.TestCase):
     def test_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
         const = (COMPONENT / "const.py").read_text(encoding="utf-8")
-        self.assertEqual(manifest["version"], "0.2.44-beta.12")
-        self.assertIn('VERSION = "0.2.44-beta.12"', const)
+        self.assertEqual(manifest["version"], "0.2.44-beta.13")
+        self.assertIn('VERSION = "0.2.44-beta.13"', const)
 
     def test_pv_installed_power_is_available_and_persistent(self) -> None:
         init_source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
@@ -167,6 +167,29 @@ class TestHomeOnManagerBeta(unittest.TestCase):
         self.assertIn("num(inverter_max_discharge_current, 0)", executor)
         self.assertIn("sw(inverter_export_surplus, True)", executor)
         self.assertNotIn("sel(inverter_work_mode_select", executor)
+
+    def test_non_sale_modes_restore_zero_export_to_ct(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        self.assertIn('INVERTER_WORK_MODE_SELF_USE_OPTION = "Zero Export To CT"', source)
+        self.assertIn('self_use_keys = {"zeroexporttoct", "zeroexportct"}', source)
+        self.assertIn("forced_battery_export = bool(", source)
+        self.assertIn("if not forced_battery_export:", source)
+        self.assertIn(
+            'sel(inverter_work_mode_select, inverter_work_mode_self_use_option)',
+            source,
+        )
+        self.assertIn(
+            'data["inverter_work_mode_target"] = inverter_work_mode_self_use_option',
+            source,
+        )
+        forced = source.split("forced_battery_export = bool(", 1)[1].split(
+            "if not forced_battery_export:", 1
+        )[0]
+        self.assertIn('mode == "PREPARE_NEGATIVE_PRICE_WINDOW"', forced)
+        self.assertIn('mode == "MORNING_PV_HEADROOM"', forced)
+        self.assertIn('mode == "SELL_BATTERY_HIGH_PRICE"', forced)
+        self.assertNotIn('mode == "PV_CHARGE"', forced)
+        self.assertNotIn('mode == "HIGH_PRICE_PV_EXPORT_HOLD_SOC"', forced)
 
     def test_runtime_command_interval_is_used(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
