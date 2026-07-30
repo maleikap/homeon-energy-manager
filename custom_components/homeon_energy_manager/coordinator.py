@@ -60,6 +60,7 @@ INVERTER_MAX_CHARGE_CURRENT = "number.inverter_battery_max_charging_current"
 INVERTER_MAX_DISCHARGE_CURRENT = "number.inverter_battery_max_discharging_current"
 INVERTER_WORK_MODE_SELECT = "select.inverter_work_mode"
 INVERTER_WORK_MODE_SELL_OPTION = "Export First"
+INVERTER_WORK_MODE_SELF_USE_OPTION = "Zero Export To CT"
 
 HOMEON_EXPORT_TARGET_W = 10000
 HOMEON_CHARGE_CURRENT_A = 80
@@ -734,6 +735,24 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         inverter_work_mode_sell_option = INVERTER_WORK_MODE_SELL_OPTION
         inverter_work_mode_state = self.hass.states.get(inverter_work_mode_select)
         inverter_work_mode_current = str(inverter_work_mode_state.state) if inverter_work_mode_state is not None else "BRAK_ENCJI"
+        inverter_work_mode_options = (
+            list(inverter_work_mode_state.attributes.get("options") or [])
+            if inverter_work_mode_state is not None
+            else []
+        )
+
+        def _work_mode_key(value: Any) -> str:
+            return "".join(ch for ch in str(value or "").lower() if ch.isalnum())
+
+        self_use_keys = {"zeroexporttoct", "zeroexportct"}
+        inverter_work_mode_self_use_option = next(
+            (
+                str(option)
+                for option in inverter_work_mode_options
+                if _work_mode_key(option) in self_use_keys
+            ),
+            INVERTER_WORK_MODE_SELF_USE_OPTION,
+        )
 
         inverter_export_target_w = self._runtime_float("inverter_export_target_w", HOMEON_EXPORT_TARGET_W)
         inverter_charge_current_a = self._runtime_float("inverter_charge_current_a", HOMEON_CHARGE_CURRENT_A)
@@ -795,6 +814,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["inverter_work_mode_current"] = inverter_work_mode_current
         data["inverter_work_mode_target"] = "bez zmiany"
         data["inverter_work_mode_sell_option"] = inverter_work_mode_sell_option
+        data["inverter_work_mode_self_use_option"] = inverter_work_mode_self_use_option
 
         data["inverter_deye_command_count"] = 0
         data["inverter_deye_changed_count"] = 0
@@ -830,6 +850,26 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         def sel(entity_id: str, option: str) -> None:
             desired.append(("select", str(entity_id), str(option)))
+
+        forced_battery_export = bool(
+            not weather_lock
+            and (
+                mode == "PREPARE_NEGATIVE_PRICE_WINDOW"
+                or (
+                    mode == "MORNING_PV_HEADROOM"
+                    and safe_export_limit_w > 0
+                    and plan_safe_to_sell_kwh > 0.3
+                )
+                or (
+                    mode == "SELL_BATTERY_HIGH_PRICE"
+                    and safe_export_limit_w > 0
+                    and plan_safe_to_sell_kwh > 0.3
+                )
+            )
+        )
+        if not forced_battery_export:
+            data["inverter_work_mode_target"] = inverter_work_mode_self_use_option
+            sel(inverter_work_mode_select, inverter_work_mode_self_use_option)
 
         if mode == "SAFE_MODE":
             executor_mode = "SAFE_MODE"
