@@ -17,8 +17,8 @@ class TestHomeOnManagerBeta(unittest.TestCase):
     def test_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
         const = (COMPONENT / "const.py").read_text(encoding="utf-8")
-        self.assertEqual(manifest["version"], "0.2.44-beta.11")
-        self.assertIn('VERSION = "0.2.44-beta.11"', const)
+        self.assertEqual(manifest["version"], "0.2.44-beta.12")
+        self.assertIn('VERSION = "0.2.44-beta.12"', const)
 
     def test_pv_installed_power_is_available_and_persistent(self) -> None:
         init_source = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
@@ -150,6 +150,23 @@ class TestHomeOnManagerBeta(unittest.TestCase):
         self.assertIn('pv_today_kwh * remaining_pv_factor', planner)
         self.assertIn('"morning_pv_forecast_source"', planner)
         self.assertIn('"morning_pv_forecast_source"', sensor)
+
+    def test_high_price_pv_export_holds_soc_without_microcycles(self) -> None:
+        planner = (COMPONENT / "planner.py").read_text(encoding="utf-8")
+        coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        self.assertIn('"HIGH_PRICE_PV_EXPORT_HOLD_SOC"', planner)
+        self.assertIn("price_drop_ahead >= high_price_hold_min_drop", planner)
+        self.assertIn("soc <= high_price_hold_soc + high_price_hold_soc_hysteresis", planner)
+        self.assertIn("safe_to_sell_kwh = 0.0", planner)
+        self.assertIn('"high_price_pv_export_hold_status"', planner)
+
+        executor = coordinator.split(
+            'elif mode == "HIGH_PRICE_PV_EXPORT_HOLD_SOC":', 1
+        )[1].split('elif mode == "PV_CHARGE":', 1)[0]
+        self.assertIn("num(inverter_max_charge_current, 0)", executor)
+        self.assertIn("num(inverter_max_discharge_current, 0)", executor)
+        self.assertIn("sw(inverter_export_surplus, True)", executor)
+        self.assertNotIn("sel(inverter_work_mode_select", executor)
 
     def test_runtime_command_interval_is_used(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
