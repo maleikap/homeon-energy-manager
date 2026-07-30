@@ -446,6 +446,57 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     current_phase = _phase(now.hour)
     current_mode = str(data.get("mode", "NORMAL"))
 
+    # Przy wysokiej cenie sprzedaży i SOC osiągającym bezpieczny cel nie
+    # wykonuj mikrocykli 20->21->20%. Zasil dom z PV, sprzedaj tylko bieżącą
+    # nadwyżkę i zacznij ładować magazyn dopiero po wyraźnym spadku ceny.
+    later_sell_prices = [
+        _f(item.get("sell"), sell_price_now)
+        for item in hours
+        if item.get("dt") is not None
+        and item["dt"] > now + timedelta(minutes=30)
+    ]
+    later_min_sell_price = min(later_sell_prices) if later_sell_prices else sell_price_now
+    price_drop_ahead = max(0.0, sell_price_now - later_min_sell_price)
+    high_price_hold_min_sell = coordinator._runtime_float(
+        "economic_good_sell_price",
+        0.55,
+    )
+    high_price_hold_min_drop = coordinator._runtime_float(
+        "economic_pv_export_price_drop",
+        0.10,
+    )
+    high_price_hold_soc_hysteresis = max(
+        1.0,
+        coordinator._runtime_float("economic_pv_hold_soc_hysteresis", 3.0),
+    )
+    high_price_hold_soc = max(min_soc, discharge_target_soc)
+    high_price_pv_export_hold_active = bool(
+        pv_power_now >= 500.0
+        and sell_price_now >= high_price_hold_min_sell
+        and price_drop_ahead >= high_price_hold_min_drop
+        and soc <= high_price_hold_soc + high_price_hold_soc_hysteresis
+        and str(data.get("safe_mode", "OFF")).upper() != "ON"
+        and current_mode not in (
+            "DISABLED",
+            "SAFE_MODE",
+            "EMERGENCY_RESERVE",
+            "NEGATIVE_IMPORT",
+            "CHEAP_CHARGE",
+            "NEGATIVE_PRICE_EXPORT_BLOCK",
+        )
+    )
+
+    if high_price_pv_export_hold_active:
+        current_mode = "HIGH_PRICE_PV_EXPORT_HOLD_SOC"
+        data["mode"] = current_mode
+        data["reason"] = (
+            f"Cena sprzedaży {sell_price_now:.3f} PLN/kWh jest o "
+            f"{price_drop_ahead:.3f} PLN/kWh wyższa od późniejszego minimum. "
+            f"Utrzymuję baterię przy {high_price_hold_soc:.1f}% i eksportuję nadwyżkę PV."
+        )[:240]
+        safe_to_sell_kwh = 0.0
+        safe_export_limit_w = configured_export_limit_w
+
     if morning_headroom_active and current_mode not in (
         "DISABLED",
         "SAFE_MODE",
@@ -453,6 +504,7 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         "NEGATIVE_IMPORT",
         "CHEAP_CHARGE",
         "NEGATIVE_PRICE_EXPORT_BLOCK",
+        "HIGH_PRICE_PV_EXPORT_HOLD_SOC",
     ):
         current_mode = "MORNING_PV_HEADROOM"
         data["mode"] = current_mode
@@ -485,7 +537,18 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
             "Blokuję sprzedaż, bo prognoza PV na jutro i profil zużycia wymagają zostawienia energii w magazynie"
         )
 
-    if current_mode == "MORNING_PV_HEADROOM":
+    if current_mode == "HIGH_PRICE_PV_EXPORT_HOLD_SOC":
+        next_action = "Sprzedawaj nadwyżkę PV, utrzymuj SOC"
+        next_time = "do spadku ceny sprzedaży"
+        reason = (
+            f"Cena teraz {sell_price_now:.3f} PLN/kWh, późniejsze minimum "
+            f"{later_min_sell_price:.3f} PLN/kWh. Nie ładuję i nie rozładowuję "
+            f"baterii wokół celu {high_price_hold_soc:.1f}%."
+        )
+        hold_reason = "Blokuję mikrocykle baterii; eksport dotyczy wyłącznie bieżącej nadwyżki PV."
+        recommended_soc = high_price_hold_soc
+
+    elif current_mode == "MORNING_PV_HEADROOM":
         next_action = "Zwolnij miejsce na dzisiejsze PV"
         next_time = "teraz"
         reason = (
@@ -584,6 +647,11 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         "plan_safe_export_limit_w": round(safe_export_limit_w, 0),
         "plan_weather_strategy": weather_strategy[:255],
         "plan_reasonable_buy_window": reasonable_buy_window,
+        "high_price_pv_export_hold_status": "ON" if high_price_pv_export_hold_active else "OFF",
+        "high_price_pv_export_hold_soc": round(high_price_hold_soc, 1),
+        "high_price_pv_export_price_now": round(sell_price_now, 3),
+        "high_price_pv_export_later_min_price": round(later_min_sell_price, 3),
+        "high_price_pv_export_price_advantage": round(price_drop_ahead, 3),
         "morning_pv_headroom_status": "ON" if morning_headroom_active else "OFF",
         "morning_pv_forecast_source": detailed_pv.get("source", "Profil uczony / prognoza dzienna"),
         "morning_pv_forecast_power_now_w": round(forecast_power_now_w, 0),
