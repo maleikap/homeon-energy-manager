@@ -950,6 +950,18 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_export_surplus_power, inverter_export_target_w if pv_surplus_export_allowed else 0)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
+        elif mode == "HIGH_PRICE_PV_EXPORT_HOLD_SOC":
+            executor_mode = "HIGH_PRICE_PV_EXPORT_HOLD_SOC"
+            action = (
+                "Wysoka cena sprzedaży — utrzymuję bezpieczny SOC, "
+                "blokuję mikrocykle baterii i eksportuję bieżącą nadwyżkę PV"
+            )
+            sw(inverter_grid_charging, False)
+            num(inverter_max_charge_current, 0)
+            num(inverter_max_discharge_current, 0)
+            num(inverter_export_surplus_power, inverter_export_target_w)
+            sw(inverter_export_surplus, True)
+
         elif mode == "PV_CHARGE":
             executor_mode = "PV_SURPLUS_EXPORT" if pv_surplus_export_allowed else "PV_CHARGE"
             action = (
