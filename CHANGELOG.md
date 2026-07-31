@@ -2,6 +2,15 @@
 
 W tym pliku dokumentowane są najważniejsze zmiany HomeOn Energy Manager.
 
+## [1.0.1] - 2026-07-31
+
+### Poprawiono
+
+- dobra cena sprzedaży ma pierwszeństwo przed zwykłym tanim ładowaniem,
+- zmiana między ładowaniem a sprzedażą nie jest zatrzymywana przez histerezę trybu,
+- zachowano nadrzędny priorytet `SAFE MODE`, awaryjnego SOC i ładowania przy cenie ujemnej,
+- README otrzymał układ zgodny z HomeOn Energy Card.
+
 ## [1.0.0] - 2026-07-31
 
 ### Dodano
