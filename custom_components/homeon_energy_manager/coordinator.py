@@ -59,6 +59,7 @@ INVERTER_MAX_CHARGE_CURRENT = "number.inverter_battery_max_charging_current"
 INVERTER_MAX_DISCHARGE_CURRENT = "number.inverter_battery_max_discharging_current"
 INVERTER_WORK_MODE_SELECT = "select.inverter_work_mode"
 INVERTER_WORK_MODE_SELL_OPTION = "Export First"
+INVERTER_WORK_MODE_PV_CHARGE_OPTION = "Zero Export To CT"
 
 HOMEON_EXPORT_TARGET_W = 10000
 HOMEON_CHARGE_CURRENT_A = 80
@@ -312,6 +313,142 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "sell_now_best": bool(sell_now_best),
             "sell_price_delta_to_best": round(max(0.0, best_price - current_price), 3),
             "sell_wait_reason": wait_reason,
+        }
+
+    def _pv_low_price_window_plan(
+        self,
+        sell_price_entity: str | None,
+        current_sell_price: float,
+        pv_forecast_today_kwh: float,
+        battery_capacity_kwh: float,
+        soc: float,
+        pv_power_w: float,
+        load_power_w: float,
+        battery_trade_enabled: bool,
+    ) -> dict[str, Any]:
+        now = dt_util.now()
+        points: list[dict[str, Any]] = []
+
+        if sell_price_entity:
+            state = self.hass.states.get(sell_price_entity)
+            if state is not None:
+                self._extract_price_points(dict(state.attributes), points)
+
+        points.append({"dt": now, "price": current_sell_price})
+
+        hourly: dict[str, dict[str, Any]] = {}
+
+        for item in points:
+            dt = item.get("dt")
+            price = self._as_float(item.get("price"), None)
+
+            if dt is None or price is None:
+                continue
+
+            local_dt = dt_util.as_local(dt)
+
+            if local_dt.date() != now.date():
+                continue
+
+            if local_dt.hour < 6 or local_dt.hour >= 20:
+                continue
+
+            hour_dt = local_dt.replace(minute=0, second=0, microsecond=0)
+            key = hour_dt.strftime("%Y-%m-%d %H")
+            existing = hourly.get(key)
+
+            if existing is None or float(price) < float(existing["price"]):
+                hourly[key] = {
+                    "dt": hour_dt,
+                    "hour": hour_dt.strftime("%H:00"),
+                    "price": float(price),
+                }
+
+        high_pv_forecast = bool(
+            battery_capacity_kwh > 0
+            and pv_forecast_today_kwh >= max(20.0, battery_capacity_kwh * 1.5)
+        )
+
+        free_to_target_kwh = max(
+            0.0,
+            battery_capacity_kwh * (95.0 - min(95.0, soc)) / 100.0,
+        )
+        average_daylight_pv_kw = max(1.0, pv_forecast_today_kwh / 10.0)
+        required_hours = int(math.ceil(free_to_target_kwh / average_daylight_pv_kw))
+        selected_hours_count = max(2, min(3, required_hours))
+
+        candidates = sorted(
+            hourly.values(),
+            key=lambda item: (float(item["price"]), item["dt"]),
+        )
+        selected = sorted(
+            candidates[:selected_hours_count],
+            key=lambda item: item["dt"],
+        )
+
+        current_key = now.replace(minute=0, second=0, microsecond=0).strftime("%Y-%m-%d %H")
+        selected_keys = {
+            item["dt"].strftime("%Y-%m-%d %H")
+            for item in selected
+        }
+
+        active = bool(
+            battery_trade_enabled
+            and high_pv_forecast
+            and len(selected) >= 2
+        )
+        charge_now = bool(active and current_key in selected_keys and soc < 95.0)
+        pv_surplus_w = max(0.0, pv_power_w - load_power_w)
+        export_now = bool(
+            active
+            and not charge_now
+            and pv_surplus_w > 500.0
+        )
+
+        windows = ", ".join(
+            f"{item['hour']} ({item['price']:.3f} PLN/kWh)"
+            for item in selected
+        ) or "brak harmonogramu"
+
+        if not battery_trade_enabled:
+            status = "WYŁĄCZONE"
+            reason = "Tryb handlu baterią jest wyłączony."
+        elif not high_pv_forecast:
+            status = "NIEAKTYWNE"
+            reason = (
+                f"Prognoza PV {pv_forecast_today_kwh:.1f} kWh nie wymaga odkładania ładowania "
+                f"magazynu {battery_capacity_kwh:.1f} kWh na najgorsze godziny."
+            )
+        elif len(selected) < 2:
+            status = "BRAK CEN"
+            reason = "Brak co najmniej dwóch przyszłych godzin ceny sprzedaży w dzisiejszym harmonogramie."
+        elif charge_now:
+            status = "ŁADOWANIE W TANIM OKNIE"
+            reason = (
+                f"To jedna z {len(selected)} najgorszych godzin sprzedaży. "
+                "Nadwyżka PV jest kierowana do magazynu."
+            )
+        elif export_now:
+            status = "EKSPORT PRZED TANIM OKNEM"
+            reason = (
+                f"Magazyn pozostaje wolny na najgorsze godziny: {windows}. "
+                f"Bieżąca nadwyżka PV {pv_surplus_w:.0f} W jest sprzedawana."
+            )
+        else:
+            status = "OCZEKIWANIE"
+            reason = f"Najgorsze godziny sprzedaży dzisiaj: {windows}."
+
+        return {
+            "active": active,
+            "charge_now": charge_now,
+            "export_now": export_now,
+            "status": status,
+            "reason": reason[:240],
+            "windows": windows[:240],
+            "hours_count": len(selected),
+            "target_soc": 95.0,
+            "pv_surplus_w": round(pv_surplus_w, 0),
+            "forecast_kwh": round(pv_forecast_today_kwh, 2),
         }
 
     async def _async_set_switch(self, entity_id: str, turn_on: bool, actions: list[str]) -> None:
@@ -734,6 +871,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         inverter_max_discharge_current = conf_entity(CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER, INVERTER_MAX_DISCHARGE_CURRENT)
         inverter_work_mode_select = INVERTER_WORK_MODE_SELECT
         inverter_work_mode_sell_option = INVERTER_WORK_MODE_SELL_OPTION
+        inverter_work_mode_pv_charge_option = INVERTER_WORK_MODE_PV_CHARGE_OPTION
         inverter_work_mode_state = self.hass.states.get(inverter_work_mode_select)
         inverter_work_mode_current = str(inverter_work_mode_state.state) if inverter_work_mode_state is not None else "BRAK_ENCJI"
 
@@ -870,6 +1008,33 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
 
+        elif mode == "PV_LOW_PRICE_CHARGE":
+            action = "Najgorsza godzina sprzedaży — ustawiam Zero Export To CT i ładuję magazyn wyłącznie z PV"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
+            sw(inverter_grid_charging, False)
+            sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
+            num(inverter_max_charge_current, inverter_charge_current_a)
+            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+
+        elif mode == "PV_PRICE_EXPORT":
+            pv_price_surplus_w = self._as_float(data.get("pv_price_strategy_surplus_w"), 0.0) or 0.0
+            pv_price_export_w = min(
+                inverter_export_target_w,
+                max(500.0, float(pv_price_surplus_w)),
+            )
+            action = (
+                "Poza najgorszymi godzinami — sprzedaję bieżącą nadwyżkę PV %.0f W "
+                "i zachowuję miejsce w magazynie"
+            ) % pv_price_export_w
+            data["inverter_work_mode_target"] = inverter_work_mode_sell_option
+            sel(inverter_work_mode_select, inverter_work_mode_sell_option)
+            sw(inverter_grid_charging, False)
+            num(inverter_export_surplus_power, pv_price_export_w)
+            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+            sw(inverter_export_surplus, True)
+
         elif (
             mode == "SELL_BATTERY_HIGH_PRICE"
             and safe_export_limit_w > 0
@@ -911,9 +1076,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "PV_CHARGE":
-            action = "Ładowanie z PV — ładowanie z sieci wyłączone, eksport baterii zablokowany"
+            action = "Ładowanie z PV — ustawiam Zero Export To CT, ładowanie z sieci wyłączone"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
@@ -1427,6 +1595,17 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             battery_trade_enabled,
             sell_stats,
         )
+
+        pv_low_price_plan = self._pv_low_price_window_plan(
+            self.entry.data.get(CONF_SELL_PRICE_SENSOR),
+            sell_price,
+            pv_today,
+            battery_capacity_kwh,
+            soc,
+            pv_power,
+            load_power,
+            battery_trade_enabled,
+        )
         # HOMEON_NEGATIVE_PRICE_WINDOW_END
 
         available_to_sell_kwh = max(0.0, battery_capacity_kwh * (soc - discharge_target_soc) / 100.0)
@@ -1516,7 +1695,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif negative_price_plan.get("prepare", False):
             mode = "PREPARE_NEGATIVE_PRICE_WINDOW"
             reason = str(negative_price_plan.get("reason", "Przygotowuję magazyn przed ceną ujemną"))
-        elif negative_price_plan.get("sell_block", False):
+        elif (
+            negative_price_plan.get("sell_block", False)
+            and not pv_low_price_plan.get("charge_now", False)
+        ):
             mode = "NEGATIVE_PRICE_EXPORT_BLOCK"
             reason = str(negative_price_plan.get("reason", "Cena sprzedaży ujemna — blokuję eksport"))
         elif buy_price <= economic_negative_buy_price and soc < economic_max_soc_after_negative_charge:
@@ -1531,12 +1713,18 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif pv_reality_lock and soc > min_soc:
             mode = "PV_REALITY_HOLD"
             reason = str(pv_reality.get("reason", "PV realnie słabe — chronię magazyn"))
+        elif pv_low_price_plan.get("charge_now", False):
+            mode = "PV_LOW_PRICE_CHARGE"
+            reason = str(pv_low_price_plan.get("reason", "Ładuję magazyn z PV w najgorszej godzinie sprzedaży"))
         elif sell_ready:
             mode = "SELL_BATTERY_HIGH_PRICE"
             reason = (
                 f"Sprzedaję teraz — cena {sell_price:.2f} PLN/kWh "
                 f"osiągnęła ustawiony próg {economic_good_sell_price:.2f} PLN/kWh"
             )
+        elif pv_low_price_plan.get("export_now", False):
+            mode = "PV_PRICE_EXPORT"
+            reason = str(pv_low_price_plan.get("reason", "Sprzedaję PV i zachowuję miejsce na najgorsze godziny"))
         elif buy_price < economic_cheap_charge_price and soc < charge_target_soc:
             mode = "CHEAP_CHARGE"
             reason = "Tania energia — można ładować magazyn"
@@ -1569,6 +1757,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "PV_REALITY_HOLD": 70,
             "SELL_BATTERY_HIGH_PRICE": 60,
             "WAIT_BETTER_SELL_PRICE": 55,
+            "PV_PRICE_EXPORT": 54,
+            "PV_LOW_PRICE_CHARGE": 53,
             "CHEAP_CHARGE": 50,
             "EXPENSIVE_SELF_USE": 45,
             "PV_CHARGE": 35,
@@ -1584,6 +1774,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "HOME_BATTERY_PRIORITY",
             "SELL_BATTERY_HIGH_PRICE",
             "WAIT_BETTER_SELL_PRICE",
+            "PV_PRICE_EXPORT",
+            "PV_LOW_PRICE_CHARGE",
         }
 
         now_ts = dt_util.now().timestamp()
@@ -1717,6 +1909,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "negative_price_prepare_export_w": negative_price_plan.get("prepare_export_w", 0.0),
             "negative_price_strategy": negative_price_plan.get("strategy", "—"),
             "negative_price_reason": negative_price_plan.get("reason", "—"),
+
+            "pv_price_strategy_status": pv_low_price_plan.get("status", "NIEAKTYWNE"),
+            "pv_price_strategy_reason": pv_low_price_plan.get("reason", "—"),
+            "pv_price_strategy_windows": pv_low_price_plan.get("windows", "—"),
+            "pv_price_strategy_hours": pv_low_price_plan.get("hours_count", 0),
+            "pv_price_strategy_target_soc": pv_low_price_plan.get("target_soc", 95.0),
+            "pv_price_strategy_forecast_kwh": pv_low_price_plan.get("forecast_kwh", 0.0),
+            "pv_price_strategy_surplus_w": pv_low_price_plan.get("pv_surplus_w", 0.0),
         }
 
         data.update(sell_stats)
