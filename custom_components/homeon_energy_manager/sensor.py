@@ -114,6 +114,26 @@ SENSORS = [
     ("learn_low_load_hour", "EMS godzina najniższego zużycia", None, "mdi:chart-bell-curve-cumulative"),
     ("learn_low_load_w", "EMS najniższe godzinowe zużycie", UnitOfPower.WATT, "mdi:home-lightning-bolt-outline"),
     ("learn_most_common_mode", "EMS najczęstszy tryb", None, "mdi:state-machine"),
+    ("learn_pv_forecast_factor", "Korekta prognozy PV", None, "mdi:chart-bell-curve"),
+    ("learn_pv_forecast_accuracy", "Realizacja prognozy PV", PERCENT, "mdi:target"),
+    ("learn_daily_pv_kwh", "EMS produkcja PV dzisiaj", UnitOfEnergy.KILO_WATT_HOUR, "mdi:solar-power"),
+    ("learn_daily_load_kwh", "EMS zużycie domu dzisiaj", UnitOfEnergy.KILO_WATT_HOUR, "mdi:home-lightning-bolt"),
+    ("pv_forecast_today_calibrated", "Skalibrowana prognoza PV dziś", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-sunny"),
+    ("pv_forecast_tomorrow_calibrated", "Skalibrowana prognoza PV jutro", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-sunny-alert"),
+    ("optimizer_status", "Optymalizator 24h", None, "mdi:chart-timeline-variant"),
+    ("optimizer_dynamic_charge_target_soc", "Dynamiczny cel SOC", PERCENT, "mdi:battery-charging-90"),
+    ("optimizer_required_charge_kwh", "Energia wymagana do celu", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-plus"),
+    ("optimizer_future_pv_surplus_kwh", "Prognozowana nadwyżka PV 24h", UnitOfEnergy.KILO_WATT_HOUR, "mdi:solar-power-variant"),
+    ("optimizer_discharge_power_kw", "Planowana moc rozładowania", "kW", "mdi:battery-arrow-down"),
+    ("optimizer_sell_window_hours", "Długość dobrego okna sprzedaży", "h", "mdi:clock-outline"),
+    ("optimizer_sell_window_capacity_kwh", "Pojemność okna sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:transmission-tower-export"),
+    ("optimizer_feasible_sale_kwh", "Możliwa sprzedaż w oknie", UnitOfEnergy.KILO_WATT_HOUR, "mdi:cash-fast"),
+    ("optimizer_required_sale_hours", "Wymagany czas sprzedaży", "h", "mdi:timer-sand"),
+    ("optimizer_recommended_sell_start", "Zalecany start sprzedaży", None, "mdi:clock-start"),
+    ("optimizer_expected_trade_profit", "Prognozowany zysk handlu", "PLN", "mdi:cash-check"),
+    ("optimizer_recovery_status", "Status wykonania planu", None, "mdi:progress-check"),
+    ("optimizer_recovery_reason", "Powód statusu planu", None, "mdi:text-box-check"),
+    ("optimizer_plan_24h", "Skrót planu 24h", None, "mdi:calendar-clock"),
 
     ("learn_avg_buy_price", "EMS średnia cena zakupu", "PLN/kWh", "mdi:cash-plus"),
     ("learn_avg_sell_price", "EMS średnia cena sprzedaży", "PLN/kWh", "mdi:cash-minus"),
@@ -170,6 +190,8 @@ SENSORS = [
     ("deye_driver_max_changes_per_run", "Deye maksymalna liczba zmian", "zmian", "mdi:shield-counter"),
     ("deye_driver_changed_count_runtime", "Deye liczba zmian w cyklu", "zmian", "mdi:counter"),
     ("deye_driver_last_control_hash", "Deye ostatni plan komend", None, "mdi:fingerprint"),
+    ("deye_command_confirmation", "Potwierdzenie komend Deye", None, "mdi:check-network"),
+    ("deye_command_confirmation_reason", "Powód potwierdzenia Deye", None, "mdi:text-box-check"),
 ]
 
 
@@ -199,7 +221,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.1.6",
+            "sw_version": "1.2.0",
         }
 
     @property
