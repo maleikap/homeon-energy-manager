@@ -761,7 +761,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         weather_lock = bool(
             mode == "WEATHER_HOLD_RESERVE"
-            or (mode in ("SELL_BATTERY_HIGH_PRICE", "WAIT_BETTER_SELL_PRICE") and plan_safe_to_sell_kwh <= 0.2)
+            or (
+                mode in ("SELL_BATTERY_HIGH_PRICE", "WAIT_BETTER_SELL_PRICE")
+                and plan_safe_to_sell_kwh <= 0.2
+                and not pv_export_opportunity
+            )
         )
 
         data["inverter_control_enabled"] = inverter_control
