@@ -2,6 +2,29 @@
 
 W tym pliku dokumentowane są najważniejsze zmiany HomeOn Energy Manager.
 
+## [1.1.0] - 2026-07-31
+
+### Dodano
+
+- automatyczny wybór 2–3 najgorszych godzin ceny sprzedaży w dziennym harmonogramie,
+- odkładanie ładowania magazynu na wybrane najgorsze godziny przy dużej prognozie PV,
+- tryb `PV_PRICE_EXPORT`, który sprzedaje bieżącą nadwyżkę PV i zachowuje miejsce w magazynie,
+- tryb `PV_LOW_PRICE_CHARGE`, który ładuje magazyn z PV w najgorszych godzinach sprzedaży,
+- sensory wybranych godzin, statusu, powodu, prognozy i nadwyżki strategii cenowej PV.
+
+### Zmieniono
+
+- liczba godzin ładowania jest dobierana automatycznie do wolnego miejsca oraz prognozowanej średniej mocy PV,
+- ładowanie PV ustawia `Zero Export To CT`,
+- eksport poza najgorszymi godzinami ustawia `Export First`,
+- ładowanie z sieci pozostaje wyłączone podczas ładowania magazynu z PV.
+
+### Bezpieczeństwo
+
+- `SAFE MODE`, awaryjny SOC i ceny ujemne zachowują wyższy priorytet,
+- eksport w trybie `PV_PRICE_EXPORT` nie wymusza rozładowania magazynu,
+- strategia działa tylko przy włączonym trybie handlu baterią i dostępnym harmonogramie cen.
+
 ## [1.0.6] - 2026-07-31
 
 ### Poprawiono
