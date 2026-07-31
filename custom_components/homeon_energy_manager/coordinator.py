@@ -233,6 +233,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
     def _price_stats_from_entity(self, entity_id: str | None, current_price: float) -> dict[str, Any]:
         now = dt_util.now()
         horizon_end = now + timedelta(hours=24)
+        current_hour_start = now.replace(minute=0, second=0, microsecond=0)
+        current_hour_end = current_hour_start + timedelta(hours=1)
 
         raw_points: list[dict[str, Any]] = []
 
@@ -242,6 +244,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 self._extract_price_points(dict(state.attributes), raw_points)
 
         by_minute: dict[str, dict[str, Any]] = {}
+        current_hour_points: list[dict[str, Any]] = []
 
         for item in raw_points:
             dt = item.get("dt")
@@ -253,26 +256,51 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             if price < -5 or price > 5:
                 continue
 
-            if dt < now - timedelta(minutes=20):
+            local_dt = dt_util.as_local(dt)
+
+            if current_hour_start <= local_dt < current_hour_end:
+                current_hour_points.append({"dt": local_dt, "price": float(price)})
+
+            # Keep the whole current hour. Hourly schedules usually expose the
+            # price at HH:00, which must remain valid until HH:59.
+            if local_dt < current_hour_start:
                 continue
 
-            if dt > horizon_end:
+            if local_dt > horizon_end:
                 continue
 
-            key = dt.strftime("%Y-%m-%d %H:%M")
-            by_minute[key] = {"dt": dt, "price": float(price)}
+            key = local_dt.strftime("%Y-%m-%d %H:%M")
+            by_minute[key] = {"dt": local_dt, "price": float(price)}
+
+        schedule_current = None
+        if current_hour_points:
+            started = [x for x in current_hour_points if x["dt"] <= now]
+            schedule_current = max(
+                started or current_hour_points,
+                key=lambda x: x["dt"] if started else -x["dt"].timestamp(),
+            )
+
+        effective_current_price = (
+            float(schedule_current["price"])
+            if schedule_current is not None
+            else float(current_price)
+        )
+        current_price_source = "harmonogram bieżącej godziny" if schedule_current else "stan sensora"
 
         points = sorted(by_minute.values(), key=lambda x: x["dt"])
 
         if not points:
             return {
                 "sell_prices_found": 0,
-                "best_sell_price_24h": round(current_price, 3),
+                "best_sell_price_24h": round(effective_current_price, 3),
                 "best_sell_time_24h": "teraz",
                 "next_better_sell_price": 0,
                 "next_better_sell_time": "-",
                 "sell_now_best": True,
                 "sell_price_delta_to_best": 0,
+                "effective_sell_price": round(effective_current_price, 3),
+                "sell_price_sensor_state": round(current_price, 3),
+                "sell_price_source": current_price_source,
                 "sell_wait_reason": "Brak harmonogramu cen w atrybutach — używam ceny aktualnej",
             }
 
@@ -283,7 +311,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         better_later = [
             x for x in points
             if x["dt"] > now + timedelta(minutes=15)
-            and float(x["price"]) > float(current_price) + 0.005
+            and float(x["price"]) > effective_current_price + 0.005
         ]
 
         if better_later:
@@ -295,7 +323,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             next_better_time = "-"
 
         tolerance = 0.01
-        sell_now_best = current_price >= best_price - tolerance
+        sell_now_best = effective_current_price >= best_price - tolerance
 
         if sell_now_best:
             wait_reason = "Aktualna cena jest najlepsza lub prawie najlepsza w oknie 24h"
@@ -311,7 +339,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "next_better_sell_price": round(next_better_price, 3),
             "next_better_sell_time": next_better_time,
             "sell_now_best": bool(sell_now_best),
-            "sell_price_delta_to_best": round(max(0.0, best_price - current_price), 3),
+            "sell_price_delta_to_best": round(max(0.0, best_price - effective_current_price), 3),
+            "effective_sell_price": round(effective_current_price, 3),
+            "sell_price_sensor_state": round(current_price, 3),
+            "sell_price_source": current_price_source,
             "sell_wait_reason": wait_reason,
         }
 
@@ -386,16 +417,25 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             key=lambda item: item["dt"],
         )
 
-        current_key = now.replace(minute=0, second=0, microsecond=0).strftime("%Y-%m-%d %H")
+        current_hour_start = now.replace(minute=0, second=0, microsecond=0)
+        current_key = current_hour_start.strftime("%Y-%m-%d %H")
         selected_keys = {
             item["dt"].strftime("%Y-%m-%d %H")
             for item in selected
         }
+        remaining_selected = [
+            item for item in selected
+            if item["dt"] >= current_hour_start
+        ]
+        selected_windows_completed = bool(
+            len(selected) >= 2 and not remaining_selected
+        )
 
         active = bool(
             battery_trade_enabled
             and high_pv_forecast
             and len(selected) >= 2
+            and remaining_selected
         )
         charge_now = bool(active and current_key in selected_keys and soc < 95.0)
         pv_surplus_w = max(0.0, pv_power_w - load_power_w)
@@ -405,10 +445,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             and pv_surplus_w > 500.0
         )
 
-        windows = ", ".join(
+        all_windows = ", ".join(
             f"{item['hour']} ({item['price']:.3f} PLN/kWh)"
             for item in selected
         ) or "brak harmonogramu"
+        windows = ", ".join(
+            f"{item['hour']} ({item['price']:.3f} PLN/kWh)"
+            for item in remaining_selected
+        ) or "brak pozostałych okien"
 
         if not battery_trade_enabled:
             status = "WYŁĄCZONE"
@@ -422,6 +466,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif len(selected) < 2:
             status = "BRAK CEN"
             reason = "Brak co najmniej dwóch przyszłych godzin ceny sprzedaży w dzisiejszym harmonogramie."
+        elif selected_windows_completed:
+            status = "ZAKOŃCZONE"
+            reason = (
+                f"Wybrane najgorsze godziny ({all_windows}) już się zakończyły. "
+                "Strategia nie blokuje teraz sprzedaży magazynu."
+            )
         elif charge_now:
             status = "ŁADOWANIE W TANIM OKNIE"
             reason = (
@@ -446,6 +496,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "reason": reason[:240],
             "windows": windows[:240],
             "hours_count": len(selected),
+            "windows_completed": selected_windows_completed,
             "target_soc": 95.0,
             "pv_surplus_w": round(pv_surplus_w, 0),
             "forecast_kwh": round(pv_forecast_today_kwh, 2),
@@ -1297,15 +1348,19 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         load_power = self._state_float_by_key(CONF_LOAD_POWER_SENSOR)
         grid_power = self._state_float_by_key(CONF_GRID_POWER_SENSOR)
         buy_price = self._state_float_by_key(CONF_BUY_PRICE_SENSOR)
-        sell_price = self._state_float_by_key(CONF_SELL_PRICE_SENSOR)
+        sell_price_sensor_state = self._state_float_by_key(CONF_SELL_PRICE_SENSOR)
 
         pv_today = self._state_float_by_key(CONF_PV_FORECAST_TODAY_SENSOR)
         pv_tomorrow = self._state_float_by_key(CONF_PV_FORECAST_TOMORROW_SENSOR)
 
         sell_stats = self._price_stats_from_entity(
             self.entry.data.get(CONF_SELL_PRICE_SENSOR),
-            sell_price,
+            sell_price_sensor_state,
         )
+        sell_price = self._as_float(
+            sell_stats.get("effective_sell_price"),
+            sell_price_sensor_state,
+        ) or 0.0
 
         if battery_discharge_positive:
             battery_discharge_w = max(battery_power, 0.0)
@@ -1638,6 +1693,15 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         economic_battery_cycle_cost = self._runtime_float("economic_battery_cycle_cost", 0.15)
         economic_min_arbitrage_profit = self._runtime_float("economic_min_arbitrage_profit", 1.0)
 
+        best_window_sell_opportunity = bool(
+            sell_stats.get("sell_now_best", False)
+            and sell_price > max(economic_negative_sell_price, economic_battery_cycle_cost)
+        )
+        sell_price_trigger = bool(
+            sell_price >= economic_good_sell_price
+            or best_window_sell_opportunity
+        )
+
         economic_estimated_sell_profit = max(
             0.0,
             available_to_sell_kwh * max(0.0, sell_price - economic_battery_cycle_cost),
@@ -1648,7 +1712,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         )
 
         sell_ready = bool(
-            sell_price >= economic_good_sell_price
+            sell_price_trigger
             and soc > discharge_target_soc + 8
             and not pv_reality_lock
             and battery_trade_enabled
@@ -1667,10 +1731,15 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             economic_sell_reason = "Bateria zasila dom — sprzedaż zablokowana przez ochronę domu"
         elif economic_estimated_sell_profit < economic_min_arbitrage_profit and not pv_export_opportunity:
             economic_sell_reason = f"Zysk {economic_estimated_sell_profit:.2f} PLN jest poniżej minimum {economic_min_arbitrage_profit:.2f} PLN"
-        elif sell_price < economic_good_sell_price:
+        elif not sell_price_trigger:
             economic_sell_reason = f"Cena sprzedaży {sell_price:.3f} PLN/kWh jest poniżej progu {economic_good_sell_price:.3f} PLN/kWh"
         elif pv_reality_lock:
             economic_sell_reason = "PV Reality blokuje agresywne rozładowanie"
+        elif best_window_sell_opportunity:
+            economic_sell_reason = (
+                f"Najlepsze opłacalne okno sprzedaży jest aktywne: "
+                f"{sell_price:.3f} PLN/kWh, szacowany zysk {economic_estimated_sell_profit:.2f} PLN"
+            )
         elif pv_export_opportunity:
             economic_sell_reason = (
                 f"Sprzedaż dozwolona przez wysoką nadwyżkę PV: "
