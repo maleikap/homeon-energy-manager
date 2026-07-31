@@ -296,17 +296,11 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         reason = "SOC jest poniżej poziomu awaryjnego."
         recommended_soc = max(recommended_soc, charge_target_soc)
 
-    elif (
-        sell_price_now >= best_sell_price - 0.005
-        and (
-            (safe_to_sell_kwh > 0.3 and soc > safe_min_soc + 1)
-            or pv_export_opportunity
-        )
-    ):
+    elif current_mode == "SELL_BATTERY_HIGH_PRICE":
         next_action = "Sprzedaż bezpiecznej nadwyżki"
         next_time = "teraz"
         reason = (
-            f"Teraz jest najlepsza lub prawie najlepsza cena sprzedaży: {sell_price_now:.3f} PLN/kWh. "
+            f"Aktualna cena osiągnęła ustawiony próg sprzedaży: {sell_price_now:.3f} PLN/kWh. "
             f"Sprzedaż obejmuje bieżącą nadwyżkę PV oraz bezpieczną nadwyżkę baterii {safe_to_sell_kwh:.2f} kWh."
         )
         recommended_soc = safe_min_soc
