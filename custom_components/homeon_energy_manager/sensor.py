@@ -199,7 +199,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.1.4",
+            "sw_version": "1.1.5",
         }
 
     @property
