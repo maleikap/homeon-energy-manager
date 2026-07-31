@@ -1127,20 +1127,38 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "WAIT_BETTER_SELL_PRICE":
-            wait_pv_export_w = min(
-                inverter_export_target_w,
-                max(0.0, pv_export_surplus_w),
-            )
-            action = (
-                "Czekam na lepszą cenę — zachowuję baterię i sprzedaję tylko bieżącą nadwyżkę PV %.0f W"
-                % wait_pv_export_w
-            )
-            data["inverter_work_mode_target"] = inverter_work_mode_sell_option
-            sel(inverter_work_mode_select, inverter_work_mode_sell_option)
-            sw(inverter_grid_charging, False)
-            num(inverter_export_surplus_power, wait_pv_export_w)
-            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
-            sw(inverter_export_surplus, wait_pv_export_w > 50.0)
+            wait_soc = float(self._as_float(data.get("soc"), 0.0) or 0.0)
+            wait_charge_target_soc = 95.0
+
+            if wait_soc < wait_charge_target_soc:
+                action = (
+                    "Czekam na lepszą cenę — ładuję magazyn z nadwyżki PV do %.0f%%, "
+                    "bez eksportu i bez ładowania z sieci"
+                    % wait_charge_target_soc
+                )
+                data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+                sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
+                sw(inverter_grid_charging, False)
+                sw(inverter_export_surplus, False)
+                num(inverter_export_surplus_power, 0)
+                num(inverter_max_charge_current, inverter_charge_current_a)
+                num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+            else:
+                wait_pv_export_w = min(
+                    inverter_export_target_w,
+                    max(0.0, pv_export_surplus_w),
+                )
+                action = (
+                    "Czekam na lepszą cenę — magazyn osiągnął %.0f%%, "
+                    "sprzedaję tylko bieżącą nadwyżkę PV %.0f W"
+                    % (wait_charge_target_soc, wait_pv_export_w)
+                )
+                data["inverter_work_mode_target"] = inverter_work_mode_sell_option
+                sel(inverter_work_mode_select, inverter_work_mode_sell_option)
+                sw(inverter_grid_charging, False)
+                num(inverter_export_surplus_power, wait_pv_export_w)
+                num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+                sw(inverter_export_surplus, wait_pv_export_w > 50.0)
 
         elif mode == "PV_CHARGE":
             action = "Ładowanie z PV — ustawiam Zero Export To CT, ładowanie z sieci wyłączone"
