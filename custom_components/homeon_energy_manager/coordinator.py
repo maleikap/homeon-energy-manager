@@ -1478,9 +1478,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif buy_price <= economic_negative_buy_price and soc < economic_max_soc_after_negative_charge:
             mode = "NEGATIVE_IMPORT"
             reason = "Cena zakupu jest ujemna lub zerowa — opłaca się ładować"
-        elif buy_price < economic_cheap_charge_price and soc < charge_target_soc:
-            mode = "CHEAP_CHARGE"
-            reason = "Tania energia — można ładować magazyn"
         elif home_battery_protection_active:
             mode = "HOME_BATTERY_PRIORITY"
             reason = home_battery_protection_reason
@@ -1496,6 +1493,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif sell_ready and sell_stats["sell_now_best"]:
             mode = "SELL_BATTERY_HIGH_PRICE"
             reason = f"Sprzedaż teraz ma sens — cena {sell_price:.2f} PLN/kWh jest najlepsza lub prawie najlepsza"
+        elif buy_price < economic_cheap_charge_price and soc < charge_target_soc:
+            mode = "CHEAP_CHARGE"
+            reason = "Tania energia — można ładować magazyn"
         elif pv_power > 1000 and soc < charge_target_soc:
             mode = "PV_CHARGE"
             reason = "Produkcja PV ładuje magazyn"
@@ -1537,6 +1537,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "EMERGENCY_RESERVE",
             "NEGATIVE_IMPORT",
             "NEGATIVE_PRICE_EXPORT_BLOCK",
+            "SELL_BATTERY_HIGH_PRICE",
+            "WAIT_BETTER_SELL_PRICE",
         }
 
         now_ts = dt_util.now().timestamp()
