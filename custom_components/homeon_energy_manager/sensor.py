@@ -40,6 +40,13 @@ SENSORS = [
     ("next_better_sell_time", "Godzina następnej lepszej sprzedaży", None, "mdi:clock-fast"),
     ("pv_forecast_today", "Prognoza PV dziś", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-sunny"),
     ("pv_forecast_tomorrow", "Prognoza PV jutro", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-sunny-alert"),
+    ("pv_price_strategy_status", "Strategia cenowa PV", None, "mdi:solar-power-variant"),
+    ("pv_price_strategy_reason", "Powód strategii cenowej PV", None, "mdi:text-box-check"),
+    ("pv_price_strategy_windows", "Najgorsze godziny sprzedaży PV", None, "mdi:clock-alert"),
+    ("pv_price_strategy_hours", "Liczba godzin ładowania PV", None, "mdi:clock-outline"),
+    ("pv_price_strategy_target_soc", "Cel SOC strategii PV", PERCENT, "mdi:battery-charging"),
+    ("pv_price_strategy_forecast_kwh", "Prognoza strategii PV", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-sunny"),
+    ("pv_price_strategy_surplus_w", "Nadwyżka PV strategii cenowej", UnitOfPower.WATT, "mdi:transmission-tower-export"),
 
     # Cele baterii
     ("battery_capacity_kwh", "Pojemność magazynu", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-high"),
@@ -190,7 +197,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.0.6",
+            "sw_version": "1.1.0",
         }
 
     @property
