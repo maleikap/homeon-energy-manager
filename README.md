@@ -175,6 +175,16 @@ Po zakończeniu wybranych najgorszych godzin strategia zwalniania miejsca zostaj
 
 Strategia działa kolejno: przed najgorszymi godzinami `PV_PRICE_EXPORT` sprzedaje bieżącą produkcję i zachowuje miejsce w magazynie; w wybranych najgorszych godzinach `PV_LOW_PRICE_CHARGE` ładuje baterię z PV; po ich zakończeniu `WAIT_BETTER_SELL_PRICE` zachowuje energię baterii i może sprzedawać bieżącą nadwyżkę PV; w najlepszym opłacalnym oknie `SELL_BATTERY_HIGH_PRICE` sprzedaje dostępną energię magazynu.
 
+### Optymalizator 24 h
+
+Optymalizator łączy godzinowy harmonogram cen z wyuczonym profilem zużycia domu i produkcji PV. Oblicza dynamiczny cel SOC, ilość energii możliwą do sprzedaży, wymagany czas rozładowania, przewidywany zysk oraz zalecany moment rozpoczęcia sprzedaży. Jeżeli pełna sprzedaż nie zmieściłaby się w najlepszej godzinie, manager może rozpocząć ją wcześniej w nadal opłacalnym oknie. Prognoza PV jest automatycznie korygowana na podstawie stosunku rzeczywistej produkcji do prognozy z poprzednich dni.
+
+Nowe parametry pozwalają ustawić sprawność ładowania i rozładowania oraz napięcie nominalne baterii. Domyślne wartości to odpowiednio 94%, 94% i 51,2 V.
+
+### Zdarzenia i powiadomienia
+
+Przy zmianie trybu lub statusu wykonania komend manager emituje zdarzenie `homeon_energy_manager_decision`. Dane zdarzenia zawierają tryb, powód, SOC, cenę sprzedaży, następną akcję, jej godzinę oraz status potwierdzenia Deye. Zdarzenie można wykorzystać jako wyzwalacz automatyzacji Home Assistant wysyłającej powiadomienie mobilne albo wiadomość Telegram.
+
 Wybrane godziny i aktualną decyzję pokazują sensory:
 
 - **Strategia cenowa PV**,
