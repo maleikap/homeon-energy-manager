@@ -184,4 +184,16 @@ ha core check
 
 ## Wsparcie projektu
 
-Rozwój HomeOn można wesprzeć przez [BuyCoffee](https://buycoffee.to/homeon).
+<div align="center">
+  <h3>HomeOn rozwija się dzięki użytkownikom</h3>
+  <p>
+    Jeżeli HomeOn pomaga lepiej wykorzystywać energię, ograniczać koszty i zarządzać magazynem,<br>
+    możesz wesprzeć dalszy rozwój, testy oraz utrzymanie projektu.
+  </p>
+  <p>
+    <a href="https://buycoffee.to/homeon">
+      <img src="https://img.shields.io/badge/BuyCoffee-Wesprzyj%20HomeOn-F6C344?style=for-the-badge&logo=buymeacoffee&logoColor=000000" alt="Wesprzyj HomeOn przez BuyCoffee">
+    </a>
+  </p>
+  <p><strong>Dziękuję za każde wsparcie projektu.</strong></p>
+</div>
