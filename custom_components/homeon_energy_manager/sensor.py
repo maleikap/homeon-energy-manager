@@ -34,6 +34,8 @@ SENSORS = [
     # Ceny i prognoza
     ("buy_price", "Cena zakupu", "PLN/kWh", "mdi:cash-plus"),
     ("sell_price", "Cena sprzedaży", "PLN/kWh", "mdi:cash-minus"),
+    ("sell_price_sensor_state", "Cena sprzedaży — stan encji", "PLN/kWh", "mdi:database-clock"),
+    ("sell_price_source", "Źródło ceny sprzedaży", None, "mdi:source-branch"),
     ("best_sell_price_24h", "Najlepsza cena sprzedaży 24h", "PLN/kWh", "mdi:cash-clock"),
     ("best_sell_time_24h", "Godzina najlepszej sprzedaży", None, "mdi:clock-star-four-points"),
     ("next_better_sell_price", "Następna lepsza cena sprzedaży", "PLN/kWh", "mdi:cash-clock"),
@@ -197,7 +199,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.1.0",
+            "sw_version": "1.1.2",
         }
 
     @property
