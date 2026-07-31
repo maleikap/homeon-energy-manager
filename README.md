@@ -143,6 +143,39 @@ Najważniejsze ustawienia dostępne jako encje `number`:
 
 Dobra cena sprzedaży ma pierwszeństwo przed zwykłym tanim ładowaniem. Ładowanie przy cenie ujemnej, `SAFE MODE` i awaryjny SOC pozostają nadrzędnymi zabezpieczeniami.
 
+### Ładowanie w najgorszych godzinach sprzedaży
+
+Przy dużej prognozie produkcji PV manager nie zapełnia magazynu od rana. Analizuje dzisiejszy harmonogram ceny sprzedaży i wybiera 2–3 najgorsze pozostałe godziny.
+
+Przykład:
+
+- prognoza PV: 50 kWh,
+- pojemność magazynu: 15 kWh,
+- rano magazyn ma jeszcze wolne miejsce.
+
+HomeOn działa wtedy następująco:
+
+1. Poza najgorszymi godzinami ustawia `Export First` i sprzedaje bieżącą nadwyżkę PV.
+2. Nie wymusza rozładowania magazynu tylko po to, aby eksportować PV.
+3. W 2–3 godzinach z najniższą ceną sprzedaży ustawia `Zero Export To CT`.
+4. Wyłącza ładowanie z sieci i kieruje nadwyżkę PV do magazynu.
+5. Po zakończeniu taniego okna ponownie pozwala sprzedawać produkcję.
+
+Liczba godzin jest dobierana automatycznie:
+
+- na podstawie wolnego miejsca do 95% SOC,
+- na podstawie prognozowanej średniej mocy PV,
+- minimum 2 i maksimum 3 godziny.
+
+Strategia uruchamia się, gdy prognoza PV wynosi co najmniej 150% pojemności magazynu i nie mniej niż 20 kWh. Wymaga włączonego trybu handlu baterią oraz harmonogramu ceny sprzedaży w atrybutach sensora taryfy.
+
+Wybrane godziny i aktualną decyzję pokazują sensory:
+
+- **Strategia cenowa PV**,
+- **Najgorsze godziny sprzedaży PV**,
+- **Powód strategii cenowej PV**,
+- **Liczba godzin ładowania PV**.
+
 ## Bezpieczne uruchomienie
 
 1. Ustaw właściwą pojemność magazynu.
