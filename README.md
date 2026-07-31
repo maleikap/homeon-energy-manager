@@ -173,6 +173,8 @@ Cena używana do decyzji jest pobierana z przedziału harmonogramu odpowiadając
 
 Po zakończeniu wybranych najgorszych godzin strategia zwalniania miejsca zostaje zamknięta. Jeżeli bieżący przedział jest najlepszym opłacalnym oknem sprzedaży, manager może rozpocząć sprzedaż magazynu również wtedy, gdy cena jest nieznacznie niższa od ręcznie ustawionego progu `Cena dobrej sprzedaży`.
 
+Jeżeli manager oczekuje na wyraźnie lepszą cenę w trybie `WAIT_BETTER_SELL_PRICE`, nadwyżka PV ładuje magazyn do 95%. Dopiero po osiągnięciu tego poziomu bieżąca nadwyżka PV może zostać sprzedana, natomiast energia baterii pozostaje zachowana na najlepsze okno cenowe.
+
 Wybrane godziny i aktualną decyzję pokazują sensory:
 
 - **Strategia cenowa PV**,
