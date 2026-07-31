@@ -1,0 +1,66 @@
+name: Publish HACS release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - custom_components/homeon_energy_manager/**
+      - hacs.json
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: homeon-energy-manager-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f hacs.json
+          test -f custom_components/homeon_energy_manager/manifest.json
+          python -m compileall -q custom_components/homeon_energy_manager
+          python -m json.tool hacs.json >/dev/null
+          python -m json.tool custom_components/homeon_energy_manager/manifest.json >/dev/null
+          python -m json.tool custom_components/homeon_energy_manager/translations/pl.json >/dev/null
+          python -m json.tool custom_components/homeon_energy_manager/translations/en.json >/dev/null
+
+      - name: Read integration version
+        id: version
+        shell: bash
+        run: |
+          version="$(python -c 'import json; print(json.load(open("custom_components/homeon_energy_manager/manifest.json", encoding="utf-8"))["version"])')"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+  release:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Publish HACS release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --title "HomeOn Energy Manager $VERSION" --generate-notes
+          fi
