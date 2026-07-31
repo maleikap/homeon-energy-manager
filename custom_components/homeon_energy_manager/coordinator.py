@@ -746,6 +746,18 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         plan_safe_export_limit_w = self._as_float(data.get("plan_safe_export_limit_w"), inverter_export_target_w)
         plan_safe_to_sell_kwh = self._as_float(data.get("plan_safe_to_sell_kwh"), 0.0)
         safe_export_limit_w = min(inverter_export_target_w, max(0.0, float(plan_safe_export_limit_w or 0.0)))
+        pv_export_opportunity = str(data.get("economic_pv_export_opportunity", "OFF")).upper() == "ON"
+        pv_export_surplus_w = max(
+            0.0,
+            float(self._as_float(data.get("pv_power"), 0.0) or 0.0)
+            - float(self._as_float(data.get("load_power"), 0.0) or 0.0),
+        )
+
+        if pv_export_opportunity and pv_export_surplus_w > 500.0:
+            safe_export_limit_w = min(
+                inverter_export_target_w,
+                max(500.0, pv_export_surplus_w),
+            )
 
         weather_lock = bool(
             mode == "WEATHER_HOLD_RESERVE"
@@ -854,13 +866,25 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
 
-        elif mode == "SELL_BATTERY_HIGH_PRICE" and safe_export_limit_w > 0 and plan_safe_to_sell_kwh > 0.3:
-            action = "Sprzedaż tylko bezpiecznej nadwyżki: %.2f kWh, limit eksportu %.0f W" % (plan_safe_to_sell_kwh, safe_export_limit_w)
+        elif (
+            mode == "SELL_BATTERY_HIGH_PRICE"
+            and safe_export_limit_w > 0
+            and (plan_safe_to_sell_kwh > 0.3 or pv_export_opportunity)
+        ):
+            if plan_safe_to_sell_kwh > 0.3:
+                action = "Sprzedaż bezpiecznej nadwyżki baterii %.2f kWh i bieżącej nadwyżki PV, limit eksportu %.0f W" % (
+                    plan_safe_to_sell_kwh,
+                    safe_export_limit_w,
+                )
+                discharge_current = inverter_discharge_current_a
+            else:
+                action = "Sprzedaż bieżącej nadwyżki PV %.0f W bez wymuszania rozładowania baterii" % safe_export_limit_w
+                discharge_current = inverter_block_discharge_current_a
             data["inverter_work_mode_target"] = inverter_work_mode_sell_option
             sel(inverter_work_mode_select, inverter_work_mode_sell_option)
             sw(inverter_grid_charging, False)
             num(inverter_export_surplus_power, safe_export_limit_w)
-            num(inverter_max_discharge_current, inverter_discharge_current_a)
+            num(inverter_max_discharge_current, discharge_current)
             sw(inverter_export_surplus, True)
 
         elif mode == "SELL_BATTERY_HIGH_PRICE":
@@ -1435,6 +1459,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             0.0,
             available_to_sell_kwh * max(0.0, sell_price - economic_battery_cycle_cost),
         )
+        pv_export_opportunity = bool(
+            sell_price >= economic_good_sell_price
+            and pv_power > max(1000.0, load_power + 500.0)
+        )
 
         sell_ready = bool(
             sell_price >= economic_good_sell_price
@@ -1444,19 +1472,27 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             and not home_battery_protection_active
             and not negative_price_plan.get("now", False)
             and sell_price > economic_negative_sell_price
-            and economic_estimated_sell_profit >= economic_min_arbitrage_profit
+            and (
+                economic_estimated_sell_profit >= economic_min_arbitrage_profit
+                or pv_export_opportunity
+            )
         )
 
         if not battery_trade_enabled:
             economic_sell_reason = "Handel baterią OFF — HomeOn nie sprzedaje energii z magazynu"
         elif home_battery_protection_active:
             economic_sell_reason = "Bateria zasila dom — sprzedaż zablokowana przez ochronę domu"
-        elif economic_estimated_sell_profit < economic_min_arbitrage_profit:
+        elif economic_estimated_sell_profit < economic_min_arbitrage_profit and not pv_export_opportunity:
             economic_sell_reason = f"Zysk {economic_estimated_sell_profit:.2f} PLN jest poniżej minimum {economic_min_arbitrage_profit:.2f} PLN"
         elif sell_price < economic_good_sell_price:
             economic_sell_reason = f"Cena sprzedaży {sell_price:.3f} PLN/kWh jest poniżej progu {economic_good_sell_price:.3f} PLN/kWh"
         elif pv_reality_lock:
             economic_sell_reason = "PV Reality blokuje agresywne rozładowanie"
+        elif pv_export_opportunity:
+            economic_sell_reason = (
+                f"Sprzedaż dozwolona przez wysoką nadwyżkę PV: "
+                f"produkcja {pv_power:.0f} W, dom {load_power:.0f} W"
+            )
         else:
             economic_sell_reason = f"Sprzedaż ekonomicznie dozwolona: szacowany zysk {economic_estimated_sell_profit:.2f} PLN"
         # HOMEON_ECONOMIC_PROFIT_END
@@ -1541,6 +1577,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "EMERGENCY_RESERVE",
             "NEGATIVE_IMPORT",
             "NEGATIVE_PRICE_EXPORT_BLOCK",
+            "HOME_BATTERY_PRIORITY",
             "SELL_BATTERY_HIGH_PRICE",
             "WAIT_BETTER_SELL_PRICE",
         }
@@ -1619,6 +1656,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "economic_expensive_buy_price": round(economic_expensive_buy_price, 3),
             "economic_battery_cycle_cost": round(economic_battery_cycle_cost, 3),
             "economic_estimated_sell_profit": round(economic_estimated_sell_profit, 2),
+            "economic_pv_export_opportunity": "ON" if pv_export_opportunity else "OFF",
             "economic_sell_ready": "ON" if sell_ready else "OFF",
             "economic_sell_reason": economic_sell_reason[:240],
 
