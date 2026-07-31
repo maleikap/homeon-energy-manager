@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.3
+
+- Poprawne wydanie zmian strategii z `1.1.2`; tag `v1.1.2` został utworzony przed aktualizacją koordynatora i nie zawierał kompletnej poprawki.
+- Po zakończeniu wybranych tanich godzin manager zamyka okno i może przejść do sprzedaży baterii w najlepszym opłacalnym przedziale.
+
 ## 1.1.2
 
 - Zakończone najgorsze godziny nie pozostają aktywne w strategii PV i nie blokują późniejszej sprzedaży magazynu.
