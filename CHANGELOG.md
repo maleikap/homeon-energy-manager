@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.5
+
+- W trybie `WAIT_BETTER_SELL_PRICE` nadwyżka PV najpierw ładuje magazyn do 95%, zamiast być sprzedawana po niższej cenie.
+- Podczas oczekiwania ładowanie z sieci pozostaje wyłączone, eksport baterii jest zablokowany, a falownik pracuje w `Zero Export To CT`.
+- Po osiągnięciu 95% manager może sprzedawać bieżącą nadwyżkę PV, zachowując energię baterii na lepsze okno cenowe.
+
 ## 1.1.4
 
 - Manager nie opróżnia baterii po samym przekroczeniu ręcznego progu, jeżeli w ciągu najbliższych 8 godzin występuje wyraźnie lepsza cena sprzedaży.
