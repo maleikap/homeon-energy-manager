@@ -171,6 +171,8 @@ Strategia uruchamia się, gdy prognoza PV wynosi co najmniej 150% pojemności ma
 
 Cena używana do decyzji jest pobierana z przedziału harmonogramu odpowiadającego bieżącej godzinie. Wpis godzinowy, np. `15:00`, obowiązuje aż do `15:59`. Stan encji jest używany jako bezpieczny fallback tylko wtedy, gdy w harmonogramie brakuje bieżącego przedziału. Źródło można sprawdzić w encji `Źródło ceny sprzedaży`.
 
+Po zakończeniu wybranych najgorszych godzin strategia zwalniania miejsca zostaje zamknięta. Jeżeli bieżący przedział jest najlepszym opłacalnym oknem sprzedaży, manager może rozpocząć sprzedaż magazynu również wtedy, gdy cena jest nieznacznie niższa od ręcznie ustawionego progu `Cena dobrej sprzedaży`.
+
 Wybrane godziny i aktualną decyzję pokazują sensory:
 
 - **Strategia cenowa PV**,
