@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.6
+
+- Uporządkowano kolejność strategii: eksport PV przed najgorszymi godzinami, ładowanie baterii w najgorszych godzinach, oczekiwanie po ich zakończeniu i sprzedaż baterii w najlepszym oknie.
+- `PV_PRICE_EXPORT` ma pierwszeństwo przed `WAIT_BETTER_SELL_PRICE`, dopóki wybrane godziny ładowania są jeszcze przed nami.
+- `WAIT_BETTER_SELL_PRICE` zachowuje energię baterii, ale sprzedaje bieżącą nadwyżkę PV zamiast kontynuować ładowanie po zakończeniu najgorszych godzin.
+
 ## 1.1.5
 
 - W trybie `WAIT_BETTER_SELL_PRICE` nadwyżka PV najpierw ładuje magazyn do 95%, zamiast być sprzedawana po niższej cenie.
