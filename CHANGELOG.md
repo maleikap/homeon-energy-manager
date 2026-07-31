@@ -2,6 +2,14 @@
 
 W tym pliku dokumentowane są najważniejsze zmiany HomeOn Energy Manager.
 
+## [1.0.5] - 2026-07-31
+
+### Poprawiono
+
+- stan przełącznika trybu handlu baterią jest odtwarzany z zapisanych opcji po restarcie Home Assistant,
+- aktualizacja lub ponowne załadowanie integracji nie wyłącza już samoczynnie wcześniej włączonego handlu,
+- domyślna wartość dla nowej instalacji pozostaje bezpiecznie wyłączona.
+
 ## [1.0.4] - 2026-07-31
 
 ### Poprawiono
