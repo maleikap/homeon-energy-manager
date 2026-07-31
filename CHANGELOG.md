@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2
+
+- Zakończone najgorsze godziny nie pozostają aktywne w strategii PV i nie blokują późniejszej sprzedaży magazynu.
+- Tryb sprzedaży baterii może rozpocząć się w najlepszym opłacalnym oknie harmonogramu także wtedy, gdy cena jest nieznacznie niższa od ręcznego progu dobrej sprzedaży.
+- Powód strategii pokazuje, że wybrane tanie okna zostały zakończone, zamiast nadal wskazywać minione godziny.
+
 ## 1.1.1
 
 - Fixed current-hour sell-price handling: an hourly schedule value at `HH:00` now remains active through the full hour.
