@@ -92,9 +92,38 @@ async def update_learning(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     battery_charge_w = max(0.0, _f(data.get("battery_charge_w"), 0.0))
     battery_discharge_w = max(0.0, _f(data.get("battery_discharge_w"), 0.0))
     deye_self_w = max(0.0, _f(data.get("deye_self_power"), 0.0))
+    pv_forecast_today_kwh = max(0.0, _f(data.get("pv_forecast_today"), 0.0))
 
     buy_price = _f(data.get("buy_price"), 0.0)
     sell_price = _f(data.get("sell_price"), 0.0)
+
+    day_key = now.strftime("%Y-%m-%d")
+    learned_day_key = str(learn.get("daily_key", ""))
+
+    if learned_day_key and learned_day_key != day_key:
+        finished_pv_kwh = max(0.0, _f(learn.get("daily_pv_kwh"), 0.0))
+        finished_forecast_kwh = max(0.0, _f(learn.get("daily_forecast_kwh"), 0.0))
+
+        if finished_forecast_kwh >= 1.0:
+            forecast_ratio = min(1.35, max(0.35, finished_pv_kwh / finished_forecast_kwh))
+            _ewma(learn, "pv_forecast_factor", forecast_ratio, 0.20)
+            learn["previous_day_pv_kwh"] = finished_pv_kwh
+            learn["previous_day_forecast_kwh"] = finished_forecast_kwh
+            learn["previous_day_forecast_ratio"] = forecast_ratio
+
+        learn["daily_pv_kwh"] = 0.0
+        learn["daily_load_kwh"] = 0.0
+        learn["daily_forecast_kwh"] = 0.0
+
+    learn["daily_key"] = day_key
+    learn["daily_pv_kwh"] = _f(learn.get("daily_pv_kwh"), 0.0) + pv_w * dt_hours / 1000.0
+    learn["daily_load_kwh"] = _f(learn.get("daily_load_kwh"), 0.0) + load_w * dt_hours / 1000.0
+    learn["daily_forecast_kwh"] = max(
+        _f(learn.get("daily_forecast_kwh"), 0.0),
+        pv_forecast_today_kwh,
+    )
+
+    pv_forecast_factor = min(1.35, max(0.35, _f(learn.get("pv_forecast_factor"), 1.0)))
 
     _ewma(learn, "avg_load_w", load_w)
     _ewma(learn, "avg_pv_w", pv_w)
@@ -226,6 +255,17 @@ async def update_learning(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         "learn_avg_sell_price": _round(learn.get("avg_sell_price"), 3),
         "learn_best_sell_price_seen": _round(learn.get("best_sell_price_seen"), 3),
         "learn_most_common_mode": most_common_mode,
+        "learn_pv_forecast_factor": _round(pv_forecast_factor, 3),
+        "learn_pv_forecast_accuracy": _round(min(100.0, pv_forecast_factor * 100.0), 1),
+        "learn_daily_pv_kwh": _round(learn.get("daily_pv_kwh"), 2),
+        "learn_daily_load_kwh": _round(learn.get("daily_load_kwh"), 2),
+        "learn_previous_day_pv_kwh": _round(learn.get("previous_day_pv_kwh"), 2),
+        "learn_previous_day_forecast_kwh": _round(learn.get("previous_day_forecast_kwh"), 2),
+        "pv_forecast_today_calibrated": _round(pv_forecast_today_kwh * pv_forecast_factor, 2),
+        "pv_forecast_tomorrow_calibrated": _round(
+            max(0.0, _f(data.get("pv_forecast_tomorrow"), 0.0)) * pv_forecast_factor,
+            2,
+        ),
     })
 
     last_saved_raw = learn.get("last_saved_ts")
