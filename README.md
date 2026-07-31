@@ -1,115 +1,147 @@
-# HomeOn Energy Manager
+<p align="center">
+  <img src="brand/logo.svg" alt="HomeOn" width="520">
+</p>
 
-HomeOn Energy Manager to integracja Home Assistant zarządzająca instalacją fotowoltaiczną, magazynem energii i falownikiem na podstawie bieżącego zużycia, prognozy produkcji oraz dynamicznych cen energii.
+<h1 align="center">HomeOn Energy Manager</h1>
 
-Manager wyznacza cele ładowania i rozładowania, planuje zakup oraz sprzedaż energii i może przekazywać bezpieczne polecenia do falownika. Dom i bezpieczeństwo magazynu zawsze mają pierwszeństwo przed handlem energią.
+<p align="center">
+  Inteligentny manager energii dla Home Assistant, instalacji fotowoltaicznej, magazynu energii i taryf dynamicznych.
+</p>
 
-## Najważniejsze funkcje
+<p align="center">
+  <a href="https://github.com/maleikap/homeon-energy-manager/releases"><img src="https://img.shields.io/github/v/release/maleikap/homeon-energy-manager" alt="Latest release"></a>
+  <a href="https://github.com/maleikap/homeon-energy-manager"><img src="https://img.shields.io/badge/Home%20Assistant-HACS-41BDF5" alt="Home Assistant HACS"></a>
+  <a href="https://buycoffee.to/homeon"><img src="https://img.shields.io/badge/Support%20HomeOn-BuyCoffee-F6C344" alt="Support HomeOn on BuyCoffee"></a>
+</p>
+
+## Przeznaczenie
+
+HomeOn Energy Manager analizuje produkcję PV, zużycie domu, stan magazynu, prognozę pogody oraz dynamiczne ceny energii. Na tej podstawie planuje ładowanie, wykorzystanie i sprzedaż energii oraz może bezpiecznie sterować falownikiem.
+
+Najważniejsze funkcje:
 
 - bieżący bilans PV, domu, sieci i magazynu,
-- planowanie ładowania oraz sprzedaży według cen energii,
+- planowanie ładowania i sprzedaży według cen energii,
+- wyznaczanie celów SOC magazynu,
 - prognozowanie potrzeb energetycznych domu,
 - wykorzystanie prognozy produkcji PV,
-- ocena realnej jakości produkcji PV,
-- przygotowanie miejsca w magazynie przed tanią lub ujemną ceną,
+- ocena jakości rzeczywistej produkcji PV,
+- przygotowanie miejsca przed tanią lub ujemną ceną,
 - ochrona minimalnego i awaryjnego SOC,
-- tryb testowy `dry-run`,
-- kontrolowane sterowanie falownikiem Deye,
 - uczenie typowego zużycia domu,
-- diagnostyka jakości danych i tryb `SAFE MODE`.
+- diagnostyka danych i tryb `SAFE MODE`,
+- bezpieczne sterowanie falownikiem Deye,
+- tryb testowy `dry-run`.
 
-## Wymagania
+Dom i bezpieczeństwo magazynu zawsze mają pierwszeństwo przed handlem energią.
 
-- Home Assistant 2025.1 lub nowszy,
-- HACS,
-- instalacja fotowoltaiczna z magazynem energii,
-- integracja udostępniająca encje falownika i baterii,
-- integracja dynamicznych cen zakupu oraz sprzedaży energii.
+## Wymagane elementy
 
-## Integracje potrzebne do pełnej funkcjonalności
+| Element | Zastosowanie |
+| --- | --- |
+| Home Assistant 2025.1 lub nowszy | Środowisko uruchomieniowe |
+| HACS | Automatyczna instalacja i aktualizacja integracji |
+| Instalacja PV z magazynem energii | Źródło produkcji, SOC i mocy baterii |
+| Integracja falownika Deye/Solarman lub zgodna | Odczyty instalacji oraz sterowanie falownikiem |
+| Integracja taryfy dynamicznej | Aktualne ceny zakupu i sprzedaży energii |
 
-### Falownik i magazyn energii
+## Integracje zalecane do pełnej funkcjonalności
 
-Wymagana jest integracja Deye/Solarman lub inna zgodna integracja udostępniająca:
+### Pstryk AIO
 
-- SOC magazynu,
-- moc baterii,
-- moc PV,
-- moc domu,
-- moc sieci,
-- przełącznik ładowania baterii z sieci,
-- przełącznik eksportu energii,
-- encję ustawiania mocy eksportu,
-- encje maksymalnego prądu ładowania i rozładowania.
-
-Nazwy encji mogą być inne — wybiera się je podczas konfiguracji HomeOn Energy Manager.
-
-### Dynamiczne ceny energii
-
-Potrzebne są osobne sensory:
+Pstryk AIO może dostarczać aktualne ceny zakupu i sprzedaży energii wykorzystywane przez managera. W konfiguracji należy wskazać osobne sensory:
 
 - aktualnej ceny zakupu energii,
 - aktualnej ceny sprzedaży energii.
 
-Manager współpracuje między innymi z danymi udostępnianymi przez Pstryk, jeżeli odpowiednie sensory cen są dostępne w Home Assistant.
+Manager nie korzysta z dziennego kosztu ani dziennej wartości sprzedaży jako aktualnej ceny. Te encje są przeznaczone do prezentacji bilansu finansowego w HomeOn Energy Card.
 
 ### Prognoza produkcji PV
 
-Zalecana jest jedna z integracji:
+Do dokładnego planowania magazynu zalecana jest jedna z integracji:
 
 - Forecast.Solar,
-- Solcast PV Forecast.
+- Solcast PV Forecast,
+- inne źródło udostępniające prognozę produkcji dzisiaj i jutro.
 
-Manager wykorzystuje prognozę produkcji na dziś i jutro. Bez prognozy część funkcji planowania będzie ograniczona.
+Brak prognozy nie blokuje uruchomienia integracji, ale ogranicza jakość planowania.
+
+### Integracja falownika
+
+HomeOn Energy Manager potrzebuje co najmniej:
+
+- SOC magazynu,
+- mocy baterii,
+- mocy PV,
+- mocy domu,
+- mocy sieci,
+- przełącznika ładowania z sieci,
+- przełącznika eksportu nadwyżki,
+- nastawy mocy eksportu,
+- nastawy maksymalnego prądu ładowania,
+- nastawy maksymalnego prądu rozładowania.
+
+Do pełnego sterowania Deye potrzebna jest również encja trybu pracy falownika udostępniająca właściwe opcje `Export First` i `Zero Export To CT`.
+
+Nazwy encji zależą od użytej integracji falownika i konfiguracji Home Assistant.
 
 ## Instalacja przez HACS
 
-1. Otwórz HACS w Home Assistant.
-2. Przejdź do sekcji **Integracje**.
-3. Dodaj repozytorium niestandardowe:
+1. W HACS otwórz menu repozytoriów niestandardowych.
+2. Dodaj repozytorium jako typ **Integracja**:
 
-   `https://github.com/maleikap/homeon-energy-manager`
+```text
+https://github.com/maleikap/homeon-energy-manager
+```
 
-4. Wybierz kategorię **Integracja**.
-5. Pobierz najnowsze wydanie HomeOn Energy Manager.
-6. Uruchom ponownie Home Assistant.
-7. Przejdź do **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
-8. Wyszukaj **HomeOn Energy Manager**.
+3. Pobierz HomeOn Energy Manager.
+4. Uruchom ponownie Home Assistant.
+5. Przejdź do **Ustawienia → Urządzenia i usługi → Dodaj integrację**.
+6. Wyszukaj **HomeOn Energy Manager**.
 
-Nie trzeba ręcznie kopiować plików do katalogu `custom_components`.
+HACS instaluje integrację automatycznie. Nie należy ręcznie kopiować plików do `/config/custom_components`.
 
-## Pierwsza konfiguracja
+## Konfiguracja
 
-Podczas dodawania integracji należy wybrać:
+Podczas dodawania integracji należy wskazać:
 
 - sensory SOC, mocy baterii, PV, domu i sieci,
-- sensory ceny zakupu i sprzedaży,
+- sensory aktualnej ceny zakupu i sprzedaży,
 - opcjonalne sensory prognozy PV,
 - pojemność magazynu energii,
 - minimalny i awaryjny SOC,
 - kierunki znaków mocy baterii i sieci,
 - encje sterujące falownikiem.
 
-Po instalacji sterowanie falownikiem jest wyłączone, a `dry-run` pozostaje włączony. Pozwala to sprawdzić decyzje managera przed wysłaniem rzeczywistych poleceń.
+Po instalacji sterowanie falownikiem jest wyłączone, a `dry-run` włączony. Pozwala to sprawdzić decyzje managera przed wysłaniem rzeczywistych poleceń.
 
-## Pojemność magazynu
+### Pojemność magazynu
 
 W urządzeniu **HomeOn Energy Manager** dostępna jest encja:
 
-`number.homeon_pojemnosc_magazynu`
+```text
+number.homeon_pojemnosc_magazynu
+```
 
-Wartość należy ustawić jako rzeczywistą użyteczną pojemność całego magazynu w kWh. Ustawienie jest zapisywane i od razu wykorzystywane przez planowanie, cele SOC oraz obliczenia energii.
+Należy w niej ustawić rzeczywistą użyteczną pojemność całego magazynu w kWh. Wartość zapisuje się automatycznie i jest od razu używana do obliczania celów SOC, wolnego miejsca i energii dostępnej do sprzedaży.
 
-Przykład dla magazynu 15 kWh:
+Dla magazynu 15 kWh i SOC 27%:
 
-- SOC 27% = około 4,05 kWh energii w magazynie,
-- wolne miejsce = około 10,95 kWh.
+- energia w magazynie wynosi około 4,05 kWh,
+- wolne miejsce wynosi około 10,95 kWh.
 
-Manager udostępnia osobne sensory:
+Są to dwie różne wartości.
 
-- **Energia w magazynie** — aktualna ilość energii wynikająca z SOC,
-- **Wolne miejsce w magazynie** — ilość energii możliwa do doładowania,
-- **Energia dostępna do sprzedaży** — nadwyżka ponad wyznaczony bezpieczny cel.
+### Progi ekonomiczne
+
+Najważniejsze ustawienia dostępne jako encje `number`:
+
+- **Cena dobrej sprzedaży** — minimalna cena pozwalająca rozpocząć sprzedaż,
+- **Cena taniego ładowania** — maksymalna cena zwykłego ładowania z sieci,
+- **Minimalny zysk arbitrażu** — minimalny przewidywany zysk ze sprzedaży,
+- **Koszt cyklu baterii** — koszt uwzględniany przy ocenie opłacalności.
+
+Dobra cena sprzedaży ma pierwszeństwo przed zwykłym tanim ładowaniem. Ładowanie przy cenie ujemnej, `SAFE MODE` i awaryjny SOC pozostają nadrzędnymi zabezpieczeniami.
 
 ## Bezpieczne uruchomienie
 
@@ -117,20 +149,39 @@ Manager udostępnia osobne sensory:
 2. Sprawdź kierunki mocy baterii i sieci.
 3. Pozostaw `dry-run` włączony.
 4. Obserwuj tryb EMS, decyzję i plan zmian Deye.
-5. Dopiero po sprawdzeniu danych włącz sterowanie falownikiem.
+5. Sprawdź działanie ładowania oraz wyłączenia eksportu.
+6. Dopiero po weryfikacji włącz sterowanie falownikiem.
 
 Jeżeli wymagane dane są nieaktualne lub niepoprawne, manager przechodzi do `SAFE MODE` i ogranicza wykonywanie poleceń.
 
-## HomeOn Energy Card
+## Brakujące dane
 
-Do czytelnej prezentacji pracy managera można użyć:
+Brak sensora aktualnej ceny lub podstawowego pomiaru instalacji może uruchomić `SAFE MODE`. Brak opcjonalnej prognozy PV nie zatrzymuje integracji, ale ogranicza dokładność planowania.
 
-[HomeOn Energy Card](https://github.com/maleikap/homeon-energy-card)
+Jeżeli manager nie reaguje na zmianę progu sprzedaży, należy sprawdzić:
 
-Karta pokazuje przepływ energii, magazyn, ceny, prognozę PV, decyzje managera oraz dzienny bilans finansowy.
+- czy włączony jest **Tryb handlu baterią**,
+- czy wskazany sensor pokazuje aktualną cenę sprzedaży w `PLN/kWh`,
+- czy SOC jest wyższy od wyznaczonego celu rozładowania,
+- czy minimalny przewidywany zysk został osiągnięty,
+- czy manager nie działa w `SAFE MODE` albo ochronie awaryjnego SOC.
+
+## Aktualizacje
+
+Nowe wersje są publikowane automatycznie jako wydania GitHub i pobierane przez HACS. Po aktualizacji integracji wymagane jest ponowne uruchomienie Home Assistant.
+
+Przed restartem zalecane jest wykonanie:
+
+```bash
+ha core check
+```
+
+## Powiązane projekty
+
+- [HomeOn Energy Card](https://github.com/maleikap/homeon-energy-card)
+- [Zgłoszenia problemów](https://github.com/maleikap/homeon-energy-manager/issues)
+- [Historia zmian](CHANGELOG.md)
 
 ## Wsparcie projektu
 
-Jeżeli projekt jest przydatny, możesz wesprzeć jego dalszy rozwój:
-
-[Postaw kawę przez BuyCoffee](https://buycoffee.to/homeon)
+Rozwój HomeOn można wesprzeć przez [BuyCoffee](https://buycoffee.to/homeon).
