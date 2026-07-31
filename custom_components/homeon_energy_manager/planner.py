@@ -116,7 +116,10 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     soc = _f(data.get("soc"), 0.0)
 
     battery_capacity = _f(
-        coordinator.entry.data.get(CONF_BATTERY_CAPACITY_KWH),
+        data.get(
+            "battery_capacity_kwh",
+            coordinator.entry.data.get(CONF_BATTERY_CAPACITY_KWH),
+        ),
         DEFAULT_BATTERY_CAPACITY_KWH,
     )
 
