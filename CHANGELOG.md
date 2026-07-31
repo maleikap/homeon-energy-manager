@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.0
+
+- Dodano godzinowy optymalizator 24 h wykorzystujący ceny, prognozę PV, godzinowy profil zużycia domu, pojemność baterii i ograniczenia falownika.
+- Dodano automatyczną kalibrację prognozy PV na podstawie rzeczywistej produkcji z zakończonych dni.
+- Dodano dynamiczny cel SOC, prognozę nadwyżki PV, energię wymaganą do ładowania i plan awaryjny przy niewykonanym ładowaniu.
+- Dodano obliczanie mocy i czasu potrzebnego do sprzedaży magazynu oraz możliwość wcześniejszego startu, jeśli najlepsze okno jest zbyt krótkie.
+- Kalkulacja uwzględnia sprawność ładowania, sprawność rozładowania, napięcie baterii i koszt cyklu.
+- Dodano potwierdzanie wykonania komend Deye: `NEW_PLAN`, `SENT`, `PENDING`, `CONFIRMED` i `NOT_APPLIED`.
+- Dodano zdarzenie Home Assistant `homeon_energy_manager_decision` przy zmianie trybu lub statusu potwierdzenia Deye; można je wykorzystać w automatyzacjach i Telegramie.
+- Dotychczasowe tryby, zabezpieczenia SOC, ceny ujemne, `SAFE_MODE`, strategia PV i ochrona domu pozostają zachowane.
+
 ## 1.1.6
 
 - Uporządkowano kolejność strategii: eksport PV przed najgorszymi godzinami, ładowanie baterii w najgorszych godzinach, oczekiwanie po ich zakończeniu i sprzedaż baterii w najlepszym oknie.
