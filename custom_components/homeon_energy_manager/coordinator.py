@@ -1274,6 +1274,26 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["deye_driver_max_changes_per_run"] = round(deye_max_changes_per_run, 0)
         data["deye_driver_changed_count_runtime"] = deye_driver_changed_count_runtime
         data["deye_driver_last_control_hash"] = _short(deye_driver_last_control_hash)
+        last_sent_hash = str(getattr(self, "_homeon_last_control_hash", "") or "")
+        last_sent_ts = float(getattr(self, "_homeon_last_control_ts", 0.0) or 0.0)
+        confirmation_age = max(0.0, dt_util.now().timestamp() - last_sent_ts) if last_sent_ts else 0.0
+
+        if not changed_preview:
+            data["deye_command_confirmation"] = "CONFIRMED"
+            data["deye_command_confirmation_reason"] = "Deye ma wszystkie wymagane nastawy"
+        elif last_sent_hash == deye_driver_last_control_hash and confirmation_age > 180.0:
+            data["deye_command_confirmation"] = "NOT_APPLIED"
+            data["deye_command_confirmation_reason"] = (
+                f"Po {confirmation_age:.0f} s Deye nadal nie potwierdził {len(changed_preview)} zmian"
+            )[:240]
+        elif last_sent_hash == deye_driver_last_control_hash:
+            data["deye_command_confirmation"] = "PENDING"
+            data["deye_command_confirmation_reason"] = (
+                f"Oczekuję na potwierdzenie {len(changed_preview)} zmian przez Deye"
+            )[:240]
+        else:
+            data["deye_command_confirmation"] = "NEW_PLAN"
+            data["deye_command_confirmation_reason"] = f"Nowy plan zawiera {len(changed_preview)} zmian"
         # HOMEON_DEYE_SAFE_DRIVER_END
 
         data["inverter_deye_plan"] = _short(" | ".join(preview))
@@ -1337,6 +1357,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         data["inverter_control_last_result"] = " | ".join(actions) if actions else "Brak wykonanych akcji"
         data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
+        data["deye_command_confirmation"] = "SENT"
+        data["deye_command_confirmation_reason"] = "Komendy wysłane — potwierdzenie zostanie sprawdzone w kolejnym cyklu"
         return data
 
     async def _async_update_data(self) -> dict:
@@ -2024,6 +2046,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "pv_price_strategy_reason": pv_low_price_plan.get("reason", "—"),
             "pv_price_strategy_windows": pv_low_price_plan.get("windows", "—"),
             "pv_price_strategy_hours": pv_low_price_plan.get("hours_count", 0),
+            "pv_price_strategy_windows_completed": bool(pv_low_price_plan.get("windows_completed", False)),
             "pv_price_strategy_target_soc": pv_low_price_plan.get("target_soc", 95.0),
             "pv_price_strategy_forecast_kwh": pv_low_price_plan.get("forecast_kwh", 0.0),
             "pv_price_strategy_surplus_w": pv_low_price_plan.get("pv_surplus_w", 0.0),
@@ -2033,4 +2056,27 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data = await update_learning(self, data)
         data = build_planner_data(self, data)
         data = await self._async_apply_inverter_control(data)
+        event_mode = str(data.get("mode", "UNKNOWN"))
+        event_confirmation = str(data.get("deye_command_confirmation", "UNKNOWN"))
+        last_event_mode = str(getattr(self, "_homeon_last_event_mode", ""))
+        last_event_confirmation = str(getattr(self, "_homeon_last_event_confirmation", ""))
+
+        if event_mode != last_event_mode or event_confirmation != last_event_confirmation:
+            self.hass.bus.async_fire(
+                f"{DOMAIN}_decision",
+                {
+                    "entry_id": self.entry.entry_id,
+                    "mode": event_mode,
+                    "reason": str(data.get("reason", ""))[:240],
+                    "soc": data.get("soc"),
+                    "sell_price": data.get("sell_price"),
+                    "next_action": data.get("plan_next_action"),
+                    "next_action_time": data.get("plan_next_action_time"),
+                    "deye_confirmation": event_confirmation,
+                },
+            )
+
+        if event_mode != last_event_mode or event_confirmation != last_event_confirmation:
+            self._homeon_last_event_mode = event_mode
+            self._homeon_last_event_confirmation = event_confirmation
         return data
