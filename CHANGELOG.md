@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.4
+
+- Manager nie opróżnia baterii po samym przekroczeniu ręcznego progu, jeżeli w ciągu najbliższych 8 godzin występuje wyraźnie lepsza cena sprzedaży.
+- Tryb `WAIT_BETTER_SELL_PRICE` zachowuje energię w magazynie, ale nadal sprzedaje bieżącą nadwyżkę PV.
+- Dodano kontrolę czasu i minimalnej różnicy ceny, aby nie odkładać sprzedaży dla nieznacznie lepszych lub zbyt odległych okien.
+
 ## 1.1.3
 
 - Poprawne wydanie zmian strategii z `1.1.2`; tag `v1.1.2` został utworzony przed aktualizacją koordynatora i nie zawierał kompletnej poprawki.
