@@ -294,6 +294,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 "sell_prices_found": 0,
                 "best_sell_price_24h": round(effective_current_price, 3),
                 "best_sell_time_24h": "teraz",
+                "best_sell_minutes_from_now": 0,
                 "next_better_sell_price": 0,
                 "next_better_sell_time": "-",
                 "sell_now_best": True,
@@ -307,6 +308,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         best = max(points, key=lambda x: x["price"])
         best_price = float(best["price"])
         best_time = self._fmt_dt_hour(best["dt"])
+        best_minutes_from_now = max(
+            0.0,
+            (best["dt"] - now).total_seconds() / 60.0,
+        )
 
         better_later = [
             x for x in points
@@ -336,6 +341,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "sell_prices_found": len(points),
             "best_sell_price_24h": round(best_price, 3),
             "best_sell_time_24h": best_time,
+            "best_sell_minutes_from_now": round(best_minutes_from_now, 0),
             "next_better_sell_price": round(next_better_price, 3),
             "next_better_sell_time": next_better_time,
             "sell_now_best": bool(sell_now_best),
@@ -1121,10 +1127,20 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "WAIT_BETTER_SELL_PRICE":
-            action = "Czekam na lepszą cenę sprzedaży — blokuję sprzedaż baterii"
+            wait_pv_export_w = min(
+                inverter_export_target_w,
+                max(0.0, pv_export_surplus_w),
+            )
+            action = (
+                "Czekam na lepszą cenę — zachowuję baterię i sprzedaję tylko bieżącą nadwyżkę PV %.0f W"
+                % wait_pv_export_w
+            )
+            data["inverter_work_mode_target"] = inverter_work_mode_sell_option
+            sel(inverter_work_mode_select, inverter_work_mode_sell_option)
             sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+            num(inverter_export_surplus_power, wait_pv_export_w)
+            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+            sw(inverter_export_surplus, wait_pv_export_w > 50.0)
 
         elif mode == "PV_CHARGE":
             action = "Ładowanie z PV — ustawiam Zero Export To CT, ładowanie z sieci wyłączone"
@@ -1701,6 +1717,23 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sell_price >= economic_good_sell_price
             or best_window_sell_opportunity
         )
+        best_sell_price = self._as_float(
+            sell_stats.get("best_sell_price_24h"),
+            sell_price,
+        ) or sell_price
+        best_sell_minutes = self._as_float(
+            sell_stats.get("best_sell_minutes_from_now"),
+            0.0,
+        ) or 0.0
+        better_price_margin = max(0.05, sell_price * 0.08)
+        wait_for_better_sell = bool(
+            sell_price_trigger
+            and not sell_stats.get("sell_now_best", False)
+            and 15.0 < best_sell_minutes <= 8.0 * 60.0
+            and best_sell_price >= sell_price + better_price_margin
+            and available_to_sell_kwh > 0.3
+            and battery_trade_enabled
+        )
 
         economic_estimated_sell_profit = max(
             0.0,
@@ -1785,6 +1818,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif pv_low_price_plan.get("charge_now", False):
             mode = "PV_LOW_PRICE_CHARGE"
             reason = str(pv_low_price_plan.get("reason", "Ładuję magazyn z PV w najgorszej godzinie sprzedaży"))
+        elif wait_for_better_sell:
+            mode = "WAIT_BETTER_SELL_PRICE"
+            reason = (
+                f"Zachowuję energię na lepszą sprzedaż: teraz {sell_price:.2f} PLN/kWh, "
+                f"najlepsza cena {best_sell_price:.2f} PLN/kWh o "
+                f"{sell_stats.get('best_sell_time_24h', '-')}"
+            )
         elif sell_ready:
             mode = "SELL_BATTERY_HIGH_PRICE"
             reason = (
