@@ -49,6 +49,7 @@ SENSORS = [
     ("morning_target_soc", "Cel poranny", PERCENT, "mdi:weather-sunset-up"),
     ("charge_target_soc", "Cel ładowania", PERCENT, "mdi:battery-plus"),
     ("discharge_target_soc", "Cel rozładowania", PERCENT, "mdi:battery-minus"),
+    ("battery_energy_kwh", "Energia w magazynie", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery"),
     ("available_to_sell_kwh", "Energia dostępna do sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:cash-fast"),
     ("free_space_kwh", "Wolne miejsce w magazynie", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-outline"),
 
@@ -189,7 +190,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.43",
+            "sw_version": "1.0.0",
         }
 
     @property
