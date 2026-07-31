@@ -4,7 +4,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
+from .const import CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH, DOMAIN
 from .coordinator import HomeOnEnergyCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.NUMBER]
@@ -18,6 +18,7 @@ DEFAULT_RUNTIME_OPTIONS = {
     "inverter_discharge_current_a": 120,
     "inverter_safe_discharge_current_a": 20,
     "inverter_block_discharge_current_a": 5,
+    CONF_BATTERY_CAPACITY_KWH: DEFAULT_BATTERY_CAPACITY_KWH,
     "economic_good_sell_price": 0.55,
     "economic_cheap_charge_price": 0.30,
     "economic_negative_buy_price": 0.0,
@@ -45,7 +46,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     }
 
     for key, default in DEFAULT_RUNTIME_OPTIONS.items():
-        runtime[key] = entry.options.get(key, default)
+        runtime[key] = entry.options.get(key, entry.data.get(key, default))
 
     hass.data[DOMAIN][entry.entry_id] = runtime
 
