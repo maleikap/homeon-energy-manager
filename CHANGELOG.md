@@ -2,6 +2,14 @@
 
 W tym pliku dokumentowane są najważniejsze zmiany HomeOn Energy Manager.
 
+## [1.0.4] - 2026-07-31
+
+### Poprawiono
+
+- blokada pogodowa nie zatrzymuje już sprzedaży bieżącej nadwyżki PV przy dobrej cenie,
+- rezerwa pogodowa nadal chroni baterię przed wymuszonym rozładowaniem,
+- eksport PV może działać niezależnie od energii baterii dopuszczonej do sprzedaży.
+
 ## [1.0.3] - 2026-07-31
 
 ### Poprawiono
