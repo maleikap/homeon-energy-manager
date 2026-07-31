@@ -2,6 +2,15 @@
 
 W tym pliku dokumentowane są najważniejsze zmiany HomeOn Energy Manager.
 
+## [1.0.3] - 2026-07-31
+
+### Poprawiono
+
+- wysoka nadwyżka produkcji PV przy dobrej cenie sprzedaży może uruchomić eksport bez blokady minimalnego zysku liczonego wyłącznie dla baterii,
+- `HOME_BATTERY_PRIORITY` nie jest utrzymywany przez histerezę po świadomym włączeniu handlu baterią,
+- zachowano blokady sprzedaży dla `SAFE MODE`, awaryjnego SOC, słabej jakości PV i ceny ujemnej,
+- dodano diagnostyczny stan możliwości eksportu nadwyżki PV.
+
 ## [1.0.2] - 2026-07-31
 
 ### Poprawiono
