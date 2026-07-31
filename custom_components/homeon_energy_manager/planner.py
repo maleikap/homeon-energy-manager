@@ -296,6 +296,18 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         reason = "SOC jest poniżej poziomu awaryjnego."
         recommended_soc = max(recommended_soc, charge_target_soc)
 
+    elif current_mode == "PV_LOW_PRICE_CHARGE":
+        next_action = "Ładowanie PV w najgorszej godzinie sprzedaży"
+        next_time = "teraz"
+        reason = str(data.get("pv_price_strategy_reason", "Nadwyżka PV jest kierowana do magazynu."))
+        recommended_soc = _f(data.get("pv_price_strategy_target_soc"), 95.0)
+
+    elif current_mode == "PV_PRICE_EXPORT":
+        next_action = "Sprzedaż PV przed najgorszymi godzinami"
+        next_time = "teraz"
+        reason = str(data.get("pv_price_strategy_reason", "Sprzedaję PV i zachowuję wolne miejsce w magazynie."))
+        recommended_soc = min(soc, _f(data.get("pv_price_strategy_target_soc"), 95.0))
+
     elif current_mode == "SELL_BATTERY_HIGH_PRICE":
         next_action = "Sprzedaż bezpiecznej nadwyżki"
         next_time = "teraz"
