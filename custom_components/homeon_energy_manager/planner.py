@@ -271,7 +271,13 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         f"Najbliższe normalne/tanie dokupienie: {reasonable_buy_window}."
     )
 
-    if current_mode in ("SELL_BATTERY_HIGH_PRICE", "WAIT_BETTER_SELL_PRICE") and safe_to_sell_kwh <= 0.2:
+    pv_export_opportunity = str(data.get("economic_pv_export_opportunity", "OFF")).upper() == "ON"
+
+    if (
+        current_mode in ("SELL_BATTERY_HIGH_PRICE", "WAIT_BETTER_SELL_PRICE")
+        and safe_to_sell_kwh <= 0.2
+        and not pv_export_opportunity
+    ):
         data["mode"] = "WEATHER_HOLD_RESERVE"
         current_mode = "WEATHER_HOLD_RESERVE"
         data["reason"] = (
@@ -290,6 +296,30 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         reason = "SOC jest poniżej poziomu awaryjnego."
         recommended_soc = max(recommended_soc, charge_target_soc)
 
+    elif (
+        sell_price_now >= best_sell_price - 0.005
+        and (
+            (safe_to_sell_kwh > 0.3 and soc > safe_min_soc + 1)
+            or pv_export_opportunity
+        )
+    ):
+        next_action = "Sprzedaż bezpiecznej nadwyżki"
+        next_time = "teraz"
+        reason = (
+            f"Teraz jest najlepsza lub prawie najlepsza cena sprzedaży: {sell_price_now:.3f} PLN/kWh. "
+            f"Sprzedaż obejmuje bieżącą nadwyżkę PV oraz bezpieczną nadwyżkę baterii {safe_to_sell_kwh:.2f} kWh."
+        )
+        recommended_soc = safe_min_soc
+
+    elif best_sell_price > sell_price_now + 0.02 and (safe_to_sell_kwh > 0.3 or pv_export_opportunity):
+        next_action = "Trzymaj energię do sprzedaży"
+        next_time = str(best_sell.get("hour", "-"))
+        reason = (
+            f"Lepsza sprzedaż planowana o {best_sell.get('hour', '-')} przy cenie {best_sell_price:.3f} PLN/kWh. "
+            f"Bezpieczna nadwyżka do sprzedaży: {safe_to_sell_kwh:.2f} kWh."
+        )
+        hold_reason = "Bateria ma wartość rynkową, ale EMS zostawia rezerwę pod pogodę i zużycie."
+
     elif buy_price_now <= cheapest_buy + 0.005 and soc < charge_target_soc:
         next_action = "Ładowanie z taniej energii"
         next_time = "teraz"
@@ -301,24 +331,6 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         next_time = str(cheapest.get("hour", "-"))
         reason = f"Najtańsze okno zakupu jest o {cheapest.get('hour', '-')} przy cenie {cheapest_buy:.3f} PLN/kWh."
         hold_reason = "Nie ładuję teraz, bo w planie jest tańsza energia."
-
-    elif sell_price_now >= best_sell_price - 0.005 and safe_to_sell_kwh > 0.3 and soc > safe_min_soc + 1:
-        next_action = "Sprzedaż bezpiecznej nadwyżki"
-        next_time = "teraz"
-        reason = (
-            f"Teraz jest najlepsza lub prawie najlepsza cena sprzedaży: {sell_price_now:.3f} PLN/kWh. "
-            f"Sprzedaż ograniczona do bezpiecznej nadwyżki {safe_to_sell_kwh:.2f} kWh."
-        )
-        recommended_soc = safe_min_soc
-
-    elif best_sell_price > sell_price_now + 0.02 and safe_to_sell_kwh > 0.3:
-        next_action = "Trzymaj energię do sprzedaży"
-        next_time = str(best_sell.get("hour", "-"))
-        reason = (
-            f"Lepsza sprzedaż planowana o {best_sell.get('hour', '-')} przy cenie {best_sell_price:.3f} PLN/kWh. "
-            f"Bezpieczna nadwyżka do sprzedaży: {safe_to_sell_kwh:.2f} kWh."
-        )
-        hold_reason = "Bateria ma wartość rynkową, ale EMS zostawia rezerwę pod pogodę i zużycie."
 
     elif current_phase == "Okno PV" and soc > morning_target_soc:
         next_action = "Zostaw miejsce na PV"
