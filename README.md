@@ -169,6 +169,8 @@ Liczba godzin jest dobierana automatycznie:
 
 Strategia uruchamia się, gdy prognoza PV wynosi co najmniej 150% pojemności magazynu i nie mniej niż 20 kWh. Wymaga włączonego trybu handlu baterią oraz harmonogramu ceny sprzedaży w atrybutach sensora taryfy.
 
+Cena używana do decyzji jest pobierana z przedziału harmonogramu odpowiadającego bieżącej godzinie. Wpis godzinowy, np. `15:00`, obowiązuje aż do `15:59`. Stan encji jest używany jako bezpieczny fallback tylko wtedy, gdy w harmonogramie brakuje bieżącego przedziału. Źródło można sprawdzić w encji `Źródło ceny sprzedaży`.
+
 Wybrane godziny i aktualną decyzję pokazują sensory:
 
 - **Strategia cenowa PV**,
