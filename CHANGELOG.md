@@ -2,6 +2,15 @@
 
 W tym pliku dokumentowane są najważniejsze zmiany HomeOn Energy Manager.
 
+## [1.0.2] - 2026-07-31
+
+### Poprawiono
+
+- świadomie włączony tryb handlu baterią nie jest już blokowany tylko dlatego, że bateria jednocześnie zasila dom,
+- ochrona zasilania domu pozostaje aktywna, gdy tryb handlu baterią jest wyłączony,
+- planner korzysta z aktualnej pojemności magazynu ustawionej encją `number`, a nie ze starej wartości pierwszej konfiguracji,
+- obliczenie bezpiecznej energii do sprzedaży używa prawidłowej pojemności magazynu.
+
 ## [1.0.1] - 2026-07-31
 
 ### Poprawiono
