@@ -2,6 +2,15 @@
 
 W tym pliku dokumentowane są najważniejsze zmiany HomeOn Energy Manager.
 
+## [1.0.6] - 2026-07-31
+
+### Poprawiono
+
+- po osiągnięciu ustawionej ceny dobrej sprzedaży manager sprzedaje od razu,
+- późniejsza nieco lepsza cena nie przełącza już managera w `WAIT_BETTER_SELL_PRICE`,
+- bieżąca nadwyżka PV nie jest ładowana do magazynu, gdy aktualna cena osiągnęła ustawiony próg sprzedaży,
+- planner i wykonawca Deye otrzymują tę samą decyzję sprzedaży.
+
 ## [1.0.5] - 2026-07-31
 
 ### Poprawiono
