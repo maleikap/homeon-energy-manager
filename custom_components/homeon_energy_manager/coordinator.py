@@ -1531,12 +1531,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif pv_reality_lock and soc > min_soc:
             mode = "PV_REALITY_HOLD"
             reason = str(pv_reality.get("reason", "PV realnie słabe — chronię magazyn"))
-        elif sell_ready and not sell_stats["sell_now_best"]:
-            mode = "WAIT_BETTER_SELL_PRICE"
-            reason = sell_stats["sell_wait_reason"]
-        elif sell_ready and sell_stats["sell_now_best"]:
+        elif sell_ready:
             mode = "SELL_BATTERY_HIGH_PRICE"
-            reason = f"Sprzedaż teraz ma sens — cena {sell_price:.2f} PLN/kWh jest najlepsza lub prawie najlepsza"
+            reason = (
+                f"Sprzedaję teraz — cena {sell_price:.2f} PLN/kWh "
+                f"osiągnęła ustawiony próg {economic_good_sell_price:.2f} PLN/kWh"
+            )
         elif buy_price < economic_cheap_charge_price and soc < charge_target_soc:
             mode = "CHEAP_CHARGE"
             reason = "Tania energia — można ładować magazyn"
