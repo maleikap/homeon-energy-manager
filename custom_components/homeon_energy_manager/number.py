@@ -2,15 +2,25 @@ from __future__ import annotations
 
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfPower
+from homeassistant.const import UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DEFAULT_BATTERY_CAPACITY_KWH, DOMAIN
 
 
 NUMBERS = [
+    (
+        "battery_capacity_kwh",
+        "Pojemność magazynu",
+        1,
+        500,
+        0.1,
+        UnitOfEnergy.KILO_WATT_HOUR,
+        "mdi:battery-high",
+        DEFAULT_BATTERY_CAPACITY_KWH,
+    ),
     (
         "inverter_export_target_w",
         "Maksymalny eksport",
@@ -133,14 +143,17 @@ class HomeOnNumber(CoordinatorEntity, NumberEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "0.2.43",
+            "sw_version": "1.0.0",
         }
 
     @property
     def native_value(self):
         value = self.hass.data[DOMAIN][self._entry.entry_id].get(
             self._key,
-            self._entry.options.get(self._key, self._default),
+            self._entry.options.get(
+                self._key,
+                self._entry.data.get(self._key, self._default),
+            ),
         )
 
         try:
