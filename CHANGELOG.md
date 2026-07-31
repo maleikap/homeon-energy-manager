@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+
+- Fixed current-hour sell-price handling: an hourly schedule value at `HH:00` now remains active through the full hour.
+- EMS decisions use the current schedule interval price and fall back to the entity state only when the schedule has no current interval.
+- Added diagnostics showing the effective sell price, raw entity state and selected price source.
+
 W tym pliku dokumentowane są najważniejsze zmiany HomeOn Energy Manager.
 
 ## [1.1.0] - 2026-07-31
