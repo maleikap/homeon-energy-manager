@@ -128,7 +128,21 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     night_reserve_soc = _f(data.get("night_reserve_soc"), 30.0)
     morning_target_soc = _f(data.get("morning_target_soc"), 60.0)
     available_to_sell_kwh = _f(data.get("available_to_sell_kwh"), 0.0)
-    pv_tomorrow_kwh = _f(data.get("pv_forecast_tomorrow"), 0.0)
+    pv_today_kwh = _f(
+        data.get("pv_forecast_today_calibrated"),
+        _f(data.get("pv_forecast_today"), 0.0),
+    )
+    pv_tomorrow_kwh = _f(
+        data.get("pv_forecast_tomorrow_calibrated"),
+        _f(data.get("pv_forecast_tomorrow"), 0.0),
+    )
+    charge_efficiency = min(1.0, max(0.50, coordinator._runtime_float("battery_charge_efficiency_percent", 94.0) / 100.0))
+    discharge_efficiency = min(1.0, max(0.50, coordinator._runtime_float("battery_discharge_efficiency_percent", 94.0) / 100.0))
+    battery_voltage_v = max(12.0, coordinator._runtime_float("battery_nominal_voltage_v", 51.2))
+    max_export_w = max(0.0, coordinator._runtime_float("inverter_export_target_w", 10000.0))
+    discharge_current_a = max(0.0, coordinator._runtime_float("inverter_discharge_current_a", 120.0))
+    discharge_power_kw = min(max_export_w / 1000.0, discharge_current_a * battery_voltage_v / 1000.0)
+    cycle_cost = max(0.0, coordinator._runtime_float("economic_battery_cycle_cost", 0.15))
 
     buy_series = _series_from_entity(
         coordinator,
@@ -178,6 +192,19 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
             "load_w": expected_load_w,
             "pv_w": expected_pv_w,
         })
+
+    raw_pv_kwh = sum(max(0.0, _f(item.get("pv_w"), 0.0)) / 1000.0 for item in hours)
+    forecast_24h_kwh = max(0.0, pv_today_kwh + pv_tomorrow_kwh)
+    pv_profile_scale = 1.0
+
+    if raw_pv_kwh > 0.2 and forecast_24h_kwh > 0:
+        pv_profile_scale = min(5.0, max(0.20, forecast_24h_kwh / raw_pv_kwh))
+
+    for item in hours:
+        item["pv_w"] = max(0.0, _f(item.get("pv_w"), 0.0) * pv_profile_scale)
+        item["load_kwh"] = max(0.0, _f(item.get("load_w"), 0.0) / 1000.0)
+        item["pv_kwh"] = max(0.0, _f(item.get("pv_w"), 0.0) / 1000.0)
+        item["pv_surplus_kwh"] = max(0.0, item["pv_kwh"] - item["load_kwh"])
 
     cheapest = _best_hour(hours, "buy", False)
     best_sell = _best_hour(hours, "sell", True)
@@ -245,6 +272,52 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     safe_min_soc = 100.0 * energy_to_keep_kwh / max(battery_capacity, 0.1)
     safe_min_soc = min(100.0, max(night_reserve_soc, safe_min_soc))
 
+    profitable_sell_floor = max(cycle_cost / max(discharge_efficiency, 0.01), best_sell_price * 0.90)
+    sell_hours = [
+        item for item in hours
+        if _f(item.get("sell"), 0.0) >= profitable_sell_floor
+        and _f(item.get("sell"), 0.0) > cycle_cost
+    ]
+    sell_window_hours = max(1.0, float(len(sell_hours))) if sell_hours else 0.0
+    sell_window_capacity_kwh = max(0.0, discharge_power_kw * sell_window_hours * discharge_efficiency)
+    feasible_sale_kwh = min(safe_to_sell_kwh, sell_window_capacity_kwh)
+    required_sale_hours = (
+        feasible_sale_kwh / max(discharge_power_kw * discharge_efficiency, 0.1)
+        if feasible_sale_kwh > 0
+        else 0.0
+    )
+    best_sell_dt = best_sell.get("dt", base)
+    recommended_sell_start_dt = best_sell_dt - timedelta(hours=required_sale_hours)
+
+    future_pv_surplus_kwh = sum(_f(item.get("pv_surplus_kwh"), 0.0) for item in hours)
+    planned_market_energy_kwh = min(
+        max(0.0, battery_capacity - energy_to_keep_kwh),
+        max(feasible_sale_kwh, min(future_pv_surplus_kwh * charge_efficiency, battery_capacity)),
+    )
+    dynamic_target_energy_kwh = min(
+        battery_capacity * 0.95,
+        max(energy_to_keep_kwh, energy_to_keep_kwh + planned_market_energy_kwh),
+    )
+    dynamic_charge_target_soc = min(
+        95.0,
+        max(safe_min_soc, dynamic_target_energy_kwh / max(battery_capacity, 0.1) * 100.0),
+    )
+    required_charge_kwh = max(0.0, dynamic_target_energy_kwh - current_battery_energy_kwh)
+    expected_trade_revenue = feasible_sale_kwh * best_sell_price
+    expected_cycle_cost = feasible_sale_kwh * cycle_cost
+    expected_trade_profit = max(0.0, expected_trade_revenue - expected_cycle_cost)
+
+    selected_windows_completed = bool(data.get("pv_price_strategy_windows_completed", False))
+    if selected_windows_completed and soc + 1.0 < dynamic_charge_target_soc:
+        recovery_status = "NIEDOBÓR ENERGII"
+        recovery_reason = (
+            f"Po zakończeniu tanich okien brakuje około {required_charge_kwh:.2f} kWh do celu "
+            f"{dynamic_charge_target_soc:.0f}%. Plan ograniczy późniejszą sprzedaż zamiast naruszać rezerwę."
+        )
+    else:
+        recovery_status = "OK"
+        recovery_reason = "Plan ładowania i rezerwy jest wykonalny."
+
     if safe_to_sell_kwh <= 0.2:
         safe_export_limit_w = 0.0
     else:
@@ -255,6 +328,28 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
 
     current_phase = _phase(now.hour)
     current_mode = str(data.get("mode", "NORMAL"))
+
+    if current_mode == "PV_LOW_PRICE_CHARGE" and soc >= dynamic_charge_target_soc:
+        data["mode"] = "PV_PRICE_EXPORT"
+        current_mode = "PV_PRICE_EXPORT"
+        data["reason"] = (
+            f"Dynamiczny cel ładowania {dynamic_charge_target_soc:.0f}% został osiągnięty — "
+            "sprzedaję dalszą nadwyżkę PV"
+        )
+
+    if (
+        current_mode == "WAIT_BETTER_SELL_PRICE"
+        and feasible_sale_kwh > 0.3
+        and required_sale_hours > 0.25
+        and now >= recommended_sell_start_dt
+        and sell_price_now > cycle_cost
+    ):
+        data["mode"] = "SELL_BATTERY_HIGH_PRICE"
+        current_mode = "SELL_BATTERY_HIGH_PRICE"
+        data["reason"] = (
+            f"Rozpoczynam sprzedaż wcześniej, aby zdążyć oddać {feasible_sale_kwh:.2f} kWh "
+            f"w dobrym oknie; wymagany czas około {required_sale_hours:.1f} h"
+        )
 
     charge_window = f"{cheapest.get('hour', '-')} ({cheapest_buy:.3f} PLN/kWh)"
     sell_window = f"{best_sell.get('hour', '-')} ({best_sell_price:.3f} PLN/kWh)"
@@ -385,6 +480,25 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         "plan_safe_export_limit_w": round(safe_export_limit_w, 0),
         "plan_weather_strategy": weather_strategy[:255],
         "plan_reasonable_buy_window": reasonable_buy_window,
+        "optimizer_status": "ACTIVE",
+        "optimizer_dynamic_charge_target_soc": round(dynamic_charge_target_soc, 1),
+        "optimizer_required_charge_kwh": round(required_charge_kwh, 2),
+        "optimizer_future_pv_surplus_kwh": round(future_pv_surplus_kwh, 2),
+        "optimizer_charge_efficiency": round(charge_efficiency * 100.0, 1),
+        "optimizer_discharge_efficiency": round(discharge_efficiency * 100.0, 1),
+        "optimizer_discharge_power_kw": round(discharge_power_kw, 2),
+        "optimizer_sell_window_hours": round(sell_window_hours, 1),
+        "optimizer_sell_window_capacity_kwh": round(sell_window_capacity_kwh, 2),
+        "optimizer_feasible_sale_kwh": round(feasible_sale_kwh, 2),
+        "optimizer_required_sale_hours": round(required_sale_hours, 2),
+        "optimizer_recommended_sell_start": _hour_label(recommended_sell_start_dt),
+        "optimizer_expected_trade_profit": round(expected_trade_profit, 2),
+        "optimizer_recovery_status": recovery_status,
+        "optimizer_recovery_reason": recovery_reason[:240],
+        "optimizer_plan_24h": " | ".join(
+            f"{item['hour']} PV {item['pv_kwh']:.1f}kWh Dom {item['load_kwh']:.1f}kWh S {item['sell']:.2f}"
+            for item in hours[:8]
+        )[:240],
     })
 
     return data
