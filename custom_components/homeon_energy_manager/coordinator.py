@@ -89,7 +89,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
     def _conf_float(self, key: str, default: float) -> float:
         try:
-            return float(self.entry.data.get(key, default))
+            runtime = self.hass.data.get(DOMAIN, {}).get(self.entry.entry_id, {})
+            value = runtime.get(
+                key,
+                self.entry.options.get(key, self.entry.data.get(key, default)),
+            )
+            return float(value)
         except Exception:
             return default
 
@@ -1393,6 +1398,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         # HOMEON_NEGATIVE_PRICE_WINDOW_END
 
         available_to_sell_kwh = max(0.0, battery_capacity_kwh * (soc - discharge_target_soc) / 100.0)
+        battery_energy_kwh = max(0.0, battery_capacity_kwh * soc / 100.0)
         free_space_kwh = max(0.0, battery_capacity_kwh * (100.0 - soc) / 100.0)
         energy_to_charge_target_kwh = max(0.0, battery_capacity_kwh * (charge_target_soc - soc) / 100.0)
         energy_above_morning_target_kwh = max(0.0, battery_capacity_kwh * (soc - morning_target_soc) / 100.0)
@@ -1637,6 +1643,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "pv_reality_installed_kwp": pv_reality.get("installed_kwp", 0),
 
             "available_to_sell_kwh": round(available_to_sell_kwh, 2),
+            "battery_energy_kwh": round(battery_energy_kwh, 2),
             "free_space_kwh": round(free_space_kwh, 2),
             "energy_to_charge_target_kwh": round(energy_to_charge_target_kwh, 2),
             "energy_above_morning_target_kwh": round(energy_above_morning_target_kwh, 2),
