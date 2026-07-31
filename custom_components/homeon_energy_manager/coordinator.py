@@ -1228,7 +1228,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         # HOMEON_HOME_BATTERY_PRIORITY_START
         battery_trade_enabled = bool(store.get("battery_trade", False))
         home_battery_load_w = min(max(load_power, 0.0), max(battery_discharge_w, 0.0))
-        home_battery_protection_active = bool(home_battery_load_w > 250.0 and load_power > 300.0)
+        home_battery_protection_active = bool(
+            not battery_trade_enabled
+            and home_battery_load_w > 250.0
+            and load_power > 300.0
+        )
 
         if home_battery_protection_active:
             home_battery_protection_reason = (
@@ -1242,7 +1246,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         else:
             home_battery_protection_reason = (
                 "Ochrona domu nie blokuje sterowania — bateria nie zasila teraz istotnie gospodarstwa "
-                "albo handel baterią jest świadomie włączony."
+                "albo tryb handlu baterią został świadomie włączony."
             )
         # HOMEON_HOME_BATTERY_PRIORITY_END
         night_reserve_soc = max(
