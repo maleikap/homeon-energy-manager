@@ -246,3 +246,8 @@ ha core check
   </p>
   <p><strong>Dziękuję za każde wsparcie projektu.</strong></p>
 </div>
+
+
+### Zakończenie sprzedaży baterii
+
+Po osiągnięciu docelowego SOC manager ustawia `Zero Export To CT`, wyłącza wymuszony eksport i ustawia limit eksportu na 0 W. Dzięki temu Deye nie pozostaje w `Export First` po zakończeniu okna sprzedaży. Bateria może nadal obsługiwać dom zgodnie z bezpiecznym limitem rozładowania, ale nie jest dalej wymuszenie sprzedawana do sieci.
