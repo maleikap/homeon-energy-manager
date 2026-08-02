@@ -1018,7 +1018,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         if mode == "SAFE_MODE":
             executor_mode = "SAFE_MODE"
-            action = "SAFE_MODE — błąd danych, blokuję handel i ustawiam bezpieczne ograniczenia"
+            action = "SAFE_MODE — błąd danych, ustawiam Zero Export To CT i blokuję handel"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, False)
             sw(inverter_grid_charging, False)
             num(inverter_export_surplus_power, 0)
@@ -1026,14 +1028,20 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         elif weather_lock:
             executor_mode = "WEATHER_HOLD_RESERVE"
-            action = "Pogoda/PV: blokuję sprzedaż baterii i zostawiam energię na kolejny dzień"
+            action = "Pogoda/PV: ustawiam Zero Export To CT i zostawiam energię na kolejny dzień"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, False)
             sw(inverter_grid_charging, False)
+            num(inverter_export_surplus_power, 0)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "EMERGENCY_RESERVE":
-            action = "Awaryjny SOC — włączam ładowanie z sieci i blokuję eksport"
+            action = "Awaryjny SOC — ustawiam Zero Export To CT, włączam ładowanie z sieci i blokuję eksport"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
             sw(inverter_grid_charging, True)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
@@ -1052,15 +1060,20 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         elif mode == "NEGATIVE_PRICE_EXPORT_BLOCK":
             executor_mode = "NEGATIVE_PRICE_EXPORT_BLOCK"
-            action = "Cena sprzedaży ujemna — blokuję sprzedaż i eksport z baterii"
+            action = "Cena sprzedaży ujemna — ustawiam Zero Export To CT i blokuję eksport z baterii"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, False)
             sw(inverter_grid_charging, False)
             num(inverter_export_surplus_power, 0)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode in ("NEGATIVE_IMPORT", "CHEAP_CHARGE"):
-            action = "Tania energia — ładuję magazyn z sieci, eksport baterii zablokowany"
+            action = "Tania energia — ustawiam Zero Export To CT, ładuję z sieci i blokuję eksport"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
             sw(inverter_grid_charging, True)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
@@ -1114,16 +1127,22 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_export_surplus, True)
 
         elif mode == "SELL_BATTERY_HIGH_PRICE":
-            executor_mode = "SELL_BLOCKED_NO_SAFE_SURPLUS"
-            action = "Cena sprzedaży dobra, ale brak bezpiecznej nadwyżki — blokuję eksport baterii"
+            executor_mode = "DISCHARGE_TARGET_HOLD"
+            action = "Cel sprzedaży osiągnięty — ustawiam Zero Export To CT i kończę eksport baterii"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, False)
             sw(inverter_grid_charging, False)
+            num(inverter_export_surplus_power, 0)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "PV_REALITY_HOLD":
-            action = "Realna produkcja PV jest słaba — blokuję sprzedaż i ograniczam rozładowanie magazynu"
+            action = "Realna produkcja PV jest słaba — ustawiam Zero Export To CT i chronię magazyn"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "WAIT_BETTER_SELL_PRICE":
@@ -1154,16 +1173,22 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "EXPENSIVE_SELF_USE":
-            action = "Droga energia — bateria pracuje na dom, bez sprzedaży do sieci"
+            action = "Droga energia — Zero Export To CT, bateria pracuje wyłącznie na dom"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
             num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         else:
             executor_mode = "NORMAL_SAFE"
-            action = "Normalna praca — bez ładowania z sieci i bez wymuszonej sprzedaży"
+            action = "Normalna praca — Zero Export To CT, bez wymuszonej sprzedaży"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, False)
+            num(inverter_export_surplus_power, 0)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
@@ -1769,7 +1794,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         sell_ready = bool(
             sell_price_trigger
-            and soc > discharge_target_soc + 8
+            and soc > discharge_target_soc + 1
             and not pv_reality_lock
             and battery_trade_enabled
             and not home_battery_protection_active
