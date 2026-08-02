@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.1
+
+- Po osiągnięciu docelowego SOC manager jawnie przełącza Deye z `Export First` na `Zero Export To CT`.
+- Tryby bez sprzedaży wyłączają eksport, ustawiają limit eksportu na 0 W i nie pozostawiają poprzedniego trybu falownika.
+- Sprzedaż baterii kończy się z tolerancją około 1% względem celu zamiast pozostawiać aktywne wymuszenie eksportu.
+- Dodano status wykonawczy `DISCHARGE_TARGET_HOLD` dla osiągniętego celu sprzedaży.
+
+
 ## 1.2.0
 
 - Dodano godzinowy optymalizator 24 h wykorzystujący ceny, prognozę PV, godzinowy profil zużycia domu, pojemność baterii i ograniczenia falownika.
