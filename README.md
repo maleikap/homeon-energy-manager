@@ -251,3 +251,8 @@ ha core check
 ### Zakończenie sprzedaży baterii
 
 Po osiągnięciu docelowego SOC manager ustawia `Zero Export To CT`, wyłącza wymuszony eksport i ustawia limit eksportu na 0 W. Dzięki temu Deye nie pozostaje w `Export First` po zakończeniu okna sprzedaży. Bateria może nadal obsługiwać dom zgodnie z bezpiecznym limitem rozładowania, ale nie jest dalej wymuszenie sprzedawana do sieci.
+
+
+### Eksport PV po zakończeniu ładowania
+
+Po zakończeniu wybranych najgorszych godzin dodatnia cena sprzedaży uruchamia `PV_PRICE_EXPORT` dla bieżącej nadwyżki PV. Dotyczy to również bardzo niskiej dodatniej ceny, np. 0,05 PLN/kWh. Manager nie ogranicza wtedy produkcji paneli i nie wymusza dodatkowej sprzedaży z baterii. Cena równa zero lub ujemna nadal blokuje eksport.
