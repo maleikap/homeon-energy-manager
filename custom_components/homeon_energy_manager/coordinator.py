@@ -955,8 +955,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             )
 
         # Zero Export To CT lets Deye manage home, battery and PV. Sell Solar
-        # permits surplus PV export; its power value is a ceiling, not a live
-        # production setpoint. Export First is reserved for battery trading.
+        # permits surplus PV export. Its power setting belongs to Deye/the user
+        # and is not changed in this mode. Export First is reserved for battery trading.
         sell_price_for_inverter = float(self._as_float(data.get("sell_price"), 0.0) or 0.0)
         sell_solar_allowed = sell_price_for_inverter > 0.0
         sell_solar_limit_w = inverter_export_target_w if sell_solar_allowed else 0.0
@@ -1032,7 +1032,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, False)
             sw(inverter_grid_charging, False)
-            num(inverter_export_surplus_power, 0)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif weather_lock:
@@ -1042,7 +1041,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, sell_solar_allowed)
             sw(inverter_grid_charging, False)
-            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "EMERGENCY_RESERVE":
@@ -1050,7 +1048,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, False)
-            num(inverter_export_surplus_power, 0)
             sw(inverter_grid_charging, True)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
@@ -1074,7 +1071,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, False)
             sw(inverter_grid_charging, False)
-            num(inverter_export_surplus_power, 0)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode in ("NEGATIVE_IMPORT", "CHEAP_CHARGE"):
@@ -1082,7 +1078,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, False)
-            num(inverter_export_surplus_power, 0)
             sw(inverter_grid_charging, True)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
@@ -1093,7 +1088,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, sell_solar_allowed)
-            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
 
@@ -1102,7 +1096,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
-            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
             sw(inverter_export_surplus, sell_solar_allowed)
 
@@ -1134,7 +1127,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, sell_solar_allowed)
             sw(inverter_grid_charging, False)
-            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "PV_REALITY_HOLD":
@@ -1143,7 +1135,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, sell_solar_allowed)
-            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "WAIT_BETTER_SELL_PRICE":
@@ -1151,7 +1142,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
-            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
             sw(inverter_export_surplus, sell_solar_allowed)
 
@@ -1161,7 +1151,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, sell_solar_allowed)
-            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
@@ -1171,7 +1160,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, sell_solar_allowed)
-            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         else:
@@ -1181,7 +1169,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, sell_solar_allowed)
-            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
