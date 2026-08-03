@@ -1092,7 +1092,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             pv_price_surplus_w = self._as_float(data.get("pv_price_strategy_surplus_w"), 0.0) or 0.0
             pv_price_export_w = min(
                 inverter_export_target_w,
-                max(500.0, float(pv_price_surplus_w)),
+                max(0.0, float(pv_price_surplus_w)),
             )
             action = (
                 "Poza najgorszymi godzinami — sprzedaję bieżącą nadwyżkę PV %.0f W "
@@ -1103,7 +1103,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_grid_charging, False)
             num(inverter_export_surplus_power, pv_price_export_w)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
-            sw(inverter_export_surplus, True)
+            sw(inverter_export_surplus, pv_price_export_w > 50.0)
 
         elif (
             mode == "SELL_BATTERY_HIGH_PRICE"
@@ -1881,6 +1881,17 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             reason = (
                 f"Sprzedaję teraz — cena {sell_price:.2f} PLN/kWh "
                 f"osiągnęła ustawiony próg {economic_good_sell_price:.2f} PLN/kWh"
+            )
+        elif (
+            pv_low_price_plan.get("windows_completed", False)
+            and sell_price > max(0.0, economic_negative_sell_price)
+            and pv_power > load_power + 50.0
+        ):
+            mode = "PV_PRICE_EXPORT"
+            reason = (
+                f"Godziny ładowania zakończone — sprzedaję bieżącą nadwyżkę PV "
+                f"{max(0.0, pv_power - load_power):.0f} W nawet przy niskiej dodatniej cenie "
+                f"{sell_price:.3f} PLN/kWh"
             )
         elif buy_price < economic_cheap_charge_price and soc < charge_target_soc:
             mode = "CHEAP_CHARGE"
