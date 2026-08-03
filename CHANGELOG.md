@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.4
+
+- W `Zero Export To CT` manager nie zapisuje już encji `Solar Sell Power`; jej wartością zarządza falownik lub użytkownik.
+- Manager nadal ustawia tryb pracy i przełącznik `Sell Solar` zależnie od ceny.
+- Nastawa mocy eksportu jest zmieniana tylko w `Export First`, podczas świadomej sprzedaży baterii lub przygotowania miejsca przed ceną ujemną.
+
+
 ## 1.2.3
 
 - Zwykłe tryby pracy używają `Zero Export To CT`, dzięki czemu falownik Deye sam rozdziela energię między dom, magazyn i sieć.
