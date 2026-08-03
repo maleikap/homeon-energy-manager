@@ -330,12 +330,20 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     current_mode = str(data.get("mode", "NORMAL"))
 
     if current_mode == "PV_LOW_PRICE_CHARGE" and soc >= dynamic_charge_target_soc:
-        data["mode"] = "PV_PRICE_EXPORT"
-        current_mode = "PV_PRICE_EXPORT"
-        data["reason"] = (
-            f"Dynamiczny cel ładowania {dynamic_charge_target_soc:.0f}% został osiągnięty — "
-            "sprzedaję dalszą nadwyżkę PV"
-        )
+        if sell_price_now > 0.0:
+            data["mode"] = "PV_PRICE_EXPORT"
+            current_mode = "PV_PRICE_EXPORT"
+            data["reason"] = (
+                f"Dynamiczny cel ładowania {dynamic_charge_target_soc:.0f}% został osiągnięty — "
+                f"sprzedaję dalszą nadwyżkę PV po dodatniej cenie {sell_price_now:.3f} PLN/kWh"
+            )
+        else:
+            data["mode"] = "NEGATIVE_PRICE_EXPORT_BLOCK"
+            current_mode = "NEGATIVE_PRICE_EXPORT_BLOCK"
+            data["reason"] = (
+                f"Dynamiczny cel ładowania {dynamic_charge_target_soc:.0f}% został osiągnięty, "
+                "ale cena sprzedaży jest zerowa lub ujemna — blokuję eksport"
+            )
 
     if (
         current_mode == "WAIT_BETTER_SELL_PRICE"
