@@ -954,6 +954,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 max(500.0, pv_export_surplus_w),
             )
 
+        # Zero Export To CT lets Deye manage home, battery and PV. Sell Solar
+        # permits surplus PV export; its power value is a ceiling, not a live
+        # production setpoint. Export First is reserved for battery trading.
+        sell_price_for_inverter = float(self._as_float(data.get("sell_price"), 0.0) or 0.0)
+        sell_solar_allowed = sell_price_for_inverter > 0.0
+        sell_solar_limit_w = inverter_export_target_w if sell_solar_allowed else 0.0
+
         weather_lock = bool(
             mode == "WEATHER_HOLD_RESERVE"
             or (
@@ -970,6 +977,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["inverter_control_safe_export_limit_w"] = round(safe_export_limit_w, 0)
         data["inverter_control_safe_to_sell_kwh"] = round(plan_safe_to_sell_kwh, 2)
         data["inverter_control_weather_lock"] = "ON" if weather_lock else "OFF"
+        data["inverter_sell_solar_allowed"] = "ON" if sell_solar_allowed else "OFF"
+        data["inverter_sell_solar_limit_w"] = round(sell_solar_limit_w, 0)
 
         data["inverter_entity_grid_charging"] = inverter_grid_charging
         data["inverter_entity_export_surplus"] = inverter_export_surplus
@@ -1031,9 +1040,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             action = "Pogoda/PV: ustawiam Zero Export To CT i zostawiam energię na kolejny dzień"
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
-            sw(inverter_export_surplus, False)
+            sw(inverter_export_surplus, sell_solar_allowed)
             sw(inverter_grid_charging, False)
-            num(inverter_export_surplus_power, 0)
+            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "EMERGENCY_RESERVE":
@@ -1079,31 +1088,23 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
 
         elif mode == "PV_LOW_PRICE_CHARGE":
-            action = "Najgorsza godzina sprzedaży — ustawiam Zero Export To CT i ładuję magazyn wyłącznie z PV"
+            action = "Najgorsza godzina sprzedaży — Zero Export To CT; Deye ładuje magazyn z PV i sprzedaje pozostałą nadwyżkę"
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_export_surplus_power, 0)
+            sw(inverter_export_surplus, sell_solar_allowed)
+            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
 
         elif mode == "PV_PRICE_EXPORT":
-            pv_price_surplus_w = self._as_float(data.get("pv_price_strategy_surplus_w"), 0.0) or 0.0
-            pv_price_export_w = min(
-                inverter_export_target_w,
-                max(0.0, float(pv_price_surplus_w)),
-            )
-            action = (
-                "Poza najgorszymi godzinami — sprzedaję bieżącą nadwyżkę PV %.0f W "
-                "i zachowuję miejsce w magazynie"
-            ) % pv_price_export_w
-            data["inverter_work_mode_target"] = inverter_work_mode_sell_option
-            sel(inverter_work_mode_select, inverter_work_mode_sell_option)
+            action = "Poza najgorszymi godzinami — Zero Export To CT; Deye sam rozdziela PV, a Sell Solar pozwala sprzedać nadwyżkę"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
-            num(inverter_export_surplus_power, pv_price_export_w)
+            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
-            sw(inverter_export_surplus, pv_price_export_w > 50.0)
+            sw(inverter_export_surplus, sell_solar_allowed)
 
         elif (
             mode == "SELL_BATTERY_HIGH_PRICE"
@@ -1128,67 +1129,59 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         elif mode == "SELL_BATTERY_HIGH_PRICE":
             executor_mode = "DISCHARGE_TARGET_HOLD"
-            action = "Cel sprzedaży osiągnięty — ustawiam Zero Export To CT i kończę eksport baterii"
+            action = "Cel sprzedaży baterii osiągnięty — Zero Export To CT; kończę rozładowanie, ale Sell Solar nadal przepuszcza nadwyżkę PV"
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
-            sw(inverter_export_surplus, False)
+            sw(inverter_export_surplus, sell_solar_allowed)
             sw(inverter_grid_charging, False)
-            num(inverter_export_surplus_power, 0)
+            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "PV_REALITY_HOLD":
-            action = "Realna produkcja PV jest słaba — ustawiam Zero Export To CT i chronię magazyn"
+            action = "Realna produkcja PV jest słaba — Zero Export To CT chroni magazyn, a dodatnia cena pozwala sprzedać nadwyżkę PV"
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_export_surplus_power, 0)
+            sw(inverter_export_surplus, sell_solar_allowed)
+            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "WAIT_BETTER_SELL_PRICE":
-            wait_pv_export_w = min(
-                inverter_export_target_w,
-                max(0.0, pv_export_surplus_w),
-            )
-            action = (
-                "Czekam na najlepszą cenę baterii — zachowuję magazyn i sprzedaję "
-                "bieżącą nadwyżkę PV %.0f W"
-                % wait_pv_export_w
-            )
-            data["inverter_work_mode_target"] = inverter_work_mode_sell_option
-            sel(inverter_work_mode_select, inverter_work_mode_sell_option)
-            sw(inverter_grid_charging, False)
-            num(inverter_export_surplus_power, wait_pv_export_w)
-            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
-            sw(inverter_export_surplus, wait_pv_export_w > 50.0)
-
-        elif mode == "PV_CHARGE":
-            action = "Ładowanie z PV — ustawiam Zero Export To CT, ładowanie z sieci wyłączone"
+            action = "Czekam z baterią na lepszą cenę — Zero Export To CT; Sell Solar sprzedaje wyłącznie bieżącą nadwyżkę PV"
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_export_surplus_power, 0)
+            num(inverter_export_surplus_power, sell_solar_limit_w)
+            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+            sw(inverter_export_surplus, sell_solar_allowed)
+
+        elif mode == "PV_CHARGE":
+            action = "Ładowanie z PV — Zero Export To CT; Deye ładuje magazyn i sprzedaje nadwyżkę przy dodatniej cenie"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
+            sw(inverter_grid_charging, False)
+            sw(inverter_export_surplus, sell_solar_allowed)
+            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "EXPENSIVE_SELF_USE":
-            action = "Droga energia — Zero Export To CT, bateria pracuje wyłącznie na dom"
+            action = "Droga energia — Zero Export To CT; Deye zasila dom i sprzedaje tylko nadwyżkę PV"
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_export_surplus_power, 0)
+            sw(inverter_export_surplus, sell_solar_allowed)
+            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         else:
             executor_mode = "NORMAL_SAFE"
-            action = "Normalna praca — Zero Export To CT, bez wymuszonej sprzedaży"
+            action = "Normalna praca — Zero Export To CT; Deye sam zarządza domem, magazynem i nadwyżką PV"
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_export_surplus_power, 0)
+            sw(inverter_export_surplus, sell_solar_allowed)
+            num(inverter_export_surplus_power, sell_solar_limit_w)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
