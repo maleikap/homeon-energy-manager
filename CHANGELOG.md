@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.3
+
+- Zwykłe tryby pracy używają `Zero Export To CT`, dzięki czemu falownik Deye sam rozdziela energię między dom, magazyn i sieć.
+- Przy dodatniej cenie manager pozostawia `Sell Solar` włączone i ustawia skonfigurowany maksymalny limit eksportu; przy cenie zerowej lub ujemnej blokuje sprzedaż.
+- `Export First` pozostaje wyłącznie dla zaplanowanej sprzedaży energii z baterii i przygotowania miejsca przed cenami ujemnymi.
+- Po osiągnięciu celu sprzedaży baterii bieżąca nadwyżka PV może nadal trafić do sieci.
+
+
 ## 1.2.2
 
 - Po zakończeniu wybranych najgorszych godzin manager sprzedaje każdą bieżącą nadwyżkę PV przy dodatniej cenie, zamiast ograniczać produkcję.
