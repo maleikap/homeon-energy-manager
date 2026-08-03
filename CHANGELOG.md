@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.2
+
+- Po zakończeniu wybranych najgorszych godzin manager sprzedaje każdą bieżącą nadwyżkę PV przy dodatniej cenie, zamiast ograniczać produkcję.
+- Limit w `PV_PRICE_EXPORT` odpowiada rzeczywistej nadwyżce PV, dzięki czemu brakująca moc nie jest pobierana z baterii.
+- Po osiągnięciu celu ładowania cena zerowa lub ujemna nadal blokuje eksport.
+
+
 ## 1.2.1
 
 - Po osiągnięciu docelowego SOC manager jawnie przełącza Deye z `Export First` na `Zero Export To CT`.
