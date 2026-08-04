@@ -179,7 +179,7 @@ Strategia działa kolejno: przed najgorszymi godzinami `PV_PRICE_EXPORT` sprzeda
 
 ### Optymalizator 24 h
 
-Optymalizator łączy godzinowy harmonogram cen z wyuczonym profilem zużycia domu i produkcji PV. Oblicza dynamiczny cel SOC, ilość energii możliwą do sprzedaży, wymagany czas rozładowania, przewidywany zysk oraz zalecany moment rozpoczęcia sprzedaży. Jeżeli pełna sprzedaż nie zmieściłaby się w najlepszej godzinie, manager może rozpocząć ją wcześniej w nadal opłacalnym oknie. Prognoza PV jest automatycznie korygowana na podstawie stosunku rzeczywistej produkcji do prognozy z poprzednich dni.
+Optymalizator łączy godzinowy harmonogram cen z wyuczonym profilem zużycia domu i produkcji PV. Oblicza dynamiczny cel SOC, ilość energii możliwą do sprzedaży, wymagany czas rozładowania, przewidywany zysk oraz zalecany moment rozpoczęcia sprzedaży. Jeżeli pełna sprzedaż nie zmieściłaby się w najlepszej godzinie, manager może rozpocząć ją wcześniej tylko wtedy, gdy bieżąca cena wynosi co najmniej 95% najlepszej ceny w analizowanym okresie. Porównanie obejmuje pełne 24 godziny, więc sam ręczny próg sprzedaży nie uruchomi baterii przed wyraźnie lepszym oknem. Prognoza PV jest automatycznie korygowana na podstawie stosunku rzeczywistej produkcji do prognozy z poprzednich dni.
 
 Nowe parametry pozwalają ustawić sprawność ładowania i rozładowania oraz napięcie nominalne baterii. Domyślne wartości to odpowiednio 94%, 94% i 51,2 V.
 
