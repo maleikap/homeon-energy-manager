@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.6
+
+- Manager porównuje bieżącą cenę sprzedaży z najlepszą ceną w pełnym horyzoncie 24 godzin zamiast czekać maksymalnie 8 godzin.
+- Wcześniejsze rozpoczęcie rozładowania baterii jest dozwolone tylko przy cenie wynoszącej co najmniej 95% najlepszej ceny.
+- Ręczny próg dobrej sprzedaży nie powoduje już sprzedaży magazynu, jeżeli później występuje wyraźnie korzystniejsze okno.
+- Bieżąca nadwyżka PV może być nadal sprzedawana podczas oczekiwania bez rozładowywania baterii.
+
+
 ## 1.2.5
 
 - Przygotowanie miejsca przed najgorszymi godzinami ponownie używa `Export First` z zablokowanym rozładowaniem baterii, dzięki czemu poranna produkcja PV jest sprzedawana zamiast ładować magazyn.
