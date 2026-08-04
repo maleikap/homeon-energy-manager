@@ -1757,7 +1757,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         wait_for_better_sell = bool(
             sell_price_trigger
             and not sell_stats.get("sell_now_best", False)
-            and 15.0 < best_sell_minutes <= 8.0 * 60.0
+            and 15.0 < best_sell_minutes <= 24.0 * 60.0
             and best_sell_price >= sell_price + better_price_margin
             and available_to_sell_kwh > 0.3
             and battery_trade_enabled
