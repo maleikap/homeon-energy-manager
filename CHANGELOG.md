@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.7
+
+- Manager nie zapisuje już nastawy `Solar Sell Power` w żadnym trybie, również podczas sprzedaży baterii i przygotowania miejsca przed ceną ujemną.
+- Moc eksportu pozostaje wyłącznie ustawieniem falownika Deye.
+- Z formularza nowej instalacji usunięto nieużywaną encję mocy eksportu.
+- Tryb pracy, `Sell Solar` oraz ograniczenia prądu baterii nadal są sterowane zgodnie z planem energii.
+
+
 ## 1.2.6
 
 - Manager porównuje bieżącą cenę sprzedaży z najlepszą ceną w pełnym horyzoncie 24 godzin zamiast czekać maksymalnie 8 godzin.
