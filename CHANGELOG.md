@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.5
+
+- Przygotowanie miejsca przed najgorszymi godzinami ponownie używa `Export First` z zablokowanym rozładowaniem baterii, dzięki czemu poranna produkcja PV jest sprzedawana zamiast ładować magazyn.
+- `WAIT_BETTER_SELL_PRICE` sprzedaje bieżącą produkcję PV, zachowując energię baterii na późniejszą, lepszą cenę.
+- Ładowanie magazynu z PV pozostaje ograniczone do wybranych najgorszych godzin w trybie `PV_LOW_PRICE_CHARGE`.
+- Manager nie zmienia `Solar Sell Power` w tych trybach.
+
+
 ## 1.2.4
 
 - W `Zero Export To CT` manager nie zapisuje już encji `Solar Sell Power`; jej wartością zarządza falownik lub użytkownik.
