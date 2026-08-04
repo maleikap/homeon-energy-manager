@@ -27,7 +27,6 @@
           "pv_very_good_forecast_kwh": "Bardzo dobra prognoza PV kWh",
           "inverter_grid_charging_switch": "Falownik: przełącznik ładowania z sieci",
           "inverter_export_surplus_switch": "Falownik: przełącznik eksportu nadwyżki",
-          "inverter_export_surplus_power_number": "Falownik: moc eksportu nadwyżki",
           "inverter_max_charge_current_number": "Falownik: maksymalny prąd ładowania",
           "inverter_max_discharge_current_number": "Falownik: maksymalny prąd rozładowania"
         }
