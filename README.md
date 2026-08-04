@@ -77,13 +77,12 @@ HomeOn Energy Manager potrzebuje co najmniej:
 - mocy sieci,
 - przełącznika ładowania z sieci,
 - przełącznika eksportu nadwyżki,
-- nastawy mocy eksportu,
 - nastawy maksymalnego prądu ładowania,
 - nastawy maksymalnego prądu rozładowania.
 
 Do pełnego sterowania Deye potrzebna jest również encja trybu pracy falownika udostępniająca właściwe opcje `Export First` i `Zero Export To CT`.
 
-W zwykłej pracy i podczas wybranych najgorszych godzin manager ustawia `Zero Export To CT`, aby falownik zasilał dom i ładował magazyn. Przed tymi godzinami tryb `PV_PRICE_EXPORT` używa `Export First` z zablokowanym rozładowaniem baterii: bieżąca produkcja PV trafia do domu i sieci, a magazyn zachowuje wolne miejsce na późniejsze ładowanie. Tak samo działa oczekiwanie z baterią na lepszą cenę sprzedaży. Przy dodatniej cenie manager włącza `Sell Solar`, a przy cenie zerowej lub ujemnej go wyłącza. Poza świadomą sprzedażą baterii manager nie zmienia nastawy `Solar Sell Power`; należy ustawić ją w Deye na właściwy limit instalacji.
+W zwykłej pracy i podczas wybranych najgorszych godzin manager ustawia `Zero Export To CT`, aby falownik zasilał dom i ładował magazyn. Przed tymi godzinami tryb `PV_PRICE_EXPORT` używa `Export First` z zablokowanym rozładowaniem baterii: bieżąca produkcja PV trafia do domu i sieci, a magazyn zachowuje wolne miejsce na późniejsze ładowanie. Tak samo działa oczekiwanie z baterią na lepszą cenę sprzedaży. Przy dodatniej cenie manager włącza `Sell Solar`, a przy cenie zerowej lub ujemnej go wyłącza. Manager nigdy nie zmienia nastawy `Solar Sell Power`, także podczas sprzedaży baterii i przygotowania miejsca przed ceną ujemną. Właściwy limit eksportu należy ustawić bezpośrednio w Deye.
 
 Nazwy encji zależą od użytej integracji falownika i konfiguracji Home Assistant.
 
