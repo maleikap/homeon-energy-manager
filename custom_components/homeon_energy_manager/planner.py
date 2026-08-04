@@ -351,12 +351,14 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         and required_sale_hours > 0.25
         and now >= recommended_sell_start_dt
         and sell_price_now > cycle_cost
+        and sell_price_now >= best_sell_price * 0.95
     ):
         data["mode"] = "SELL_BATTERY_HIGH_PRICE"
         current_mode = "SELL_BATTERY_HIGH_PRICE"
         data["reason"] = (
             f"Rozpoczynam sprzedaż wcześniej, aby zdążyć oddać {feasible_sale_kwh:.2f} kWh "
-            f"w dobrym oknie; wymagany czas około {required_sale_hours:.1f} h"
+            f"w dobrym oknie; bieżąca cena {sell_price_now:.3f} PLN/kWh stanowi co najmniej 95% "
+            f"najlepszej ceny {best_sell_price:.3f} PLN/kWh, wymagany czas około {required_sale_hours:.1f} h"
         )
 
     charge_window = f"{cheapest.get('hour', '-')} ({cheapest_buy:.3f} PLN/kWh)"
