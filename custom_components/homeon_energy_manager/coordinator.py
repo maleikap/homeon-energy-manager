@@ -36,7 +36,6 @@ from .const import (
     CONF_PV_VERY_GOOD_FORECAST_KWH,
     CONF_INVERTER_GRID_CHARGING_SWITCH,
     CONF_INVERTER_EXPORT_SURPLUS_SWITCH,
-    CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER,
     CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
     CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
     DEFAULT_BATTERY_CAPACITY_KWH,
@@ -54,7 +53,6 @@ _LOGGER = logging.getLogger(__name__)
 
 INVERTER_GRID_CHARGING = "switch.inverter_battery_grid_charging"
 INVERTER_EXPORT_SURPLUS = "switch.inverter_export_surplus"
-INVERTER_EXPORT_SURPLUS_POWER = "number.inverter_export_surplus_power"
 INVERTER_MAX_CHARGE_CURRENT = "number.inverter_battery_max_charging_current"
 INVERTER_MAX_DISCHARGE_CURRENT = "number.inverter_battery_max_discharging_current"
 INVERTER_WORK_MODE_SELECT = "select.inverter_work_mode"
@@ -923,7 +921,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         inverter_grid_charging = conf_entity(CONF_INVERTER_GRID_CHARGING_SWITCH, INVERTER_GRID_CHARGING)
         inverter_export_surplus = conf_entity(CONF_INVERTER_EXPORT_SURPLUS_SWITCH, INVERTER_EXPORT_SURPLUS)
-        inverter_export_surplus_power = conf_entity(CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER, INVERTER_EXPORT_SURPLUS_POWER)
         inverter_max_charge_current = conf_entity(CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER, INVERTER_MAX_CHARGE_CURRENT)
         inverter_max_discharge_current = conf_entity(CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER, INVERTER_MAX_DISCHARGE_CURRENT)
         inverter_work_mode_select = INVERTER_WORK_MODE_SELECT
@@ -982,7 +979,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         data["inverter_entity_grid_charging"] = inverter_grid_charging
         data["inverter_entity_export_surplus"] = inverter_export_surplus
-        data["inverter_entity_export_surplus_power"] = inverter_export_surplus_power
         data["inverter_entity_max_charge_current"] = inverter_max_charge_current
         data["inverter_entity_max_discharge_current"] = inverter_max_discharge_current
         data["inverter_entity_work_mode"] = inverter_work_mode_select
