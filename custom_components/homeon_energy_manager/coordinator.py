@@ -1060,7 +1060,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             data["inverter_work_mode_target"] = inverter_work_mode_sell_option
             sel(inverter_work_mode_select, inverter_work_mode_sell_option)
             sw(inverter_grid_charging, False)
-            num(inverter_export_surplus_power, neg_export_w)
             num(inverter_max_discharge_current, inverter_discharge_current_a)
             sw(inverter_export_surplus, True)
 
@@ -1116,7 +1115,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             data["inverter_work_mode_target"] = inverter_work_mode_sell_option
             sel(inverter_work_mode_select, inverter_work_mode_sell_option)
             sw(inverter_grid_charging, False)
-            num(inverter_export_surplus_power, safe_export_limit_w)
             num(inverter_max_discharge_current, discharge_current)
             sw(inverter_export_surplus, True)
 
