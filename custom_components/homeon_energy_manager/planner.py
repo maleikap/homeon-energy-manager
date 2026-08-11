@@ -118,7 +118,7 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     battery_capacity = _f(
         data.get(
             "battery_capacity_kwh",
-            coordinator.entry.data.get(CONF_BATTERY_CAPACITY_KWH),
+            coordinator._conf_value(CONF_BATTERY_CAPACITY_KWH),
         ),
         DEFAULT_BATTERY_CAPACITY_KWH,
     )
@@ -146,13 +146,13 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
 
     buy_series = _series_from_entity(
         coordinator,
-        coordinator.entry.data.get(CONF_BUY_PRICE_SENSOR),
+        coordinator._conf_value(CONF_BUY_PRICE_SENSOR),
         buy_price_now,
     )
 
     sell_series = _series_from_entity(
         coordinator,
-        coordinator.entry.data.get(CONF_SELL_PRICE_SENSOR),
+        coordinator._conf_value(CONF_SELL_PRICE_SENSOR),
         sell_price_now,
     )
 
