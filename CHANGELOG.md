@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.8
+
+- przeliczanie mocy raportowanej w `kW` i `MW` do watów przed użyciem w algorytmie i diagnostyce,
+- ostrzeżenie, gdy nocne zużycie z marginesem przekracza pojemność magazynu i blokuje cele SOC,
+- wybierana encja trybu pracy falownika oraz konfigurowalne nazwy trybów Deye,
+- formularz późniejszej edycji encji i parametrów bez usuwania integracji,
+- przygotowanie magazynu przed ujemną ceną korzysta z harmonogramu ceny sprzedaży,
+- techniczne sensory zostały przeniesione do kategorii diagnostycznej.
+
 ## 1.2.7
 
 - Manager nie zapisuje już nastawy `Solar Sell Power` w żadnym trybie, również podczas sprzedaży baterii i przygotowania miejsca przed ceną ujemną.
