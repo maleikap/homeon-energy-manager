@@ -26,9 +26,11 @@ CONF_PV_VERY_GOOD_FORECAST_KWH = "pv_very_good_forecast_kwh"
 
 CONF_INVERTER_GRID_CHARGING_SWITCH = "inverter_grid_charging_switch"
 CONF_INVERTER_EXPORT_SURPLUS_SWITCH = "inverter_export_surplus_switch"
-CONF_INVERTER_EXPORT_SURPLUS_POWER_NUMBER = "inverter_export_surplus_power_number"
 CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER = "inverter_max_charge_current_number"
 CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER = "inverter_max_discharge_current_number"
+CONF_INVERTER_WORK_MODE_SELECT = "inverter_work_mode_select"
+CONF_INVERTER_WORK_MODE_SELL_OPTION = "inverter_work_mode_sell_option"
+CONF_INVERTER_WORK_MODE_PV_CHARGE_OPTION = "inverter_work_mode_pv_charge_option"
 
 DEFAULT_BATTERY_CAPACITY_KWH = 30.0
 DEFAULT_MIN_SOC = 15.0
@@ -43,6 +45,8 @@ DEFAULT_PV_VERY_GOOD_FORECAST_KWH = 42.0
 
 DEFAULT_INVERTER_GRID_CHARGING_SWITCH = "switch.inverter_battery_grid_charging"
 DEFAULT_INVERTER_EXPORT_SURPLUS_SWITCH = "switch.inverter_export_surplus"
-DEFAULT_INVERTER_EXPORT_SURPLUS_POWER_NUMBER = "number.inverter_export_surplus_power"
 DEFAULT_INVERTER_MAX_CHARGE_CURRENT_NUMBER = "number.inverter_battery_max_charging_current"
 DEFAULT_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER = "number.inverter_battery_max_discharging_current"
+DEFAULT_INVERTER_WORK_MODE_SELECT = "select.inverter_work_mode"
+DEFAULT_INVERTER_WORK_MODE_SELL_OPTION = "Export First"
+DEFAULT_INVERTER_WORK_MODE_PV_CHARGE_OPTION = "Zero Export To CT"

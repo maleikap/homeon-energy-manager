@@ -31,6 +31,9 @@ from .const import (
     CONF_INVERTER_EXPORT_SURPLUS_SWITCH,
     CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
     CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
+    CONF_INVERTER_WORK_MODE_SELECT,
+    CONF_INVERTER_WORK_MODE_SELL_OPTION,
+    CONF_INVERTER_WORK_MODE_PV_CHARGE_OPTION,
     DEFAULT_BATTERY_CAPACITY_KWH,
     DEFAULT_MIN_SOC,
     DEFAULT_EMERGENCY_SOC,
@@ -44,6 +47,9 @@ from .const import (
     DEFAULT_INVERTER_EXPORT_SURPLUS_SWITCH,
     DEFAULT_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
     DEFAULT_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
+    DEFAULT_INVERTER_WORK_MODE_SELECT,
+    DEFAULT_INVERTER_WORK_MODE_SELL_OPTION,
+    DEFAULT_INVERTER_WORK_MODE_PV_CHARGE_OPTION,
 )
 
 
@@ -58,6 +64,57 @@ SWITCH_SELECTOR = selector.EntitySelector(
 NUMBER_SELECTOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="number")
 )
+
+SELECT_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="select")
+)
+
+
+def _schema(defaults: dict | None = None) -> vol.Schema:
+    values = defaults or {}
+
+    def value(key, default=None):
+        return values.get(key, default)
+
+    def optional_entity(key):
+        configured = value(key)
+        return vol.Optional(key, default=configured) if configured else vol.Optional(key)
+
+    def required_entity(key):
+        configured = value(key)
+        return vol.Required(key, default=configured) if configured else vol.Required(key)
+
+    return vol.Schema(
+        {
+            required_entity(CONF_SOC_SENSOR): SENSOR_SELECTOR,
+            required_entity(CONF_BATTERY_POWER_SENSOR): SENSOR_SELECTOR,
+            required_entity(CONF_PV_POWER_SENSOR): SENSOR_SELECTOR,
+            required_entity(CONF_LOAD_POWER_SENSOR): SENSOR_SELECTOR,
+            required_entity(CONF_GRID_POWER_SENSOR): SENSOR_SELECTOR,
+            required_entity(CONF_BUY_PRICE_SENSOR): SENSOR_SELECTOR,
+            required_entity(CONF_SELL_PRICE_SENSOR): SENSOR_SELECTOR,
+            optional_entity(CONF_PV_FORECAST_TODAY_SENSOR): SENSOR_SELECTOR,
+            optional_entity(CONF_PV_FORECAST_TOMORROW_SENSOR): SENSOR_SELECTOR,
+            vol.Required(CONF_BATTERY_CAPACITY_KWH, default=value(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH)): vol.Coerce(float),
+            vol.Required(CONF_MIN_SOC, default=value(CONF_MIN_SOC, DEFAULT_MIN_SOC)): vol.Coerce(float),
+            vol.Required(CONF_EMERGENCY_SOC, default=value(CONF_EMERGENCY_SOC, DEFAULT_EMERGENCY_SOC)): vol.Coerce(float),
+            vol.Required(CONF_NIGHT_CONSUMPTION_KWH, default=value(CONF_NIGHT_CONSUMPTION_KWH, DEFAULT_NIGHT_CONSUMPTION_KWH)): vol.Coerce(float),
+            vol.Required(CONF_NIGHT_SAFETY_MARGIN, default=value(CONF_NIGHT_SAFETY_MARGIN, DEFAULT_NIGHT_SAFETY_MARGIN)): vol.Coerce(float),
+            vol.Required(CONF_MIN_NIGHT_RESERVE_SOC, default=value(CONF_MIN_NIGHT_RESERVE_SOC, DEFAULT_MIN_NIGHT_RESERVE_SOC)): vol.Coerce(float),
+            vol.Required(CONF_BATTERY_DISCHARGE_POSITIVE, default=value(CONF_BATTERY_DISCHARGE_POSITIVE, True)): selector.BooleanSelector(),
+            vol.Required(CONF_GRID_IMPORT_POSITIVE, default=value(CONF_GRID_IMPORT_POSITIVE, True)): selector.BooleanSelector(),
+            vol.Required(CONF_PV_MEDIUM_FORECAST_KWH, default=value(CONF_PV_MEDIUM_FORECAST_KWH, DEFAULT_PV_MEDIUM_FORECAST_KWH)): vol.Coerce(float),
+            vol.Required(CONF_PV_GOOD_FORECAST_KWH, default=value(CONF_PV_GOOD_FORECAST_KWH, DEFAULT_PV_GOOD_FORECAST_KWH)): vol.Coerce(float),
+            vol.Required(CONF_PV_VERY_GOOD_FORECAST_KWH, default=value(CONF_PV_VERY_GOOD_FORECAST_KWH, DEFAULT_PV_VERY_GOOD_FORECAST_KWH)): vol.Coerce(float),
+            vol.Required(CONF_INVERTER_GRID_CHARGING_SWITCH, default=value(CONF_INVERTER_GRID_CHARGING_SWITCH, DEFAULT_INVERTER_GRID_CHARGING_SWITCH)): SWITCH_SELECTOR,
+            vol.Required(CONF_INVERTER_EXPORT_SURPLUS_SWITCH, default=value(CONF_INVERTER_EXPORT_SURPLUS_SWITCH, DEFAULT_INVERTER_EXPORT_SURPLUS_SWITCH)): SWITCH_SELECTOR,
+            vol.Required(CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER, default=value(CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER, DEFAULT_INVERTER_MAX_CHARGE_CURRENT_NUMBER)): NUMBER_SELECTOR,
+            vol.Required(CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER, default=value(CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER, DEFAULT_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER)): NUMBER_SELECTOR,
+            vol.Required(CONF_INVERTER_WORK_MODE_SELECT, default=value(CONF_INVERTER_WORK_MODE_SELECT, DEFAULT_INVERTER_WORK_MODE_SELECT)): SELECT_SELECTOR,
+            vol.Required(CONF_INVERTER_WORK_MODE_SELL_OPTION, default=value(CONF_INVERTER_WORK_MODE_SELL_OPTION, DEFAULT_INVERTER_WORK_MODE_SELL_OPTION)): str,
+            vol.Required(CONF_INVERTER_WORK_MODE_PV_CHARGE_OPTION, default=value(CONF_INVERTER_WORK_MODE_PV_CHARGE_OPTION, DEFAULT_INVERTER_WORK_MODE_PV_CHARGE_OPTION)): str,
+        }
+    )
 
 
 class HomeOnEnergyManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -75,57 +132,27 @@ class HomeOnEnergyManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data=user_input,
             )
 
-        data_schema = vol.Schema(
-            {
-                vol.Required(CONF_SOC_SENSOR): SENSOR_SELECTOR,
-                vol.Required(CONF_BATTERY_POWER_SENSOR): SENSOR_SELECTOR,
-                vol.Required(CONF_PV_POWER_SENSOR): SENSOR_SELECTOR,
-                vol.Required(CONF_LOAD_POWER_SENSOR): SENSOR_SELECTOR,
-                vol.Required(CONF_GRID_POWER_SENSOR): SENSOR_SELECTOR,
-                vol.Required(CONF_BUY_PRICE_SENSOR): SENSOR_SELECTOR,
-                vol.Required(CONF_SELL_PRICE_SENSOR): SENSOR_SELECTOR,
-
-                vol.Optional(CONF_PV_FORECAST_TODAY_SENSOR): SENSOR_SELECTOR,
-                vol.Optional(CONF_PV_FORECAST_TOMORROW_SENSOR): SENSOR_SELECTOR,
-
-                vol.Required(CONF_BATTERY_CAPACITY_KWH, default=DEFAULT_BATTERY_CAPACITY_KWH): vol.Coerce(float),
-                vol.Required(CONF_MIN_SOC, default=DEFAULT_MIN_SOC): vol.Coerce(float),
-                vol.Required(CONF_EMERGENCY_SOC, default=DEFAULT_EMERGENCY_SOC): vol.Coerce(float),
-                vol.Required(CONF_NIGHT_CONSUMPTION_KWH, default=DEFAULT_NIGHT_CONSUMPTION_KWH): vol.Coerce(float),
-                vol.Required(CONF_NIGHT_SAFETY_MARGIN, default=DEFAULT_NIGHT_SAFETY_MARGIN): vol.Coerce(float),
-                vol.Required(CONF_MIN_NIGHT_RESERVE_SOC, default=DEFAULT_MIN_NIGHT_RESERVE_SOC): vol.Coerce(float),
-
-                vol.Required(CONF_BATTERY_DISCHARGE_POSITIVE, default=True): selector.BooleanSelector(),
-                vol.Required(CONF_GRID_IMPORT_POSITIVE, default=True): selector.BooleanSelector(),
-
-                vol.Required(CONF_PV_MEDIUM_FORECAST_KWH, default=DEFAULT_PV_MEDIUM_FORECAST_KWH): vol.Coerce(float),
-                vol.Required(CONF_PV_GOOD_FORECAST_KWH, default=DEFAULT_PV_GOOD_FORECAST_KWH): vol.Coerce(float),
-                vol.Required(CONF_PV_VERY_GOOD_FORECAST_KWH, default=DEFAULT_PV_VERY_GOOD_FORECAST_KWH): vol.Coerce(float),
-
-                vol.Required(
-                    CONF_INVERTER_GRID_CHARGING_SWITCH,
-                    default=DEFAULT_INVERTER_GRID_CHARGING_SWITCH,
-                ): SWITCH_SELECTOR,
-
-                vol.Required(
-                    CONF_INVERTER_EXPORT_SURPLUS_SWITCH,
-                    default=DEFAULT_INVERTER_EXPORT_SURPLUS_SWITCH,
-                ): SWITCH_SELECTOR,
-
-                vol.Required(
-                    CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
-                    default=DEFAULT_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
-                ): NUMBER_SELECTOR,
-
-                vol.Required(
-                    CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
-                    default=DEFAULT_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
-                ): NUMBER_SELECTOR,
-            }
-        )
-
         return self.async_show_form(
             step_id="user",
-            data_schema=data_schema,
+            data_schema=_schema(),
             errors=errors,
         )
+
+    @staticmethod
+    def async_get_options_flow(config_entry):
+        return HomeOnEnergyManagerOptionsFlow(config_entry)
+
+
+class HomeOnEnergyManagerOptionsFlow(config_entries.OptionsFlow):
+    def __init__(self, config_entry):
+        self._config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        if user_input is not None:
+            updated = dict(self._config_entry.options)
+            updated.update(user_input)
+            return self.async_create_entry(title="", data=updated)
+
+        current = dict(self._config_entry.data)
+        current.update(self._config_entry.options)
+        return self.async_show_form(step_id="init", data_schema=_schema(current))

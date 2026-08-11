@@ -5,11 +5,35 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfEnergy, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 
 PERCENT = "%"
+
+MAIN_SENSOR_KEYS = {
+    "mode",
+    "reason",
+    "soc",
+    "battery_status",
+    "battery_power",
+    "pv_power",
+    "load_power",
+    "grid_power",
+    "grid_status",
+    "grid_import_w",
+    "grid_export_w",
+    "buy_price",
+    "sell_price",
+    "pv_forecast_today",
+    "pv_forecast_tomorrow",
+    "charge_target_soc",
+    "discharge_target_soc",
+    "plan_next_action",
+    "plan_next_action_time",
+    "safe_mode",
+}
 
 
 SENSORS = [
@@ -160,7 +184,7 @@ SENSORS = [
     ("negative_price_window_status", "Okno ceny ujemnej", None, "mdi:cash-clock"),
     ("negative_price_window_start", "Start ceny ujemnej", None, "mdi:clock-start"),
     ("negative_price_window_end", "Koniec ceny ujemnej", None, "mdi:clock-end"),
-    ("negative_price_min_buy_price", "Najniższa cena zakupu w oknie", "PLN/kWh", "mdi:cash-minus"),
+    ("negative_price_min_buy_price", "Najniższa cena sprzedaży w oknie", "PLN/kWh", "mdi:cash-minus"),
     ("negative_price_energy_to_free_kwh", "Energia do zwolnienia przed ceną ujemną", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-arrow-down"),
     ("negative_price_required_free_kwh", "Wymagane wolne miejsce na cenę ujemną", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-outline"),
     ("negative_price_target_soc_before", "Docelowy SOC przed ceną ujemną", PERCENT, "mdi:battery-sync"),
@@ -216,12 +240,14 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         self._attr_native_unit_of_measurement = unit
         self._attr_icon = icon
+        if key not in MAIN_SENSOR_KEYS:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.7",
+            "sw_version": "1.2.8",
         }
 
     @property

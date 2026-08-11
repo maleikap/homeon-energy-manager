@@ -38,6 +38,9 @@ from .const import (
     CONF_INVERTER_EXPORT_SURPLUS_SWITCH,
     CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
     CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER,
+    CONF_INVERTER_WORK_MODE_SELECT,
+    CONF_INVERTER_WORK_MODE_SELL_OPTION,
+    CONF_INVERTER_WORK_MODE_PV_CHARGE_OPTION,
     DEFAULT_BATTERY_CAPACITY_KWH,
     DEFAULT_MIN_SOC,
     DEFAULT_EMERGENCY_SOC,
@@ -47,6 +50,9 @@ from .const import (
     DEFAULT_PV_MEDIUM_FORECAST_KWH,
     DEFAULT_PV_GOOD_FORECAST_KWH,
     DEFAULT_PV_VERY_GOOD_FORECAST_KWH,
+    DEFAULT_INVERTER_WORK_MODE_SELECT,
+    DEFAULT_INVERTER_WORK_MODE_SELL_OPTION,
+    DEFAULT_INVERTER_WORK_MODE_PV_CHARGE_OPTION,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -55,10 +61,6 @@ INVERTER_GRID_CHARGING = "switch.inverter_battery_grid_charging"
 INVERTER_EXPORT_SURPLUS = "switch.inverter_export_surplus"
 INVERTER_MAX_CHARGE_CURRENT = "number.inverter_battery_max_charging_current"
 INVERTER_MAX_DISCHARGE_CURRENT = "number.inverter_battery_max_discharging_current"
-INVERTER_WORK_MODE_SELECT = "select.inverter_work_mode"
-INVERTER_WORK_MODE_SELL_OPTION = "Export First"
-INVERTER_WORK_MODE_PV_CHARGE_OPTION = "Zero Export To CT"
-
 HOMEON_EXPORT_TARGET_W = 10000
 HOMEON_CHARGE_CURRENT_A = 80
 HOMEON_DISCHARGE_CURRENT_A = 120
@@ -98,8 +100,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             return default
 
     def _conf_bool(self, key: str, default: bool) -> bool:
-        value = self.entry.data.get(key, default)
+        value = self.entry.options.get(key, self.entry.data.get(key, default))
         return bool(value)
+
+    def _conf_value(self, key: str, default: Any = None) -> Any:
+        return self.entry.options.get(key, self.entry.data.get(key, default))
 
     def _state_float_by_entity(self, entity_id: str | None, default: float = 0.0) -> float:
         if not entity_id:
@@ -113,10 +118,15 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         if raw in (None, "", "unknown", "unavailable"):
             return default
 
-        return self._as_float(raw, default)
+        value = self._as_float(raw, default)
+        unit = str(state.attributes.get("unit_of_measurement", "")).strip().lower()
+        power_multiplier = {"w": 1.0, "kw": 1000.0, "mw": 1_000_000.0}.get(unit)
+        if value is not None and power_multiplier is not None:
+            return float(value) * power_multiplier
+        return value
 
     def _state_float_by_key(self, key: str, default: float = 0.0) -> float:
-        return self._state_float_by_entity(self.entry.data.get(key), default)
+        return self._state_float_by_entity(self._conf_value(key), default)
 
     def _state_text_by_entity(self, entity_id: str, default: str) -> str:
         state = self.hass.states.get(entity_id)
@@ -639,8 +649,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
     def _negative_price_plan(
         self,
-        buy_price_entity: str | None,
-        buy_price: float,
+        price_entity: str | None,
+        price: float,
         sell_price: float,
         soc: float,
         battery_capacity_kwh: float,
@@ -651,7 +661,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         sell_stats: dict[str, Any],
     ) -> dict[str, Any]:
         now = dt_util.now()
-        points = self._price_points_for_entity(buy_price_entity, buy_price, horizon_hours=12)
+        points = self._price_points_for_entity(price_entity, price, horizon_hours=12)
 
         negative_points = [
             p for p in points
@@ -669,21 +679,21 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "target_soc_before": 100.0,
             "prepare_export_w": 0.0,
             "strategy": "Brak ceny ujemnej w najbliższym oknie albo brak harmonogramu cen.",
-            "reason": "Nie znaleziono nadchodzącego okna ceny ujemnej w atrybutach ceny zakupu.",
+            "reason": "Nie znaleziono nadchodzącego okna ujemnej ceny sprzedaży.",
             "prepare": False,
             "now": False,
             "sell_block": bool(sell_price <= 0.0),
         }
 
         if not negative_points:
-            if buy_price <= 0.0:
+            if price <= 0.0:
                 result.update({
                     "status": "TERAZ",
                     "start": "teraz",
                     "end": "-",
-                    "min_price": round(buy_price, 3),
-                    "strategy": "Ładuj magazyn przy cenie ujemnej i blokuj eksport.",
-                    "reason": "Aktualna cena zakupu jest ujemna lub zerowa — priorytetem jest ładowanie magazynu i brak sprzedaży.",
+                    "min_price": round(price, 3),
+                    "strategy": "Ładuj magazyn przy ujemnej cenie sprzedaży i blokuj eksport.",
+                    "reason": "Aktualna cena sprzedaży jest ujemna lub zerowa — priorytetem jest ładowanie magazynu i brak eksportu.",
                     "now": True,
                 })
             elif sell_price <= 0.0:
@@ -712,7 +722,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         end_dt = group[-1]["dt"] + timedelta(hours=1)
         min_price = min(float(x["price"]) for x in group)
 
-        now_active = bool((buy_price <= 0.0) or (start_dt <= now + timedelta(minutes=10) and end_dt > now))
+        now_active = bool((price <= 0.0) or (start_dt <= now + timedelta(minutes=10) and end_dt > now))
         hours_to_start = max(0.0, (start_dt - now).total_seconds() / 3600.0)
         duration_h = max(1.0, (end_dt - start_dt).total_seconds() / 3600.0)
 
@@ -754,7 +764,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             status = "TERAZ"
             strategy = "Cena ujemna trwa teraz — ładuj magazyn i blokuj eksport."
             reason = (
-                f"Cena zakupu {buy_price:.3f} PLN/kWh. "
+                f"Cena sprzedaży {price:.3f} PLN/kWh. "
                 "HomeOn powinien ładować magazyn, blokować sprzedaż i zatrzymać eksport baterii."
             )
         elif prepare:
@@ -916,16 +926,16 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         mode = str(data.get("mode", "NORMAL"))
 
         def conf_entity(key: str, default: str) -> str:
-            text = str(self.entry.data.get(key, default) or "").strip()
+            text = str(self._conf_value(key, default) or "").strip()
             return text if text else default
 
         inverter_grid_charging = conf_entity(CONF_INVERTER_GRID_CHARGING_SWITCH, INVERTER_GRID_CHARGING)
         inverter_export_surplus = conf_entity(CONF_INVERTER_EXPORT_SURPLUS_SWITCH, INVERTER_EXPORT_SURPLUS)
         inverter_max_charge_current = conf_entity(CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER, INVERTER_MAX_CHARGE_CURRENT)
         inverter_max_discharge_current = conf_entity(CONF_INVERTER_MAX_DISCHARGE_CURRENT_NUMBER, INVERTER_MAX_DISCHARGE_CURRENT)
-        inverter_work_mode_select = INVERTER_WORK_MODE_SELECT
-        inverter_work_mode_sell_option = INVERTER_WORK_MODE_SELL_OPTION
-        inverter_work_mode_pv_charge_option = INVERTER_WORK_MODE_PV_CHARGE_OPTION
+        inverter_work_mode_select = conf_entity(CONF_INVERTER_WORK_MODE_SELECT, DEFAULT_INVERTER_WORK_MODE_SELECT)
+        inverter_work_mode_sell_option = conf_entity(CONF_INVERTER_WORK_MODE_SELL_OPTION, DEFAULT_INVERTER_WORK_MODE_SELL_OPTION)
+        inverter_work_mode_pv_charge_option = conf_entity(CONF_INVERTER_WORK_MODE_PV_CHARGE_OPTION, DEFAULT_INVERTER_WORK_MODE_PV_CHARGE_OPTION)
         inverter_work_mode_state = self.hass.states.get(inverter_work_mode_select)
         inverter_work_mode_current = str(inverter_work_mode_state.state) if inverter_work_mode_state is not None else "BRAK_ENCJI"
 
@@ -1392,7 +1402,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         pv_tomorrow = self._state_float_by_key(CONF_PV_FORECAST_TOMORROW_SENSOR)
 
         sell_stats = self._price_stats_from_entity(
-            self.entry.data.get(CONF_SELL_PRICE_SENSOR),
+            self._conf_value(CONF_SELL_PRICE_SENSOR),
             sell_price_sensor_state,
         )
         sell_price = self._as_float(
@@ -1426,7 +1436,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data_quality_warnings: list[str] = []
 
         def _check_required_number(label: str, key: str, min_v: float | None = None, max_v: float | None = None) -> float | None:
-            entity_id = self.entry.data.get(key)
+            entity_id = self._conf_value(key)
 
             if not entity_id:
                 data_quality_errors.append(f"{label}: brak konfiguracji encji")
@@ -1444,7 +1454,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 data_quality_errors.append(f"{label}: stan {raw}")
                 return None
 
-            value = self._as_float(raw, None)
+            value = self._state_float_by_entity(entity_id, None)
 
             if value is None:
                 data_quality_errors.append(f"{label}: nie jest liczbą ({raw})")
@@ -1479,6 +1489,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         if emergency_soc > min_soc:
             data_quality_warnings.append("Awaryjny SOC jest wyższy niż minimalny SOC")
+
+        configured_night_with_margin_kwh = night_consumption_kwh * night_safety_margin
+        if battery_capacity_kwh > 0 and configured_night_with_margin_kwh >= battery_capacity_kwh:
+            data_quality_warnings.append(
+                f"Zużycie nocne z zapasem ({configured_night_with_margin_kwh:.1f} kWh) "
+                f"przekracza pojemność magazynu ({battery_capacity_kwh:.1f} kWh); "
+                "rezerwa nocna może ograniczyć cele SOC do 95%"
+            )
 
         if pv_power < -100:
             data_quality_warnings.append(f"Moc PV jest ujemna: {pv_power:.0f} W")
@@ -1677,8 +1695,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         # HOMEON_NEGATIVE_PRICE_WINDOW_START
         negative_price_plan = self._negative_price_plan(
-            self.entry.data.get(CONF_BUY_PRICE_SENSOR),
-            buy_price,
+            self._conf_value(CONF_SELL_PRICE_SENSOR),
+            sell_price,
             sell_price,
             soc,
             battery_capacity_kwh,
@@ -1690,7 +1708,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         )
 
         pv_low_price_plan = self._pv_low_price_window_plan(
-            self.entry.data.get(CONF_SELL_PRICE_SENSOR),
+            self._conf_value(CONF_SELL_PRICE_SENSOR),
             sell_price,
             pv_today,
             battery_capacity_kwh,
