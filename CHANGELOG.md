@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.9
+
+- diagnostyka Deye nie pokazuje już `unknown`, gdy sterowanie jest celowo wyłączone lub zablokowane,
+- encje ustawień `number` i `switch` zostały przeniesione do kategorii konfiguracyjnej,
+- dokumentacja wyjaśnia edycję konfiguracji, nazwy trybów Deye i zależność rezerwy nocnej od pojemności magazynu,
+- formularz konfiguracji ostrzega o powiązaniu pojemności baterii, zużycia nocnego i marginesu.
+
 ## 1.2.8
 
 - przeliczanie mocy raportowanej w `kW` i `MW` do watów przed użyciem w algorytmie i diagnostyce,

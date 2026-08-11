@@ -34,6 +34,7 @@ jobs:
           python -m json.tool custom_components/homeon_energy_manager/manifest.json >/dev/null
           python -m json.tool custom_components/homeon_energy_manager/translations/pl.json >/dev/null
           python -m json.tool custom_components/homeon_energy_manager/translations/en.json >/dev/null
+          python -m unittest discover -s tests -v
 
       - name: Read integration version
         id: version
@@ -62,5 +63,5 @@ jobs:
           set -euo pipefail
           tag="v$VERSION"
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --target "$GITHUB_SHA" --title "HomeOn Energy Manager $VERSION" --generate-notes
+            gh release create "$tag" --target "$GITHUB_SHA" --title "HomeOn Energy Manager v$VERSION" --generate-notes
           fi

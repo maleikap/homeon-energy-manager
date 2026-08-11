@@ -883,8 +883,29 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         enabled = bool(store.get("enabled", True))
         dry_run = bool(store.get("dry_run", True))
 
+        # These values are configuration/runtime diagnostics, so they are known
+        # even when inverter control exits early.  Populate them before any guard
+        # to avoid misleading `unknown` states while control or battery trading
+        # is intentionally disabled.
+        data["deye_driver_safety_status"] = "IDLE"
+        data["deye_driver_block_reason"] = "Sterowanie falownikiem nie zostało uruchomione"
+        data["deye_driver_min_interval_seconds"] = round(
+            max(0.0, self._runtime_float("deye_min_command_interval_seconds", 120.0)),
+            0,
+        )
+        data["deye_driver_max_changes_per_run"] = round(
+            max(1.0, self._runtime_float("deye_max_changes_per_run", 6.0)),
+            0,
+        )
+        data["deye_driver_changed_count_runtime"] = 0
+        data["deye_driver_last_control_hash"] = "Brak planu"
+        data["deye_command_confirmation"] = "IDLE"
+        data["deye_command_confirmation_reason"] = "Nie wysłano komend Deye"
+
         # HOMEON_HOME_BATTERY_PRIORITY_EXEC_GUARD
         if str(data.get("home_battery_protection", "OFF")).upper() == "ON" and not bool(store.get("battery_trade", False)):
+            data["deye_driver_safety_status"] = "BLOCKED_HOME_PRIORITY"
+            data["deye_driver_block_reason"] = "Ochrona zasilania domu"
             data["inverter_control_action"] = "Ochrona domu — bateria zasila gospodarstwo, nie zmieniam nastaw Deye"
             data["inverter_control_executor_mode"] = "BLOCKED_HOME_PRIORITY"
             data["inverter_control_last_result"] = (
@@ -904,6 +925,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             return data
 
         if str(data.get("mode", "")).upper() == "HOME_BATTERY_PRIORITY":
+            data["deye_driver_safety_status"] = "BLOCKED_BATTERY_TRADE_OFF"
+            data["deye_driver_block_reason"] = "Handel baterią jest wyłączony"
             data["inverter_control_action"] = "Ochrona domu — tryb handlu baterią wyłączony, nie ustawiam Export First"
             data["inverter_control_executor_mode"] = "BLOCKED_BATTERY_TRADE_OFF"
             data["inverter_control_last_result"] = (
@@ -1007,12 +1030,16 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["inverter_deye_test_mode"] = "OFF"
 
         if not enabled:
+            data["deye_driver_safety_status"] = "DISABLED"
+            data["deye_driver_block_reason"] = "HomeOn jest wyłączony"
             data["inverter_control_action"] = "HomeOn wyłączony — nie steruję falownikiem"
             data["inverter_control_last_result"] = "OFF"
             data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
             return data
 
         if not inverter_control:
+            data["deye_driver_safety_status"] = "DISABLED"
+            data["deye_driver_block_reason"] = "Sterowanie falownikiem jest wyłączone"
             data["inverter_control_action"] = "Sterowanie falownikiem wyłączone"
             data["inverter_control_last_result"] = "OFF"
             data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
