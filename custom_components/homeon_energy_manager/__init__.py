@@ -37,7 +37,12 @@ DEFAULT_RUNTIME_OPTIONS = {
 }
 
 
+async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     coordinator = HomeOnEnergyCoordinator(hass, entry)
 
     hass.data.setdefault(DOMAIN, {})
