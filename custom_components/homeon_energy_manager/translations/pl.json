@@ -28,7 +28,50 @@
           "inverter_grid_charging_switch": "Falownik: przełącznik ładowania z sieci",
           "inverter_export_surplus_switch": "Falownik: przełącznik eksportu nadwyżki",
           "inverter_max_charge_current_number": "Falownik: maksymalny prąd ładowania",
-          "inverter_max_discharge_current_number": "Falownik: maksymalny prąd rozładowania"
+          "inverter_max_discharge_current_number": "Falownik: maksymalny prąd rozładowania",
+          "inverter_work_mode_select": "Falownik: encja trybu pracy",
+          "inverter_work_mode_sell_option": "Nazwa trybu sprzedaży z baterii",
+          "inverter_work_mode_pv_charge_option": "Nazwa trybu normalnej pracy i ładowania PV"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "HomeOn Energy Manager jest już skonfigurowany."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Ustawienia HomeOn Energy Manager",
+        "description": "Zmień encje i parametry bez usuwania integracji.",
+        "data": {
+          "soc_sensor": "SOC magazynu energii",
+          "battery_power_sensor": "Moc baterii",
+          "pv_power_sensor": "Moc PV",
+          "load_power_sensor": "Moc domu",
+          "grid_power_sensor": "Moc sieci",
+          "buy_price_sensor": "Cena zakupu energii",
+          "sell_price_sensor": "Cena sprzedaży energii",
+          "pv_forecast_today_sensor": "Prognoza PV dziś",
+          "pv_forecast_tomorrow_sensor": "Prognoza PV jutro",
+          "battery_capacity_kwh": "Pojemność magazynu kWh",
+          "min_soc": "Minimalny SOC",
+          "emergency_soc": "Awaryjny SOC",
+          "night_consumption_kwh": "Zużycie nocne kWh",
+          "night_safety_margin": "Margines bezpieczeństwa nocy",
+          "min_night_reserve_soc": "Minimalna rezerwa nocna SOC",
+          "battery_discharge_positive": "Dodatnia moc baterii oznacza rozładowanie",
+          "grid_import_positive": "Dodatnia moc sieci oznacza import",
+          "pv_medium_forecast_kwh": "Średnia prognoza PV kWh",
+          "pv_good_forecast_kwh": "Dobra prognoza PV kWh",
+          "pv_very_good_forecast_kwh": "Bardzo dobra prognoza PV kWh",
+          "inverter_grid_charging_switch": "Falownik: przełącznik ładowania z sieci",
+          "inverter_export_surplus_switch": "Falownik: przełącznik eksportu nadwyżki",
+          "inverter_max_charge_current_number": "Falownik: maksymalny prąd ładowania",
+          "inverter_max_discharge_current_number": "Falownik: maksymalny prąd rozładowania",
+          "inverter_work_mode_select": "Falownik: encja trybu pracy",
+          "inverter_work_mode_sell_option": "Nazwa trybu sprzedaży z baterii",
+          "inverter_work_mode_pv_charge_option": "Nazwa trybu normalnej pracy i ładowania PV"
         }
       }
     }
