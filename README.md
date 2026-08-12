@@ -252,6 +252,10 @@ ha core check
   <p><strong>Dziękuję za każde wsparcie projektu.</strong></p>
 </div>
 
+## Licencja
+
+HomeOn Energy Manager jest oprogramowaniem własnościowym udostępnionym publicznie do wglądu i dozwolonego użycia. Kod nie jest projektem open source. Kopiowanie, modyfikowanie, redystrybucja, sprzedaż, tworzenie wersji pochodnych lub wykorzystywanie go w innym produkcie bez wcześniejszej pisemnej zgody właściciela jest zabronione. Szczegóły znajdują się w pliku [LICENSE](LICENSE).
+
 
 ### Zakończenie sprzedaży baterii
 
