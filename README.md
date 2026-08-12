@@ -80,7 +80,7 @@ HomeOn Energy Manager potrzebuje co najmniej:
 - nastawy maksymalnego prądu ładowania,
 - nastawy maksymalnego prądu rozładowania.
 
-Do pełnego sterowania Deye potrzebna jest również encja trybu pracy falownika udostępniająca właściwe opcje `Export First` i `Zero Export To CT`.
+Do pełnego sterowania Deye potrzebna jest również encja trybu pracy falownika. Jej `entity_id` oraz dokładne nazwy opcji sprzedaży i normalnej pracy wybiera się w konfiguracji HomeOn. Domyślne wartości to `select.inverter_work_mode`, `Export First` i `Zero Export To CT`, ale nie muszą tak samo nazywać się w każdej wersji integracji lub firmware Deye.
 
 W zwykłej pracy i podczas wybranych najgorszych godzin manager ustawia `Zero Export To CT`, aby falownik zasilał dom i ładował magazyn. Przed tymi godzinami tryb `PV_PRICE_EXPORT` używa `Export First` z zablokowanym rozładowaniem baterii: bieżąca produkcja PV trafia do domu i sieci, a magazyn zachowuje wolne miejsce na późniejsze ładowanie. Tak samo działa oczekiwanie z baterią na lepszą cenę sprzedaży. Przy dodatniej cenie manager włącza `Sell Solar`, a przy cenie zerowej lub ujemnej go wyłącza. Manager nigdy nie zmienia nastawy `Solar Sell Power`, także podczas sprzedaży baterii i przygotowania miejsca przed ceną ujemną. Właściwy limit eksportu należy ustawić bezpośrednio w Deye.
 
@@ -115,6 +115,10 @@ Podczas dodawania integracji należy wskazać:
 - encje sterujące falownikiem.
 
 Po instalacji sterowanie falownikiem jest wyłączone, a `dry-run` włączony. Pozwala to sprawdzić decyzje managera przed wysłaniem rzeczywistych poleceń.
+
+Encje i parametry można później zmienić przez **Ustawienia → Urządzenia i usługi → HomeOn Energy Manager → Konfiguruj**, bez usuwania integracji. W tym miejscu można również dopasować encję trybu pracy falownika oraz dokładne nazwy opcji Deye.
+
+Ustawiając pojemność magazynu, należy sprawdzić również **Zużycie nocne** i **Margines bezpieczeństwa nocy**. Jeżeli zużycie nocne pomnożone przez margines jest równe pojemności magazynu lub ją przekracza, rezerwa zostanie ograniczona do 95% i może zablokować zmienność celów SOC. HomeOn pokaże wtedy ostrzeżenie diagnostyczne.
 
 ### Pojemność magazynu
 
@@ -247,6 +251,10 @@ ha core check
   </p>
   <p><strong>Dziękuję za każde wsparcie projektu.</strong></p>
 </div>
+
+## Licencja
+
+HomeOn Energy Manager jest oprogramowaniem własnościowym udostępnionym publicznie do wglądu i dozwolonego użycia. Kod nie jest projektem open source. Kopiowanie, modyfikowanie, redystrybucja, sprzedaż, tworzenie wersji pochodnych lub wykorzystywanie go w innym produkcie bez wcześniejszej pisemnej zgody właściciela jest zabronione. Szczegóły znajdują się w pliku [LICENSE](LICENSE).
 
 
 ### Zakończenie sprzedaży baterii

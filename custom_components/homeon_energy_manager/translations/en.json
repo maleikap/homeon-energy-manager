@@ -33,6 +33,11 @@
           "inverter_work_mode_select": "Inverter: work mode entity",
           "inverter_work_mode_sell_option": "Battery export mode name",
           "inverter_work_mode_pv_charge_option": "Normal operation and PV charging mode name"
+        },
+        "data_description": {
+          "battery_capacity_kwh": "Actual usable capacity of the complete battery system.",
+          "night_consumption_kwh": "Review this value after changing battery capacity. Night consumption with its margin should not exceed battery capacity.",
+          "night_safety_margin": "Night reserve multiplier. An excessive value can raise the minimum SOC target to 95%."
         }
       }
     },
@@ -73,6 +78,11 @@
           "inverter_work_mode_select": "Inverter: work mode entity",
           "inverter_work_mode_sell_option": "Battery export mode name",
           "inverter_work_mode_pv_charge_option": "Normal operation and PV charging mode name"
+        },
+        "data_description": {
+          "battery_capacity_kwh": "Actual usable capacity of the complete battery system.",
+          "night_consumption_kwh": "Review this value after changing battery capacity. Night consumption with its margin should not exceed battery capacity.",
+          "night_safety_margin": "Night reserve multiplier. An excessive value can raise the minimum SOC target to 95%."
         }
       }
     }

@@ -32,6 +32,11 @@
           "inverter_work_mode_select": "Falownik: encja trybu pracy",
           "inverter_work_mode_sell_option": "Nazwa trybu sprzedaży z baterii",
           "inverter_work_mode_pv_charge_option": "Nazwa trybu normalnej pracy i ładowania PV"
+        },
+        "data_description": {
+          "battery_capacity_kwh": "Rzeczywista użyteczna pojemność całego magazynu.",
+          "night_consumption_kwh": "Sprawdź tę wartość po zmianie pojemności magazynu. Zużycie nocne z marginesem nie powinno przekraczać pojemności baterii.",
+          "night_safety_margin": "Mnożnik rezerwy nocnej. Zbyt wysoka wartość może podnieść minimalny cel SOC do 95%."
         }
       }
     },
@@ -72,6 +77,11 @@
           "inverter_work_mode_select": "Falownik: encja trybu pracy",
           "inverter_work_mode_sell_option": "Nazwa trybu sprzedaży z baterii",
           "inverter_work_mode_pv_charge_option": "Nazwa trybu normalnej pracy i ładowania PV"
+        },
+        "data_description": {
+          "battery_capacity_kwh": "Rzeczywista użyteczna pojemność całego magazynu.",
+          "night_consumption_kwh": "Sprawdź tę wartość po zmianie pojemności magazynu. Zużycie nocne z marginesem nie powinno przekraczać pojemności baterii.",
+          "night_safety_margin": "Mnożnik rezerwy nocnej. Zbyt wysoka wartość może podnieść minimalny cel SOC do 95%."
         }
       }
     }
