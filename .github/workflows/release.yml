@@ -100,3 +100,23 @@ jobs:
           done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/tags" --jq '.[].ref')
 
           printf 'Pozostawione wersje: %s, %s\n' "${keep_tags[0]}" "${keep_tags[1]}"
+
+      - name: Remove obsolete merged branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          while IFS= read -r branch; do
+            [[ -z "$branch" || "$branch" == "main" ]] && continue
+            encoded_branch="${branch//\//%2F}"
+            if gh api "repos/$GITHUB_REPOSITORY/branches/$encoded_branch" >/dev/null 2>&1; then
+              gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$encoded_branch"
+            fi
+          done < <(
+            {
+              gh pr list --state merged --limit 100 --json headRefName --jq '.[].headRefName'
+              printf '%s\n' 'test/0.2.44-beta.1'
+            } | sort -u
+          )
