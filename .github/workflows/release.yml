@@ -7,6 +7,7 @@ on:
     paths:
       - custom_components/homeon_energy_manager/**
       - hacs.json
+      - .github/workflows/release.yml
   workflow_dispatch:
 
 permissions:
@@ -65,3 +66,37 @@ jobs:
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --target "$GITHUB_SHA" --title "HomeOn Energy Manager v$VERSION" --generate-notes
           fi
+
+      - name: Keep only the two newest versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t keep_tags < <(
+            gh release list --limit 100 --json tagName,publishedAt \
+              --jq 'sort_by(.publishedAt) | reverse | .[0:2] | .[].tagName'
+          )
+          test "${#keep_tags[@]}" -eq 2
+
+          should_keep() {
+            [[ "$1" == "${keep_tags[0]}" || "$1" == "${keep_tags[1]}" ]]
+          }
+
+          while IFS= read -r old_tag; do
+            [[ -z "$old_tag" ]] && continue
+            if ! should_keep "$old_tag"; then
+              gh release delete "$old_tag" --yes --cleanup-tag
+            fi
+          done < <(gh release list --limit 100 --json tagName --jq '.[].tagName')
+
+          while IFS= read -r tag_ref; do
+            [[ -z "$tag_ref" ]] && continue
+            tag="${tag_ref#refs/tags/}"
+            if ! should_keep "$tag"; then
+              gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag"
+            fi
+          done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/tags" --jq '.[].ref')
+
+          printf 'Pozostawione wersje: %s, %s\n' "${keep_tags[0]}" "${keep_tags[1]}"
