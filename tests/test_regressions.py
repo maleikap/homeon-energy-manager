@@ -40,10 +40,22 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.9", manifest["version"])
+        self.assertEqual("1.2.10", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.9"', source)
+            self.assertIn('"sw_version": "1.2.10"', source)
+
+    def test_wait_for_better_price_charges_pv_instead_of_exporting(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        branch_start = source.index('elif mode == "WAIT_BETTER_SELL_PRICE":')
+        branch_end = source.index('elif mode == "PV_CHARGE":', branch_start)
+        branch = source[branch_start:branch_end]
+
+        self.assertIn("inverter_work_mode_pv_charge_option", branch)
+        self.assertIn("sw(inverter_export_surplus, False)", branch)
+        self.assertIn("num(inverter_max_charge_current, inverter_charge_current_a)", branch)
+        self.assertIn("num(inverter_max_discharge_current, 0.0)", branch)
+        self.assertNotIn("inverter_work_mode_sell_option", branch)
 
 
 if __name__ == "__main__":
