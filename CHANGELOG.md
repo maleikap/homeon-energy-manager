@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.10
+
+- podczas oczekiwania na lepszą cenę nadwyżka PV najpierw ładuje magazyn zamiast trafiać do sieci,
+- tryb oczekiwania używa `Zero Export To CT`, wyłącza `Sell Solar` i blokuje rozładowanie baterii wartością 0 A,
+- ładowanie z sieci pozostaje wyłączone; magazyn jest przygotowywany do sprzedaży w najlepszym oknie cenowym.
+
 ## 1.2.9
 
 - diagnostyka Deye nie pokazuje już `unknown`, gdy sterowanie jest celowo wyłączone lub zablokowane,

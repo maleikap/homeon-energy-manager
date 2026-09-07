@@ -1169,12 +1169,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "WAIT_BETTER_SELL_PRICE":
-            action = "Czekam z baterią na lepszą cenę — Export First sprzedaje tylko produkcję PV, a blokada rozładowania chroni magazyn"
-            data["inverter_work_mode_target"] = inverter_work_mode_sell_option
-            sel(inverter_work_mode_select, inverter_work_mode_sell_option)
+            action = "Czekam na lepszą cenę — Zero Export To CT kieruje nadwyżkę PV do baterii i blokuje jej rozładowanie"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
-            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
-            sw(inverter_export_surplus, sell_solar_allowed)
+            sw(inverter_export_surplus, False)
+            num(inverter_max_charge_current, inverter_charge_current_a)
+            num(inverter_max_discharge_current, 0.0)
 
         elif mode == "PV_CHARGE":
             action = "Ładowanie z PV — Zero Export To CT; Deye ładuje magazyn i sprzedaje nadwyżkę przy dodatniej cenie"
