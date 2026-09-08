@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.10", manifest["version"])
+        self.assertEqual("1.2.11", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.10"', source)
+            self.assertIn('"sw_version": "1.2.11"', source)
 
     def test_wait_for_better_price_charges_pv_instead_of_exporting(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -56,6 +56,16 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("num(inverter_max_charge_current, inverter_charge_current_a)", branch)
         self.assertIn("num(inverter_max_discharge_current, 0.0)", branch)
         self.assertNotIn("inverter_work_mode_sell_option", branch)
+
+    def test_wait_for_better_price_also_applies_below_good_sell_threshold(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        condition_start = source.index("wait_for_better_sell = bool(")
+        condition_end = source.index("\n        )", condition_start)
+        condition = source[condition_start:condition_end]
+
+        self.assertIn("best_sell_price >= sell_price + better_price_margin", condition)
+        self.assertIn("available_to_sell_kwh > 0.3", condition)
+        self.assertNotIn("sell_price_trigger", condition)
 
 
 if __name__ == "__main__":

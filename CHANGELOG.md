@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.11
+
+- oczekiwanie na najlepsze okno sprzedaży działa również wtedy, gdy bieżąca cena jest niższa od ręcznego progu dobrej sprzedaży,
+- po zakończeniu najtańszych godzin Manager nie eksportuje PV po niskiej cenie, jeżeli przed nami jest wyraźnie lepsza cena,
+- nadwyżka PV doładowuje wtedy magazyn do sprzedaży w korzystniejszym oknie.
+
 ## 1.2.10
 
 - podczas oczekiwania na lepszą cenę nadwyżka PV najpierw ładuje magazyn zamiast trafiać do sieci,
