@@ -1795,8 +1795,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         ) or 0.0
         better_price_margin = max(0.05, sell_price * 0.08)
         wait_for_better_sell = bool(
-            sell_price_trigger
-            and not sell_stats.get("sell_now_best", False)
+            not sell_stats.get("sell_now_best", False)
             and 15.0 < best_sell_minutes <= 24.0 * 60.0
             and best_sell_price >= sell_price + better_price_margin
             and available_to_sell_kwh > 0.3
