@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.12
+
+- pełny magazyn nie pozostaje w trybie ładowania podczas oczekiwania na lepszą cenę,
+- od 99% SOC bieżąca nadwyżka PV jest sprzedawana w `Zero Export To CT` bez celowego rozładowywania baterii,
+- chwilowy spadek produkcji PV nie uruchamia ochrony rezerwy przy pełnym magazynie.
+
 ## 1.2.11
 
 - oczekiwanie na najlepsze okno sprzedaży działa również wtedy, gdy bieżąca cena jest niższa od ręcznego progu dobrej sprzedaży,

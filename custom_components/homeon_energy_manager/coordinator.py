@@ -967,6 +967,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         inverter_discharge_current_a = self._runtime_float("inverter_discharge_current_a", HOMEON_DISCHARGE_CURRENT_A)
         inverter_safe_discharge_current_a = self._runtime_float("inverter_safe_discharge_current_a", HOMEON_SAFE_DISCHARGE_CURRENT_A)
         inverter_block_discharge_current_a = self._runtime_float("inverter_block_discharge_current_a", HOMEON_BLOCK_DISCHARGE_CURRENT_A)
+        current_soc = float(self._as_float(data.get("soc"), 0.0) or 0.0)
 
         plan_safe_export_limit_w = self._as_float(data.get("plan_safe_export_limit_w"), inverter_export_target_w)
         plan_safe_to_sell_kwh = self._as_float(data.get("plan_safe_to_sell_kwh"), 0.0)
@@ -1124,12 +1125,20 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
 
         elif mode == "PV_PRICE_EXPORT":
-            action = "Poza najgorszymi godzinami — Export First sprzedaje produkcję PV, a blokada rozładowania zachowuje puste miejsce w magazynie"
-            data["inverter_work_mode_target"] = inverter_work_mode_sell_option
-            sel(inverter_work_mode_select, inverter_work_mode_sell_option)
-            sw(inverter_grid_charging, False)
-            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
-            sw(inverter_export_surplus, sell_solar_allowed)
+            if current_soc >= 99.0:
+                action = "Magazyn pełny — Zero Export To CT sprzedaje bieżącą nadwyżkę PV bez rozładowywania baterii"
+                data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+                sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
+                sw(inverter_grid_charging, False)
+                num(inverter_max_discharge_current, 0.0)
+                sw(inverter_export_surplus, sell_solar_allowed)
+            else:
+                action = "Poza najgorszymi godzinami — Export First sprzedaje produkcję PV, a blokada rozładowania zachowuje puste miejsce w magazynie"
+                data["inverter_work_mode_target"] = inverter_work_mode_sell_option
+                sel(inverter_work_mode_select, inverter_work_mode_sell_option)
+                sw(inverter_grid_charging, False)
+                num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+                sw(inverter_export_surplus, sell_solar_allowed)
 
         elif (
             mode == "SELL_BATTERY_HIGH_PRICE"
@@ -1879,7 +1888,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif not battery_trade_enabled and sell_price >= economic_good_sell_price and soc > discharge_target_soc + 8:
             mode = "HOME_BATTERY_PRIORITY"
             reason = "Tryb handlu baterią jest wyłączony — nie sprzedaję energii z magazynu, bateria zostaje dla domu"
-        elif pv_reality_lock and soc > min_soc:
+        elif pv_reality_lock and min_soc < soc < 99.0:
             mode = "PV_REALITY_HOLD"
             reason = str(pv_reality.get("reason", "PV realnie słabe — chronię magazyn"))
         elif pv_low_price_plan.get("charge_now", False):
