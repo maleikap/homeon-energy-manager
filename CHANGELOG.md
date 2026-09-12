@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.13
+
+- dodano twardą blokadę prądu ładowania 0 A po osiągnięciu 99% SOC,
+- blokada pozostaje aktywna do spadku SOC do 97%, aby zapobiec szybkiemu przełączaniu ustawień,
+- przy pełnym magazynie ładowanie z sieci jest zawsze wyłączone, a przy dodatniej cenie sprzedawana jest tylko bieżąca nadwyżka PV.
+
 ## 1.2.12
 
 - pełny magazyn nie pozostaje w trybie ładowania podczas oczekiwania na lepszą cenę,

@@ -968,6 +968,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         inverter_safe_discharge_current_a = self._runtime_float("inverter_safe_discharge_current_a", HOMEON_SAFE_DISCHARGE_CURRENT_A)
         inverter_block_discharge_current_a = self._runtime_float("inverter_block_discharge_current_a", HOMEON_BLOCK_DISCHARGE_CURRENT_A)
         current_soc = float(self._as_float(data.get("soc"), 0.0) or 0.0)
+        full_soc_charge_lock = bool(getattr(self, "_homeon_full_soc_charge_lock", False))
+        if current_soc >= 99.0:
+            full_soc_charge_lock = True
+        elif current_soc <= 97.0:
+            full_soc_charge_lock = False
+        self._homeon_full_soc_charge_lock = full_soc_charge_lock
+        data["inverter_full_soc_charge_lock"] = "ON" if full_soc_charge_lock else "OFF"
 
         plan_safe_export_limit_w = self._as_float(data.get("plan_safe_export_limit_w"), inverter_export_target_w)
         plan_safe_to_sell_kwh = self._as_float(data.get("plan_safe_to_sell_kwh"), 0.0)
@@ -1125,7 +1132,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
 
         elif mode == "PV_PRICE_EXPORT":
-            if current_soc >= 99.0:
+            if full_soc_charge_lock:
                 action = "Magazyn pełny — Zero Export To CT sprzedaje bieżącą nadwyżkę PV bez rozładowywania baterii"
                 data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
                 sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
@@ -1178,13 +1185,17 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
         elif mode == "WAIT_BETTER_SELL_PRICE":
-            action = "Czekam na lepszą cenę — Zero Export To CT kieruje nadwyżkę PV do baterii i blokuje jej rozładowanie"
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
-            sw(inverter_export_surplus, False)
-            num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, 0.0)
+            if full_soc_charge_lock:
+                action = "Magazyn pełny — sprzedaję tylko nadwyżkę PV i blokuję dalsze ładowanie"
+                sw(inverter_export_surplus, sell_solar_allowed)
+            else:
+                action = "Czekam na lepszą cenę — Zero Export To CT kieruje nadwyżkę PV do baterii i blokuje jej rozładowanie"
+                sw(inverter_export_surplus, False)
+                num(inverter_max_charge_current, inverter_charge_current_a)
 
         elif mode == "PV_CHARGE":
             action = "Ładowanie z PV — Zero Export To CT; Deye ładuje magazyn i sprzedaje nadwyżkę przy dodatniej cenie"
@@ -1212,6 +1223,19 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_export_surplus, sell_solar_allowed)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+
+        if full_soc_charge_lock:
+            desired = [
+                command
+                for command in desired
+                if not (
+                    (command[0] == "number" and command[1] == inverter_max_charge_current)
+                    or (command[0] == "switch" and command[1] == inverter_grid_charging)
+                )
+            ]
+            num(inverter_max_charge_current, 0.0)
+            sw(inverter_grid_charging, False)
+            action = f"{action}; ochrona pełnego SOC: prąd ładowania 0 A"
 
         data["inverter_control_executor_mode"] = executor_mode
         data["inverter_control_action"] = action
