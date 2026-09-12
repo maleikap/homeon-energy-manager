@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.14
+
+- obniżono bezpieczny próg blokady ładowania do 95% SOC po alarmie nadnapięcia DC,
+- ponowne ładowanie jest dozwolone dopiero po spadku SOC do 90%, co usuwa cykliczne skoki produkcji PV,
+- ocena słabego PV nie steruje rezerwą przy SOC od 90%, ponieważ ograniczona produkcja może wynikać z pracy falownika, a nie z pogody.
+
 ## 1.2.13
 
 - dodano twardą blokadę prądu ładowania 0 A po osiągnięciu 99% SOC,

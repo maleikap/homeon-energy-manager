@@ -969,9 +969,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         inverter_block_discharge_current_a = self._runtime_float("inverter_block_discharge_current_a", HOMEON_BLOCK_DISCHARGE_CURRENT_A)
         current_soc = float(self._as_float(data.get("soc"), 0.0) or 0.0)
         full_soc_charge_lock = bool(getattr(self, "_homeon_full_soc_charge_lock", False))
-        if current_soc >= 99.0:
+        if current_soc >= 95.0:
             full_soc_charge_lock = True
-        elif current_soc <= 97.0:
+        elif current_soc <= 90.0:
             full_soc_charge_lock = False
         self._homeon_full_soc_charge_lock = full_soc_charge_lock
         data["inverter_full_soc_charge_lock"] = "ON" if full_soc_charge_lock else "OFF"
@@ -1912,7 +1912,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif not battery_trade_enabled and sell_price >= economic_good_sell_price and soc > discharge_target_soc + 8:
             mode = "HOME_BATTERY_PRIORITY"
             reason = "Tryb handlu baterią jest wyłączony — nie sprzedaję energii z magazynu, bateria zostaje dla domu"
-        elif pv_reality_lock and min_soc < soc < 99.0:
+        elif pv_reality_lock and min_soc < soc < 90.0:
             mode = "PV_REALITY_HOLD"
             reason = str(pv_reality.get("reason", "PV realnie słabe — chronię magazyn"))
         elif pv_low_price_plan.get("charge_now", False):
