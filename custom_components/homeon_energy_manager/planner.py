@@ -329,7 +329,7 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     current_phase = _phase(now.hour)
     current_mode = str(data.get("mode", "NORMAL"))
 
-    if current_mode == "WAIT_BETTER_SELL_PRICE" and soc >= 99.0 and sell_price_now > 0.0:
+    if current_mode == "WAIT_BETTER_SELL_PRICE" and soc >= 95.0 and sell_price_now > 0.0:
         data["mode"] = "PV_PRICE_EXPORT"
         current_mode = "PV_PRICE_EXPORT"
         data["reason"] = (
