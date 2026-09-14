@@ -1188,12 +1188,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
-            num(inverter_max_discharge_current, 0.0)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
             if full_soc_charge_lock:
-                action = "Magazyn pełny — sprzedaję tylko nadwyżkę PV i blokuję dalsze ładowanie"
+                action = "Magazyn pełny — sprzedaję tylko nadwyżkę PV, a bateria może zasilać dom"
                 sw(inverter_export_surplus, sell_solar_allowed)
             else:
-                action = "Czekam na lepszą cenę — Zero Export To CT kieruje nadwyżkę PV do baterii i blokuje jej rozładowanie"
+                action = "Czekam na lepszą cenę — bateria zasila dom, ale nie jest sprzedawana do sieci"
                 sw(inverter_export_surplus, False)
                 num(inverter_max_charge_current, inverter_charge_current_a)
 
