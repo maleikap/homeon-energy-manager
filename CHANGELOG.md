@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.15
+
+- usunięto 15-minutową lukę przed najlepszym oknem sprzedaży,
+- Manager zachowuje energię w baterii aż do faktycznego rozpoczęcia lepszej ceny,
+- bieżący ręczny próg dobrej sprzedaży nie uruchamia już rozładowania w ostatnich 15 minutach oczekiwania.
+
 ## 1.2.14
 
 - obniżono bezpieczny próg blokady ładowania do 95% SOC po alarmie nadnapięcia DC,

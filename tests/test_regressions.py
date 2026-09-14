@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.14", manifest["version"])
+        self.assertEqual("1.2.15", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.14"', source)
+            self.assertIn('"sw_version": "1.2.15"', source)
 
     def test_wait_for_better_price_charges_pv_instead_of_exporting(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -90,6 +90,16 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("if full_soc_charge_lock:", source)
         self.assertIn("num(inverter_max_charge_current, 0.0)", source)
         self.assertIn("sw(inverter_grid_charging, False)", source)
+
+
+    def test_wait_for_better_price_has_no_fifteen_minute_gap(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        condition_start = source.index("wait_for_better_sell = bool(")
+        condition_end = source.index("\n        )", condition_start)
+        condition = source[condition_start:condition_end]
+
+        self.assertIn("0.0 < best_sell_minutes", condition)
+        self.assertNotIn("15.0 < best_sell_minutes", condition)
 
 
 if __name__ == "__main__":
