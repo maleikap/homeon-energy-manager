@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.16
+
+- podczas oczekiwania na najlepszą cenę bateria może normalnie zasilać dom,
+- `Zero Export To CT` i wyłączony `Sell Solar` nadal blokują przedwczesną sprzedaż baterii do sieci,
+- drogi import nie jest już wymuszany przez ustawienie prądu rozładowania na 0 A.
+
 ## 1.2.15
 
 - usunięto 15-minutową lukę przed najlepszym oknem sprzedaży,
