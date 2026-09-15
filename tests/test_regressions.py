@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.17", manifest["version"])
+        self.assertEqual("1.2.18", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.17"', source)
+            self.assertIn('"sw_version": "1.2.18"', source)
 
     def test_wait_for_better_price_charges_pv_instead_of_exporting(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -70,7 +70,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
     def test_full_battery_exports_pv_without_battery_discharge(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
         planner = (COMPONENT / "planner.py").read_text(encoding="utf-8")
-        branch_start = coordinator.index("elif full_soc_charge_lock and sell_solar_allowed:")
+        branch_start = coordinator.index("elif (\n            full_soc_charge_lock")
         branch_end = coordinator.index("elif weather_lock:", branch_start)
         branch = coordinator[branch_start:branch_end]
 
@@ -79,6 +79,8 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("sw(inverter_export_surplus, True)", branch)
         self.assertIn("num(inverter_max_charge_current, 0.0)", branch)
         self.assertIn("num(inverter_max_discharge_current, 0.0)", branch)
+        self.assertIn('"SELL_BATTERY_HIGH_PRICE"', branch)
+        self.assertIn('"PREPARE_NEGATIVE_PRICE_WINDOW"', branch)
         self.assertIn('current_mode == "WAIT_BETTER_SELL_PRICE" and soc >= 95.0', planner)
         self.assertIn("pv_reality_lock and min_soc < soc < 90.0", coordinator)
 
