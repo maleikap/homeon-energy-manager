@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.17
+
+- pełny magazyn przy dodatniej cenie przełącza Deye na `Export First`,
+- `Sell Solar` pozostaje włączone, aby falownik nie ograniczał bieżącej produkcji PV,
+- prąd ładowania i rozładowania jest ustawiany na 0 A, więc bateria nie jest dociskana ani sprzedawana,
+- histereza 95–90% zapobiega częstemu przełączaniu trybów.
+
 ## 1.2.16
 
 - podczas oczekiwania na najlepszą cenę bateria może normalnie zasilać dom,
