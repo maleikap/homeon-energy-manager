@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.18
+
+- ochrona pełnego magazynu nie blokuje sprzedaży baterii w najlepszym oknie cenowym,
+- tryb `SELL_BATTERY_HIGH_PRICE` ponownie otrzymuje ustawiony prąd rozładowania,
+- pełny magazyn nadal nie jest dociskany podczas sprzedaży samej nadwyżki PV.
+
 ## 1.2.17
 
 - pełny magazyn przy dodatniej cenie przełącza Deye na `Export First`,

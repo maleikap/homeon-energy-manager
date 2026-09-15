@@ -1075,7 +1075,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_grid_charging, False)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
-        elif full_soc_charge_lock and sell_solar_allowed:
+        elif (
+            full_soc_charge_lock
+            and sell_solar_allowed
+            and mode not in ("SELL_BATTERY_HIGH_PRICE", "PREPARE_NEGATIVE_PRICE_WINDOW")
+        ):
             executor_mode = "FULL_BATTERY_PV_EXPORT"
             action = "Magazyn pełny i cena dodatnia — Export First sprzedaje wyłącznie bieżącą nadwyżkę PV"
             data["inverter_work_mode_target"] = inverter_work_mode_sell_option
