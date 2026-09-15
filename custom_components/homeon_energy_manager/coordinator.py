@@ -1075,6 +1075,16 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_grid_charging, False)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
+        elif full_soc_charge_lock and sell_solar_allowed:
+            executor_mode = "FULL_BATTERY_PV_EXPORT"
+            action = "Magazyn pełny i cena dodatnia — Export First sprzedaje wyłącznie bieżącą nadwyżkę PV"
+            data["inverter_work_mode_target"] = inverter_work_mode_sell_option
+            sel(inverter_work_mode_select, inverter_work_mode_sell_option)
+            sw(inverter_export_surplus, True)
+            sw(inverter_grid_charging, False)
+            num(inverter_max_charge_current, 0.0)
+            num(inverter_max_discharge_current, 0.0)
+
         elif weather_lock:
             executor_mode = "WEATHER_HOLD_RESERVE"
             action = "Pogoda/PV: ustawiam Zero Export To CT i zostawiam energię na kolejny dzień"
