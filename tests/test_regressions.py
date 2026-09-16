@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.18", manifest["version"])
+        self.assertEqual("1.2.19", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.18"', source)
+            self.assertIn('"sw_version": "1.2.19"', source)
 
     def test_wait_for_better_price_charges_pv_instead_of_exporting(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -81,7 +81,9 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("num(inverter_max_discharge_current, 0.0)", branch)
         self.assertIn('"SELL_BATTERY_HIGH_PRICE"', branch)
         self.assertIn('"PREPARE_NEGATIVE_PRICE_WINDOW"', branch)
-        self.assertIn('current_mode == "WAIT_BETTER_SELL_PRICE" and soc >= 95.0', planner)
+        self.assertIn("pv_export_surplus_w > 50.0", branch)
+        self.assertIn('current_mode == "WAIT_BETTER_SELL_PRICE"', planner)
+        self.assertIn('_f(data.get("pv_power"), 0.0) > _f(data.get("load_power"), 0.0) + 50.0', planner)
         self.assertIn("pv_reality_lock and min_soc < soc < 90.0", coordinator)
 
     def test_full_soc_charge_cutoff_has_hysteresis_and_overrides_every_mode(self) -> None:
