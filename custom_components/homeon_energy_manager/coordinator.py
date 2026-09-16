@@ -1078,6 +1078,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif (
             full_soc_charge_lock
             and sell_solar_allowed
+            and pv_export_surplus_w > 50.0
             and mode not in ("SELL_BATTERY_HIGH_PRICE", "PREPARE_NEGATIVE_PRICE_WINDOW")
         ):
             executor_mode = "FULL_BATTERY_PV_EXPORT"

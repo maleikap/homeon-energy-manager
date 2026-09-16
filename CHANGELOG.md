@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.19
+
+- tryb sprzedaży nadwyżki przy pełnym magazynie działa tylko wtedy, gdy PV rzeczywiście przewyższa zużycie domu,
+- przy PV równym 0 W bateria może ponownie zasilać dom zamiast wymuszać import z sieci,
+- opis działania nie informuje już o sprzedaży PV, gdy produkcji nie ma.
+
 ## 1.2.18
 
 - ochrona pełnego magazynu nie blokuje sprzedaży baterii w najlepszym oknie cenowym,
