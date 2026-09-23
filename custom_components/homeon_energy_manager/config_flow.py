@@ -34,6 +34,8 @@ from .const import (
     CONF_INVERTER_WORK_MODE_SELECT,
     CONF_INVERTER_WORK_MODE_SELL_OPTION,
     CONF_INVERTER_WORK_MODE_PV_CHARGE_OPTION,
+    DEFAULT_PSTRYK_BUY_PRICE_SENSOR,
+    DEFAULT_PSTRYK_SELL_PRICE_SENSOR,
     DEFAULT_BATTERY_CAPACITY_KWH,
     DEFAULT_MIN_SOC,
     DEFAULT_EMERGENCY_SOC,
@@ -80,8 +82,8 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
         configured = value(key)
         return vol.Optional(key, default=configured) if configured else vol.Optional(key)
 
-    def required_entity(key):
-        configured = value(key)
+    def required_entity(key, fallback=None):
+        configured = value(key, fallback)
         return vol.Required(key, default=configured) if configured else vol.Required(key)
 
     return vol.Schema(
@@ -91,8 +93,8 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             required_entity(CONF_PV_POWER_SENSOR): SENSOR_SELECTOR,
             required_entity(CONF_LOAD_POWER_SENSOR): SENSOR_SELECTOR,
             required_entity(CONF_GRID_POWER_SENSOR): SENSOR_SELECTOR,
-            required_entity(CONF_BUY_PRICE_SENSOR): SENSOR_SELECTOR,
-            required_entity(CONF_SELL_PRICE_SENSOR): SENSOR_SELECTOR,
+            required_entity(CONF_BUY_PRICE_SENSOR, DEFAULT_PSTRYK_BUY_PRICE_SENSOR): SENSOR_SELECTOR,
+            required_entity(CONF_SELL_PRICE_SENSOR, DEFAULT_PSTRYK_SELL_PRICE_SENSOR): SENSOR_SELECTOR,
             optional_entity(CONF_PV_FORECAST_TODAY_SENSOR): SENSOR_SELECTOR,
             optional_entity(CONF_PV_FORECAST_TOMORROW_SENSOR): SENSOR_SELECTOR,
             vol.Required(CONF_BATTERY_CAPACITY_KWH, default=value(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH)): vol.Coerce(float),
