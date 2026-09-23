@@ -49,10 +49,14 @@ Dom i bezpieczeństwo magazynu zawsze mają pierwszeństwo przed handlem energi�
 
 ### Pstryk AIO
 
-Pstryk AIO może dostarczać aktualne ceny zakupu i sprzedaży energii wykorzystywane przez managera. W konfiguracji należy wskazać osobne sensory:
+Pstryk AIO jest domyślnym i automatycznie wykrywanym źródłem cen. Manager korzysta bezpośrednio z encji:
 
-- aktualnej ceny zakupu energii,
-- aktualnej ceny sprzedaży energii.
+- `sensor.pstryk_aio_obecna_cena_zakupu_pradu`,
+- `sensor.pstryk_aio_cena_zakupu_pradu_jutro`,
+- `sensor.pstryk_aio_obecna_cena_sprzedazy_pradu`,
+- `sensor.pstryk_aio_cena_sprzedazy_pradu_jutro`.
+
+Z atrybutów `today_prices` i `tomorrow_prices` pobierany jest godzinowy harmonogram obejmujący dziś i jutro. Dzięki temu decyzje o ładowaniu, oczekiwaniu oraz sprzedaży używają rzeczywistej ceny zakupu i sprzedaży Pstryk AIO. Jeżeli Pstryk AIO nie jest dostępny, Manager użyje sensora wybranego w konfiguracji. Ręczny wybór zapisany później w opcjach integracji ma pierwszeństwo.
 
 Manager nie korzysta z dziennego kosztu ani dziennej wartości sprzedaży jako aktualnej ceny. Te encje są przeznaczone do prezentacji bilansu finansowego w HomeOn Energy Card.
 
