@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.20
+
+- Pstryk AIO jest automatycznie wykrywanym i domyślnym źródłem ceny zakupu oraz sprzedaży,
+- harmonogram cen łączy atrybuty `today_prices` i `tomorrow_prices` z osobnych encji Pstryk AIO,
+- plan ceny ujemnej korzysta z ceny zakupu, a strategia sprzedaży z ceny sprzedaży,
+- ręczny wybór sensora zapisany w opcjach integracji nadal ma pierwszeństwo,
+- diagnostyka wskazuje encje będące rzeczywistym źródłem cen.
+
+
 ## 1.2.19
 
 - tryb sprzedaży nadwyżki przy pełnym magazynie działa tylko wtedy, gdy PV rzeczywiście przewyższa zużycie domu,

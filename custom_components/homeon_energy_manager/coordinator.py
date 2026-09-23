@@ -41,6 +41,10 @@ from .const import (
     CONF_INVERTER_WORK_MODE_SELECT,
     CONF_INVERTER_WORK_MODE_SELL_OPTION,
     CONF_INVERTER_WORK_MODE_PV_CHARGE_OPTION,
+    DEFAULT_PSTRYK_BUY_PRICE_SENSOR,
+    DEFAULT_PSTRYK_BUY_PRICE_TOMORROW_SENSOR,
+    DEFAULT_PSTRYK_SELL_PRICE_SENSOR,
+    DEFAULT_PSTRYK_SELL_PRICE_TOMORROW_SENSOR,
     DEFAULT_BATTERY_CAPACITY_KWH,
     DEFAULT_MIN_SOC,
     DEFAULT_EMERGENCY_SOC,
@@ -105,6 +109,37 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
     def _conf_value(self, key: str, default: Any = None) -> Any:
         return self.entry.options.get(key, self.entry.data.get(key, default))
+
+    def _price_entity_ids(
+        self,
+        key: str,
+        pstryk_current: str,
+        pstryk_tomorrow: str,
+    ) -> list[str]:
+        configured = self._conf_value(key)
+        explicit_option = self.entry.options.get(key)
+
+        if explicit_option and self.hass.states.get(str(explicit_option)) is not None:
+            current = str(explicit_option)
+        elif self.hass.states.get(pstryk_current) is not None:
+            current = pstryk_current
+        elif configured:
+            current = str(configured)
+        else:
+            current = pstryk_current
+
+        entities = [current]
+        if current == pstryk_current and self.hass.states.get(pstryk_tomorrow) is not None:
+            entities.append(pstryk_tomorrow)
+        return entities
+
+    @staticmethod
+    def _entity_id_list(entity_ids: str | list[str] | tuple[str, ...] | None) -> list[str]:
+        if not entity_ids:
+            return []
+        if isinstance(entity_ids, str):
+            return [entity_ids]
+        return [str(entity_id) for entity_id in entity_ids if entity_id]
 
     def _state_float_by_entity(self, entity_id: str | None, default: float = 0.0) -> float:
         if not entity_id:
@@ -238,7 +273,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             for item in obj:
                 self._extract_price_points(item, points)
 
-    def _price_stats_from_entity(self, entity_id: str | None, current_price: float) -> dict[str, Any]:
+    def _price_stats_from_entity(self, entity_id: str | list[str] | tuple[str, ...] | None, current_price: float) -> dict[str, Any]:
         now = dt_util.now()
         horizon_end = now + timedelta(hours=24)
         current_hour_start = now.replace(minute=0, second=0, microsecond=0)
@@ -246,8 +281,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         raw_points: list[dict[str, Any]] = []
 
-        if entity_id:
-            state = self.hass.states.get(entity_id)
+        for price_entity_id in self._entity_id_list(entity_id):
+            state = self.hass.states.get(price_entity_id)
             if state is not None:
                 self._extract_price_points(dict(state.attributes), raw_points)
 
@@ -362,7 +397,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
     def _pv_low_price_window_plan(
         self,
-        sell_price_entity: str | None,
+        sell_price_entity: str | list[str] | tuple[str, ...] | None,
         current_sell_price: float,
         pv_forecast_today_kwh: float,
         battery_capacity_kwh: float,
@@ -374,8 +409,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         now = dt_util.now()
         points: list[dict[str, Any]] = []
 
-        if sell_price_entity:
-            state = self.hass.states.get(sell_price_entity)
+        for price_entity_id in self._entity_id_list(sell_price_entity):
+            state = self.hass.states.get(price_entity_id)
             if state is not None:
                 self._extract_price_points(dict(state.attributes), points)
 
@@ -606,7 +641,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
     def _price_points_for_entity(
         self,
-        entity_id: str | None,
+        entity_id: str | list[str] | tuple[str, ...] | None,
         current_price: float,
         horizon_hours: int = 24,
     ) -> list[dict[str, Any]]:
@@ -615,8 +650,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         raw_points: list[dict[str, Any]] = []
 
-        if entity_id:
-            state = self.hass.states.get(entity_id)
+        for price_entity_id in self._entity_id_list(entity_id):
+            state = self.hass.states.get(price_entity_id)
             if state is not None:
                 self._extract_price_points(dict(state.attributes), raw_points)
 
@@ -649,7 +684,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
     def _negative_price_plan(
         self,
-        price_entity: str | None,
+        price_entity: str | list[str] | tuple[str, ...] | None,
         price: float,
         sell_price: float,
         soc: float,
@@ -1471,14 +1506,25 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         pv_power = self._state_float_by_key(CONF_PV_POWER_SENSOR)
         load_power = self._state_float_by_key(CONF_LOAD_POWER_SENSOR)
         grid_power = self._state_float_by_key(CONF_GRID_POWER_SENSOR)
-        buy_price = self._state_float_by_key(CONF_BUY_PRICE_SENSOR)
-        sell_price_sensor_state = self._state_float_by_key(CONF_SELL_PRICE_SENSOR)
+
+        buy_price_entities = self._price_entity_ids(
+            CONF_BUY_PRICE_SENSOR,
+            DEFAULT_PSTRYK_BUY_PRICE_SENSOR,
+            DEFAULT_PSTRYK_BUY_PRICE_TOMORROW_SENSOR,
+        )
+        sell_price_entities = self._price_entity_ids(
+            CONF_SELL_PRICE_SENSOR,
+            DEFAULT_PSTRYK_SELL_PRICE_SENSOR,
+            DEFAULT_PSTRYK_SELL_PRICE_TOMORROW_SENSOR,
+        )
+        buy_price = self._state_float_by_entity(buy_price_entities[0])
+        sell_price_sensor_state = self._state_float_by_entity(sell_price_entities[0])
 
         pv_today = self._state_float_by_key(CONF_PV_FORECAST_TODAY_SENSOR)
         pv_tomorrow = self._state_float_by_key(CONF_PV_FORECAST_TOMORROW_SENSOR)
 
         sell_stats = self._price_stats_from_entity(
-            self._conf_value(CONF_SELL_PRICE_SENSOR),
+            sell_price_entities,
             sell_price_sensor_state,
         )
         sell_price = self._as_float(
@@ -1511,8 +1557,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data_quality_errors: list[str] = []
         data_quality_warnings: list[str] = []
 
-        def _check_required_number(label: str, key: str, min_v: float | None = None, max_v: float | None = None) -> float | None:
-            entity_id = self._conf_value(key)
+        def _check_required_number(
+            label: str,
+            key: str,
+            min_v: float | None = None,
+            max_v: float | None = None,
+            entity_id_override: str | None = None,
+        ) -> float | None:
+            entity_id = entity_id_override or self._conf_value(key)
 
             if not entity_id:
                 data_quality_errors.append(f"{label}: brak konfiguracji encji")
@@ -1551,8 +1603,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         _check_required_number("Moc PV", CONF_PV_POWER_SENSOR, -1000.0, 200000.0)
         _check_required_number("Moc domu", CONF_LOAD_POWER_SENSOR, 0.0, 200000.0)
         _check_required_number("Moc sieci", CONF_GRID_POWER_SENSOR, -200000.0, 200000.0)
-        _check_required_number("Cena zakupu", CONF_BUY_PRICE_SENSOR, -5.0, 5.0)
-        _check_required_number("Cena sprzedaży", CONF_SELL_PRICE_SENSOR, -5.0, 5.0)
+        _check_required_number("Cena zakupu", CONF_BUY_PRICE_SENSOR, -5.0, 5.0, buy_price_entities[0])
+        _check_required_number("Cena sprzedaży", CONF_SELL_PRICE_SENSOR, -5.0, 5.0, sell_price_entities[0])
 
         if battery_capacity_kwh <= 0:
             data_quality_errors.append(f"Pojemność magazynu jest niepoprawna: {battery_capacity_kwh:g} kWh")
@@ -1771,8 +1823,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         # HOMEON_NEGATIVE_PRICE_WINDOW_START
         negative_price_plan = self._negative_price_plan(
-            self._conf_value(CONF_SELL_PRICE_SENSOR),
-            sell_price,
+            buy_price_entities,
+            buy_price,
             sell_price,
             soc,
             battery_capacity_kwh,
@@ -1784,7 +1836,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         )
 
         pv_low_price_plan = self._pv_low_price_window_plan(
-            self._conf_value(CONF_SELL_PRICE_SENSOR),
+            sell_price_entities,
             sell_price,
             pv_today,
             battery_capacity_kwh,
@@ -2081,6 +2133,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
             "buy_price": round(buy_price, 3),
             "sell_price": round(sell_price, 3),
+            "buy_price_source_entity": buy_price_entities[0],
+            "sell_price_source_entity": sell_price_entities[0],
+            "pstryk_aio_price_schedule": "ON" if (
+                buy_price_entities[0] == DEFAULT_PSTRYK_BUY_PRICE_SENSOR
+                and sell_price_entities[0] == DEFAULT_PSTRYK_SELL_PRICE_SENSOR
+            ) else "OFF",
 
             "economic_good_sell_price": round(economic_good_sell_price, 3),
             "economic_cheap_charge_price": round(economic_cheap_charge_price, 3),

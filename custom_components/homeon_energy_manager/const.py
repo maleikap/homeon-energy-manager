@@ -32,6 +32,11 @@ CONF_INVERTER_WORK_MODE_SELECT = "inverter_work_mode_select"
 CONF_INVERTER_WORK_MODE_SELL_OPTION = "inverter_work_mode_sell_option"
 CONF_INVERTER_WORK_MODE_PV_CHARGE_OPTION = "inverter_work_mode_pv_charge_option"
 
+DEFAULT_PSTRYK_BUY_PRICE_SENSOR = "sensor.pstryk_aio_obecna_cena_zakupu_pradu"
+DEFAULT_PSTRYK_BUY_PRICE_TOMORROW_SENSOR = "sensor.pstryk_aio_cena_zakupu_pradu_jutro"
+DEFAULT_PSTRYK_SELL_PRICE_SENSOR = "sensor.pstryk_aio_obecna_cena_sprzedazy_pradu"
+DEFAULT_PSTRYK_SELL_PRICE_TOMORROW_SENSOR = "sensor.pstryk_aio_cena_sprzedazy_pradu_jutro"
+
 DEFAULT_BATTERY_CAPACITY_KWH = 30.0
 DEFAULT_MIN_SOC = 15.0
 DEFAULT_EMERGENCY_SOC = 10.0
