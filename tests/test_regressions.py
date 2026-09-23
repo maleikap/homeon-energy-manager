@@ -40,10 +40,26 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.19", manifest["version"])
+        self.assertEqual("1.2.20", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.19"', source)
+            self.assertIn('"sw_version": "1.2.20"', source)
+
+    def test_pstryk_aio_is_the_automatic_price_source(self) -> None:
+        constants = (COMPONENT / "const.py").read_text(encoding="utf-8")
+        config_flow = (COMPONENT / "config_flow.py").read_text(encoding="utf-8")
+        coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+
+        self.assertIn("sensor.pstryk_aio_obecna_cena_zakupu_pradu", constants)
+        self.assertIn("sensor.pstryk_aio_cena_zakupu_pradu_jutro", constants)
+        self.assertIn("sensor.pstryk_aio_obecna_cena_sprzedazy_pradu", constants)
+        self.assertIn("sensor.pstryk_aio_cena_sprzedazy_pradu_jutro", constants)
+        self.assertIn("DEFAULT_PSTRYK_BUY_PRICE_SENSOR", config_flow)
+        self.assertIn("DEFAULT_PSTRYK_SELL_PRICE_SENSOR", config_flow)
+        self.assertIn("buy_price_entities = self._price_entity_ids(", coordinator)
+        self.assertIn("sell_price_entities = self._price_entity_ids(", coordinator)
+        self.assertIn("for price_entity_id in self._entity_id_list(entity_id):", coordinator)
+        self.assertIn("buy_price_entities,\n            buy_price,\n            sell_price,", coordinator)
 
     def test_wait_for_better_price_charges_pv_instead_of_exporting(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
