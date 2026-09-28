@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.27
+
+- planer handlu łączy teraz bieżący i jutrzejszy harmonogram cen Pstryk AIO,
+- wieczorna sprzedaż nie uruchamia się po cenie z końcówki dnia, gdy następnego ranka dostępna jest wyraźnie lepsza cena,
+- decyzja planera i diagnostyka najlepszej ceny korzystają z tego samego zestawu danych.
+
+
 ## 1.2.21
 
 - stan encji Pstryk AIO „cena jutro” nie jest już używany jako cena bieżąca, ponieważ jest średnią dobową,
