@@ -40,10 +40,21 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.23", manifest["version"])
+        self.assertEqual("1.2.24", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.23"', source)
+            self.assertIn('"sw_version": "1.2.24"', source)
+
+    def test_pstryk_daily_average_is_not_parsed_as_hourly_price(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        extractor_start = source.index("def _extract_price_points(")
+        extractor_end = source.index("def _price_stats_from_entity(", extractor_start)
+        extractor = source[extractor_start:extractor_end]
+
+        self.assertIn('"average"', extractor)
+        self.assertIn('"srednia"', extractor)
+        self.assertIn('"średnia"', extractor)
+        self.assertIn("continue", extractor)
 
     def test_grid_charge_uses_only_cheapest_required_hours(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
