@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.20", manifest["version"])
+        self.assertEqual("1.2.21", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.20"', source)
+            self.assertIn('"sw_version": "1.2.21"', source)
 
     def test_pstryk_aio_is_the_automatic_price_source(self) -> None:
         constants = (COMPONENT / "const.py").read_text(encoding="utf-8")
@@ -60,6 +60,19 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("sell_price_entities = self._price_entity_ids(", coordinator)
         self.assertIn("for price_entity_id in self._entity_id_list(entity_id):", coordinator)
         self.assertIn("buy_price_entities,\n            buy_price,\n            sell_price,", coordinator)
+
+    def test_pstryk_tomorrow_average_is_never_the_current_price(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+
+        helper_start = source.index("def _price_entity_ids(")
+        helper_end = source.index("@staticmethod", helper_start)
+        helper = source[helper_start:helper_end]
+
+        self.assertIn("if configured_text == pstryk_tomorrow:", helper)
+        self.assertIn("configured_text = pstryk_current", helper)
+        self.assertIn("if explicit_text == pstryk_tomorrow:", helper)
+        self.assertIn("explicit_text = pstryk_current", helper)
+        self.assertIn("entities.append(pstryk_tomorrow)", helper)
 
     def test_wait_for_better_price_charges_pv_instead_of_exporting(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
