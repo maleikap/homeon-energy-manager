@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.21
+
+- stan encji Pstryk AIO „cena jutro” nie jest już używany jako cena bieżąca, ponieważ jest średnią dobową,
+- błędnie wybrana wcześniej encja ceny jutra jest automatycznie mapowana na odpowiadającą encję ceny aktualnej,
+- atrybut `tomorrow_prices` nadal jest dołączany do harmonogramu cen na kolejne godziny.
+
+
 ## 1.2.20
 
 - Pstryk AIO jest automatycznie wykrywanym i domyślnym źródłem ceny zakupu oraz sprzedaży,
