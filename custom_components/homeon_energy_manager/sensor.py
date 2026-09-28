@@ -204,6 +204,12 @@ SENSORS = [
     ("economic_estimated_sell_profit", "Szacowany zysk sprzedaży", "PLN", "mdi:cash-check"),
     ("economic_sell_ready", "Gotowość sprzedaży ekonomicznej", None, "mdi:battery-arrow-up"),
     ("economic_sell_reason", "Powód ekonomii sprzedaży", None, "mdi:text-box-check"),
+    ("cheap_charge_schedule_status", "Tanie ładowanie — status", None, "mdi:battery-clock"),
+    ("cheap_charge_windows", "Tanie ładowanie — wybrane godziny", None, "mdi:clock-check"),
+    ("cheap_charge_required_hours", "Tanie ładowanie — liczba godzin", "h", "mdi:timer-outline"),
+    ("cheap_charge_missing_kwh", "Tanie ładowanie — brakująca energia", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-plus"),
+    ("cheap_charge_estimated_power_kw", "Tanie ładowanie — szacowana moc", "kW", "mdi:flash"),
+    ("cheap_charge_reason", "Tanie ładowanie — decyzja", None, "mdi:text-box-check"),
     ("economic_battery_cycle_cost", "Koszt cyklu baterii", "PLN/kWh", "mdi:battery-sync"),
     ("mode_candidate", "Kandydat trybu EMS", None, "mdi:swap-horizontal"),
     ("mode_hysteresis", "Histereza trybu EMS", None, "mdi:timer-sync"),
@@ -249,7 +255,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.22",
+            "sw_version": "1.2.23",
         }
 
     @property
