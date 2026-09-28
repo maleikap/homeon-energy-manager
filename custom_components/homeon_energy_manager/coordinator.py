@@ -1275,6 +1275,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_export_surplus, sell_solar_allowed)
             num(inverter_max_discharge_current, inverter_discharge_current_a)
 
+        elif mode == "MORNING_RESERVE_HOLD":
+            action = "Rezerwa do rana osiągnięta — ograniczam dalsze rozładowanie magazynu"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
+            sw(inverter_grid_charging, False)
+            sw(inverter_export_surplus, sell_solar_allowed)
+            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+
         else:
             executor_mode = "NORMAL_SAFE"
             action = "Normalna praca — Zero Export To CT; Deye sam zarządza domem, magazynem i nadwyżką PV"
@@ -1785,6 +1793,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             max(night_reserve_soc, discharge_target_soc),
         )
 
+        # The trading target may include tomorrow's weather deficit and can be
+        # deliberately conservative. Self-consumption only needs a hard floor
+        # that protects the energy required until morning.
+        self_use_reserve_soc = min(
+            95.0,
+            max(min_soc, night_reserve_soc),
+        )
+
         charge_target_soc = min(
             95.0,
             max(morning_target_soc + 5.0, pv_target_soc),
@@ -2029,9 +2045,18 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif pv_power > 1000 and soc < charge_target_soc:
             mode = "PV_CHARGE"
             reason = "Produkcja PV ładuje magazyn"
-        elif buy_price >= economic_expensive_buy_price and soc > min_soc:
+        elif soc <= self_use_reserve_soc + 1.0 and pv_power < load_power + 250.0:
+            mode = "MORNING_RESERVE_HOLD"
+            reason = (
+                f"Chronię energię do rana — SOC {soc:.0f}%, "
+                f"minimalna rezerwa dla domu {self_use_reserve_soc:.0f}%"
+            )
+        elif buy_price >= economic_expensive_buy_price and soc > self_use_reserve_soc + 1.0:
             mode = "EXPENSIVE_SELF_USE"
-            reason = "Droga energia — używam baterii na dom"
+            reason = (
+                f"Droga energia — używam baterii na dom do rezerwy "
+                f"{self_use_reserve_soc:.0f}%"
+            )
         else:
             mode = "NORMAL"
             reason = "Normalna praca systemu"
@@ -2058,6 +2083,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "PV_PRICE_EXPORT": 54,
             "PV_LOW_PRICE_CHARGE": 53,
             "CHEAP_CHARGE": 50,
+            "MORNING_RESERVE_HOLD": 48,
             "EXPENSIVE_SELF_USE": 45,
             "PV_CHARGE": 35,
             "NORMAL": 10,
@@ -2167,6 +2193,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "min_soc": round(min_soc, 1),
             "emergency_soc": round(emergency_soc, 1),
             "night_reserve_soc": round(night_reserve_soc, 1),
+            "self_use_reserve_soc": round(self_use_reserve_soc, 1),
             "morning_target_soc": round(morning_target_soc, 1),
             "charge_target_soc": round(charge_target_soc, 1),
             "discharge_target_soc": round(discharge_target_soc, 1),

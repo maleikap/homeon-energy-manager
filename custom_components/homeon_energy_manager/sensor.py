@@ -30,6 +30,7 @@ MAIN_SENSOR_KEYS = {
     "pv_forecast_tomorrow",
     "charge_target_soc",
     "discharge_target_soc",
+    "self_use_reserve_soc",
     "plan_next_action",
     "plan_next_action_time",
     "safe_mode",
@@ -79,6 +80,7 @@ SENSORS = [
     ("min_soc", "Minimalny SOC", PERCENT, "mdi:battery-lock"),
     ("emergency_soc", "Awaryjny SOC", PERCENT, "mdi:battery-alert"),
     ("night_reserve_soc", "Rezerwa nocna", PERCENT, "mdi:weather-night"),
+    ("self_use_reserve_soc", "Minimalna rezerwa do rana", PERCENT, "mdi:battery-lock"),
     ("morning_target_soc", "Cel poranny", PERCENT, "mdi:weather-sunset-up"),
     ("charge_target_soc", "Cel ładowania", PERCENT, "mdi:battery-plus"),
     ("discharge_target_soc", "Cel rozładowania", PERCENT, "mdi:battery-minus"),
@@ -247,7 +249,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.21",
+            "sw_version": "1.2.22",
         }
 
     @property
