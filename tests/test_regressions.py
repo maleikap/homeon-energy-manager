@@ -40,10 +40,26 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.21", manifest["version"])
+        self.assertEqual("1.2.22", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.21"', source)
+            self.assertIn('"sw_version": "1.2.22"', source)
+
+    def test_morning_reserve_protects_house_energy(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+
+        self.assertIn('self_use_reserve_soc = min(', source)
+        self.assertIn('mode = "MORNING_RESERVE_HOLD"', source)
+        self.assertIn('soc > self_use_reserve_soc + 1.0', source)
+
+        branch_start = source.index('elif mode == "MORNING_RESERVE_HOLD":')
+        branch_end = source.index('\n        else:', branch_start)
+        branch = source[branch_start:branch_end]
+        self.assertIn("inverter_block_discharge_current_a", branch)
+        self.assertIn("sw(inverter_grid_charging, False)", branch)
+
+        sensors = (COMPONENT / "sensor.py").read_text(encoding="utf-8")
+        self.assertIn('"self_use_reserve_soc"', sensors)
 
     def test_pstryk_aio_is_the_automatic_price_source(self) -> None:
         constants = (COMPONENT / "const.py").read_text(encoding="utf-8")
