@@ -40,10 +40,29 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.22", manifest["version"])
+        self.assertEqual("1.2.23", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.22"', source)
+            self.assertIn('"sw_version": "1.2.23"', source)
+
+    def test_grid_charge_uses_only_cheapest_required_hours(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+
+        helper_start = source.index("def _cheap_grid_charge_plan(")
+        helper_end = source.index("def _negative_price_plan(", helper_start)
+        helper = source[helper_start:helper_end]
+        self.assertIn("math.ceil(missing_kwh / estimated_charge_kw)", helper)
+        self.assertIn("min(3, max(1", helper)
+        self.assertIn("schedule_available", helper)
+        self.assertIn('"charge_now": charge_now', helper)
+
+        self.assertIn('cheap_grid_charge_plan.get("charge_now", False)', source)
+        self.assertIn('not cheap_grid_charge_plan.get("schedule_available", False)', source)
+        self.assertIn('"cheap_charge_windows"', source)
+
+        cheap_mode = source.index('mode = "CHEAP_CHARGE"')
+        home_protection = source.index('elif home_battery_protection_active:', cheap_mode)
+        self.assertLess(cheap_mode, home_protection)
 
     def test_morning_reserve_protects_house_energy(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
