@@ -119,12 +119,23 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         configured = self._conf_value(key)
         explicit_option = self.entry.options.get(key)
 
-        if explicit_option and self.hass.states.get(str(explicit_option)) is not None:
-            current = str(explicit_option)
+        # The state of a Pstryk "tomorrow" sensor is the daily average.
+        # It must never be used as the current hourly price. If it was
+        # accidentally selected in an older configuration, normalize it to
+        # the matching current-price entity and keep tomorrow only as schedule.
+        configured_text = str(configured) if configured else None
+        explicit_text = str(explicit_option) if explicit_option else None
+        if configured_text == pstryk_tomorrow:
+            configured_text = pstryk_current
+        if explicit_text == pstryk_tomorrow:
+            explicit_text = pstryk_current
+
+        if explicit_text and self.hass.states.get(explicit_text) is not None:
+            current = explicit_text
         elif self.hass.states.get(pstryk_current) is not None:
             current = pstryk_current
-        elif configured:
-            current = str(configured)
+        elif configured_text:
+            current = configured_text
         else:
             current = pstryk_current
 
