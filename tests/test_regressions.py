@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.24", manifest["version"])
+        self.assertEqual("1.2.25", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.24"', source)
+            self.assertIn('"sw_version": "1.2.25"', source)
 
     def test_pstryk_daily_average_is_not_parsed_as_hourly_price(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -63,7 +63,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         helper_end = source.index("def _negative_price_plan(", helper_start)
         helper = source[helper_start:helper_end]
         self.assertIn("math.ceil(missing_kwh / estimated_charge_kw)", helper)
-        self.assertIn("min(3, max(1", helper)
+        self.assertNotIn("min(3, max(1", helper)
+        self.assertIn('self._runtime_float("inverter_rated_power_kw", 20.0)', helper)
+        self.assertIn('self._runtime_float("battery_max_charge_c_rate", 0.5)', helper)
+        self.assertIn("min(inverter_power_kw, battery_charge_limit_kw)", helper)
         self.assertIn("schedule_available", helper)
         self.assertIn('"charge_now": charge_now', helper)
 
@@ -74,6 +77,22 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         cheap_mode = source.index('mode = "CHEAP_CHARGE"')
         home_protection = source.index('elif home_battery_protection_active:', cheap_mode)
         self.assertLess(cheap_mode, home_protection)
+
+    def test_required_charging_bypasses_home_priority_guard(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        executor_start = source.index("async def _async_apply_inverter_control")
+        executor_end = source.index("async def _async_update_data", executor_start)
+        executor = source[executor_start:executor_end]
+
+        self.assertIn('charging_override_modes = {"CHEAP_CHARGE", "NEGATIVE_IMPORT", "EMERGENCY_RESERVE"}', executor)
+        self.assertIn("requested_mode not in charging_override_modes", executor)
+
+    def test_control_target_uses_calibrated_pv_forecast(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        self.assertIn('learn.get("pv_forecast_factor")', source)
+        self.assertIn("pv_tomorrow_for_control = max(0.0, pv_tomorrow * pv_forecast_factor)", source)
+        self.assertIn("target_expected_24h_consumption_kwh - pv_tomorrow_for_control", source)
+        self.assertIn('"pv_forecast_tomorrow_control"', source)
 
     def test_morning_reserve_protects_house_energy(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")

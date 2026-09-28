@@ -33,6 +33,26 @@ NUMBERS = [
         10000,
     ),
     (
+        "inverter_rated_power_kw",
+        "Moc znamionowa falownika",
+        0.5,
+        1000,
+        0.5,
+        "kW",
+        "mdi:solar-power-variant",
+        20,
+    ),
+    (
+        "battery_max_charge_c_rate",
+        "Maksymalny C-rate ładowania baterii",
+        0.05,
+        2,
+        0.05,
+        "C",
+        "mdi:battery-clock",
+        0.5,
+    ),
+    (
         "inverter_charge_current_a",
         "Prąd ładowania",
         0,
@@ -148,7 +168,7 @@ class HomeOnNumber(CoordinatorEntity, NumberEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.24",
+            "sw_version": "1.2.25",
         }
 
     @property
