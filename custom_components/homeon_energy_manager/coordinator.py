@@ -693,6 +693,75 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         return sorted(by_minute.values(), key=lambda x: x["dt"])
 
+    def _cheap_grid_charge_plan(
+        self,
+        price_entity: str | list[str] | tuple[str, ...] | None,
+        current_price: float,
+        soc: float,
+        target_soc: float,
+        battery_capacity_kwh: float,
+    ) -> dict[str, Any]:
+        """Choose only the cheapest hours required to reach the SOC target."""
+        now = dt_util.now()
+        current_hour = now.replace(minute=0, second=0, microsecond=0)
+        points = self._price_points_for_entity(price_entity, current_price, horizon_hours=24)
+
+        by_hour: dict[str, dict[str, Any]] = {}
+        for point in points:
+            point_dt = point.get("dt")
+            price = self._as_float(point.get("price"), None)
+            if point_dt is None or price is None:
+                continue
+            hour = dt_util.as_local(point_dt).replace(minute=0, second=0, microsecond=0)
+            if hour < current_hour:
+                continue
+            key = hour.isoformat()
+            existing = by_hour.get(key)
+            if existing is None or point_dt <= now:
+                by_hour[key] = {"dt": hour, "price": float(price)}
+
+        hours = sorted(by_hour.values(), key=lambda item: item["dt"])
+        schedule_available = len(hours) >= 2
+        missing_kwh = max(
+            0.0,
+            battery_capacity_kwh * (target_soc - soc) / 100.0,
+        )
+        charge_current_a = max(1.0, self._runtime_float("inverter_charge_current_a", 80.0))
+        nominal_voltage_v = max(12.0, self._runtime_float("battery_nominal_voltage_v", 51.2))
+        efficiency = min(
+            1.0,
+            max(0.5, self._runtime_float("battery_charge_efficiency_percent", 94.0) / 100.0),
+        )
+        estimated_charge_kw = max(0.5, charge_current_a * nominal_voltage_v * efficiency / 1000.0)
+        required_hours = 0 if missing_kwh <= 0.05 else min(3, max(1, math.ceil(missing_kwh / estimated_charge_kw)))
+
+        selected = sorted(hours, key=lambda item: (item["price"], item["dt"]))[:required_hours]
+        selected = sorted(selected, key=lambda item: item["dt"])
+        charge_now = bool(
+            schedule_available
+            and missing_kwh > 0.05
+            and any(item["dt"] == current_hour for item in selected)
+        )
+
+        windows = ", ".join(
+            f"{self._fmt_dt_hour(item['dt'])} ({item['price']:.3f} PLN/kWh)"
+            for item in selected
+        ) or "brak"
+
+        return {
+            "schedule_available": schedule_available,
+            "charge_now": charge_now,
+            "required_hours": required_hours,
+            "missing_kwh": round(missing_kwh, 2),
+            "estimated_charge_kw": round(estimated_charge_kw, 2),
+            "windows": windows,
+            "reason": (
+                f"Wybrane najtańsze godziny: {windows}; do celu brakuje {missing_kwh:.2f} kWh"
+                if schedule_available
+                else "Brak pełnego harmonogramu Pstryk — używam awaryjnego progu ceny"
+            ),
+        }
+
     def _negative_price_plan(
         self,
         price_entity: str | list[str] | tuple[str, ...] | None,
@@ -1872,6 +1941,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             load_power,
             battery_trade_enabled,
         )
+
+        cheap_grid_charge_plan = self._cheap_grid_charge_plan(
+            buy_price_entities,
+            buy_price,
+            soc,
+            charge_target_soc,
+            battery_capacity_kwh,
+        )
         # HOMEON_NEGATIVE_PRICE_WINDOW_END
 
         available_to_sell_kwh = max(0.0, battery_capacity_kwh * (soc - discharge_target_soc) / 100.0)
@@ -2000,6 +2077,16 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif buy_price <= economic_negative_buy_price and soc < economic_max_soc_after_negative_charge:
             mode = "NEGATIVE_IMPORT"
             reason = "Cena zakupu jest ujemna lub zerowa — opłaca się ładować"
+        elif (
+            cheap_grid_charge_plan.get("charge_now", False)
+            or (
+                not cheap_grid_charge_plan.get("schedule_available", False)
+                and buy_price < economic_cheap_charge_price
+                and soc < charge_target_soc
+            )
+        ):
+            mode = "CHEAP_CHARGE"
+            reason = str(cheap_grid_charge_plan.get("reason", "Tania energia — ładuję magazyn"))
         elif home_battery_protection_active:
             mode = "HOME_BATTERY_PRIORITY"
             reason = home_battery_protection_reason
@@ -2039,9 +2126,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 f"{max(0.0, pv_power - load_power):.0f} W nawet przy niskiej dodatniej cenie "
                 f"{sell_price:.3f} PLN/kWh"
             )
-        elif buy_price < economic_cheap_charge_price and soc < charge_target_soc:
-            mode = "CHEAP_CHARGE"
-            reason = "Tania energia — można ładować magazyn"
         elif pv_power > 1000 and soc < charge_target_soc:
             mode = "PV_CHARGE"
             reason = "Produkcja PV ładuje magazyn"
@@ -2185,6 +2269,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "economic_pv_export_opportunity": "ON" if pv_export_opportunity else "OFF",
             "economic_sell_ready": "ON" if sell_ready else "OFF",
             "economic_sell_reason": economic_sell_reason[:240],
+
+            "cheap_charge_schedule_status": "AKTYWNE" if cheap_grid_charge_plan.get("charge_now", False) else "OCZEKIWANIE",
+            "cheap_charge_windows": cheap_grid_charge_plan.get("windows", "brak"),
+            "cheap_charge_required_hours": cheap_grid_charge_plan.get("required_hours", 0),
+            "cheap_charge_missing_kwh": cheap_grid_charge_plan.get("missing_kwh", 0.0),
+            "cheap_charge_estimated_power_kw": cheap_grid_charge_plan.get("estimated_charge_kw", 0.0),
+            "cheap_charge_reason": str(cheap_grid_charge_plan.get("reason", "-"))[:240],
 
             "pv_forecast_today": round(pv_today, 1),
             "pv_forecast_tomorrow": round(pv_tomorrow, 1),
