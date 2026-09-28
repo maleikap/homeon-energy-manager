@@ -67,6 +67,8 @@ SENSORS = [
     ("next_better_sell_time", "Godzina następnej lepszej sprzedaży", None, "mdi:clock-fast"),
     ("pv_forecast_today", "Prognoza PV dziś", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-sunny"),
     ("pv_forecast_tomorrow", "Prognoza PV jutro", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-sunny-alert"),
+    ("pv_forecast_tomorrow_control", "Prognoza PV jutro użyta przez EMS", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-partly-cloudy"),
+    ("pv_forecast_control_factor", "Korekta prognozy PV EMS", None, "mdi:tune-variant"),
     ("pv_price_strategy_status", "Strategia cenowa PV", None, "mdi:solar-power-variant"),
     ("pv_price_strategy_reason", "Powód strategii cenowej PV", None, "mdi:text-box-check"),
     ("pv_price_strategy_windows", "Najgorsze godziny sprzedaży PV", None, "mdi:clock-alert"),
@@ -209,6 +211,8 @@ SENSORS = [
     ("cheap_charge_required_hours", "Tanie ładowanie — liczba godzin", "h", "mdi:timer-outline"),
     ("cheap_charge_missing_kwh", "Tanie ładowanie — brakująca energia", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-plus"),
     ("cheap_charge_estimated_power_kw", "Tanie ładowanie — szacowana moc", "kW", "mdi:flash"),
+    ("cheap_charge_inverter_power_kw", "Tanie ładowanie — moc falownika", "kW", "mdi:solar-power-variant"),
+    ("cheap_charge_battery_c_rate", "Tanie ładowanie — limit C-rate", "C", "mdi:battery-clock"),
     ("cheap_charge_reason", "Tanie ładowanie — decyzja", None, "mdi:text-box-check"),
     ("economic_battery_cycle_cost", "Koszt cyklu baterii", "PLN/kWh", "mdi:battery-sync"),
     ("mode_candidate", "Kandydat trybu EMS", None, "mdi:swap-horizontal"),
@@ -255,7 +259,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.24",
+            "sw_version": "1.2.25",
         }
 
     @property
