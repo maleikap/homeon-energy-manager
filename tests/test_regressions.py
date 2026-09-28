@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.26", manifest["version"])
+        self.assertEqual("1.2.27", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.26"', source)
+            self.assertIn('"sw_version": "1.2.27"', source)
 
     def test_evening_sale_waits_only_for_next_morning(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -153,6 +153,15 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("if explicit_text == pstryk_tomorrow:", helper)
         self.assertIn("explicit_text = pstryk_current", helper)
         self.assertIn("entities.append(pstryk_tomorrow)", helper)
+
+    def test_planner_uses_today_and_tomorrow_price_schedules(self) -> None:
+        source = (COMPONENT / "planner.py").read_text(encoding="utf-8")
+
+        self.assertIn("buy_price_entities = coordinator._price_entity_ids(", source)
+        self.assertIn("sell_price_entities = coordinator._price_entity_ids(", source)
+        self.assertIn("DEFAULT_PSTRYK_BUY_PRICE_TOMORROW_SENSOR", source)
+        self.assertIn("DEFAULT_PSTRYK_SELL_PRICE_TOMORROW_SENSOR", source)
+        self.assertIn("for price_entity_id in coordinator._entity_id_list(entity_id):", source)
 
     def test_wait_for_better_price_charges_pv_instead_of_exporting(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
