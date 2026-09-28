@@ -10,6 +10,10 @@ from .const import (
     CONF_SELL_PRICE_SENSOR,
     CONF_BATTERY_CAPACITY_KWH,
     DEFAULT_BATTERY_CAPACITY_KWH,
+    DEFAULT_PSTRYK_BUY_PRICE_SENSOR,
+    DEFAULT_PSTRYK_BUY_PRICE_TOMORROW_SENSOR,
+    DEFAULT_PSTRYK_SELL_PRICE_SENSOR,
+    DEFAULT_PSTRYK_SELL_PRICE_TOMORROW_SENSOR,
 )
 
 
@@ -26,13 +30,17 @@ def _hour_label(dt) -> str:
     return dt_util.as_local(dt).strftime("%H:00")
 
 
-def _series_from_entity(coordinator, entity_id: str | None, fallback_price: float) -> dict[str, float]:
+def _series_from_entity(
+    coordinator,
+    entity_id: str | list[str] | tuple[str, ...] | None,
+    fallback_price: float,
+) -> dict[str, float]:
     now = dt_util.now()
     end = now + timedelta(hours=24)
     result: dict[str, float] = {}
 
-    if entity_id:
-        state = coordinator.hass.states.get(entity_id)
+    for price_entity_id in coordinator._entity_id_list(entity_id):
+        state = coordinator.hass.states.get(price_entity_id)
 
         if state is not None:
             points: list[dict[str, Any]] = []
@@ -144,15 +152,26 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     discharge_power_kw = min(max_export_w / 1000.0, discharge_current_a * battery_voltage_v / 1000.0)
     cycle_cost = max(0.0, coordinator._runtime_float("economic_battery_cycle_cost", 0.15))
 
+    buy_price_entities = coordinator._price_entity_ids(
+        CONF_BUY_PRICE_SENSOR,
+        DEFAULT_PSTRYK_BUY_PRICE_SENSOR,
+        DEFAULT_PSTRYK_BUY_PRICE_TOMORROW_SENSOR,
+    )
+    sell_price_entities = coordinator._price_entity_ids(
+        CONF_SELL_PRICE_SENSOR,
+        DEFAULT_PSTRYK_SELL_PRICE_SENSOR,
+        DEFAULT_PSTRYK_SELL_PRICE_TOMORROW_SENSOR,
+    )
+
     buy_series = _series_from_entity(
         coordinator,
-        coordinator._conf_value(CONF_BUY_PRICE_SENSOR),
+        buy_price_entities,
         buy_price_now,
     )
 
     sell_series = _series_from_entity(
         coordinator,
-        coordinator._conf_value(CONF_SELL_PRICE_SENSOR),
+        sell_price_entities,
         sell_price_now,
     )
 
