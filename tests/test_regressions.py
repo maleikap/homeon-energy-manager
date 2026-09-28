@@ -40,10 +40,25 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.25", manifest["version"])
+        self.assertEqual("1.2.26", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.25"', source)
+            self.assertIn('"sw_version": "1.2.26"', source)
+
+    def test_evening_sale_waits_only_for_next_morning(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        stats_start = source.index("def _price_stats_from_entity(")
+        stats_end = source.index("def _pv_low_price_window_plan(", stats_start)
+        stats = source[stats_start:stats_end]
+
+        self.assertIn("morning_deadline = current_hour_start.replace(hour=10)", stats)
+        self.assertIn("morning_deadline += timedelta(days=1)", stats)
+        self.assertIn('"best_sell_price_before_morning"', stats)
+        self.assertIn('"sell_now_best_before_morning"', stats)
+
+        self.assertIn('sell_stats.get("best_sell_price_before_morning")', source)
+        self.assertIn('sell_stats.get("best_sell_minutes_before_morning")', source)
+        self.assertIn('not sell_stats.get("sell_now_best_before_morning", False)', source)
 
     def test_pstryk_daily_average_is_not_parsed_as_hourly_price(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
