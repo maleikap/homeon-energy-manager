@@ -357,6 +357,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 "next_better_sell_price": 0,
                 "next_better_sell_time": "-",
                 "sell_now_best": True,
+                "sell_now_best_before_morning": True,
+                "best_sell_price_before_morning": round(effective_current_price, 3),
+                "best_sell_time_before_morning": "teraz",
+                "best_sell_minutes_before_morning": 0,
                 "sell_price_delta_to_best": 0,
                 "effective_sell_price": round(effective_current_price, 3),
                 "sell_price_sensor_state": round(current_price, 3),
@@ -370,6 +374,20 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         best_minutes_from_now = max(
             0.0,
             (best["dt"] - now).total_seconds() / 60.0,
+        )
+
+        morning_deadline = current_hour_start.replace(hour=10)
+        if now >= morning_deadline:
+            morning_deadline += timedelta(days=1)
+        before_morning = [item for item in points if item["dt"] <= morning_deadline]
+        if not before_morning:
+            before_morning = [{"dt": now, "price": effective_current_price}]
+        best_before_morning = max(before_morning, key=lambda x: x["price"])
+        best_price_before_morning = float(best_before_morning["price"])
+        best_time_before_morning = self._fmt_dt_hour(best_before_morning["dt"])
+        best_minutes_before_morning = max(
+            0.0,
+            (best_before_morning["dt"] - now).total_seconds() / 60.0,
         )
 
         better_later = [
@@ -388,6 +406,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         tolerance = 0.01
         sell_now_best = effective_current_price >= best_price - tolerance
+        sell_now_best_before_morning = effective_current_price >= best_price_before_morning - tolerance
 
         if sell_now_best:
             wait_reason = "Aktualna cena jest najlepsza lub prawie najlepsza w oknie 24h"
@@ -404,6 +423,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "next_better_sell_price": round(next_better_price, 3),
             "next_better_sell_time": next_better_time,
             "sell_now_best": bool(sell_now_best),
+            "sell_now_best_before_morning": bool(sell_now_best_before_morning),
+            "best_sell_price_before_morning": round(best_price_before_morning, 3),
+            "best_sell_time_before_morning": best_time_before_morning,
+            "best_sell_minutes_before_morning": round(best_minutes_before_morning, 0),
             "sell_price_delta_to_best": round(max(0.0, best_price - effective_current_price), 3),
             "effective_sell_price": round(effective_current_price, 3),
             "sell_price_sensor_state": round(current_price, 3),
@@ -1994,7 +2017,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         economic_min_arbitrage_profit = self._runtime_float("economic_min_arbitrage_profit", 1.0)
 
         best_window_sell_opportunity = bool(
-            sell_stats.get("sell_now_best", False)
+            sell_stats.get("sell_now_best_before_morning", False)
             and sell_price > max(economic_negative_sell_price, economic_battery_cycle_cost)
         )
         sell_price_trigger = bool(
@@ -2002,16 +2025,16 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             or best_window_sell_opportunity
         )
         best_sell_price = self._as_float(
-            sell_stats.get("best_sell_price_24h"),
+            sell_stats.get("best_sell_price_before_morning"),
             sell_price,
         ) or sell_price
         best_sell_minutes = self._as_float(
-            sell_stats.get("best_sell_minutes_from_now"),
+            sell_stats.get("best_sell_minutes_before_morning"),
             0.0,
         ) or 0.0
         better_price_margin = max(0.05, sell_price * 0.08)
         wait_for_better_sell = bool(
-            not sell_stats.get("sell_now_best", False)
+            not sell_stats.get("sell_now_best_before_morning", False)
             and 0.0 < best_sell_minutes <= 24.0 * 60.0
             and best_sell_price >= sell_price + better_price_margin
             and available_to_sell_kwh > 0.3
@@ -2119,7 +2142,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             reason = (
                 f"Zachowuję energię na lepszą sprzedaż: teraz {sell_price:.2f} PLN/kWh, "
                 f"najlepsza cena {best_sell_price:.2f} PLN/kWh o "
-                f"{sell_stats.get('best_sell_time_24h', '-')}"
+                f"{sell_stats.get('best_sell_time_before_morning', '-')}"
             )
         elif sell_ready:
             mode = "SELL_BATTERY_HIGH_PRICE"
