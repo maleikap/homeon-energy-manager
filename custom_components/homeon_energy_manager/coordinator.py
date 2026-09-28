@@ -731,14 +731,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             0.0,
             battery_capacity_kwh * (target_soc - soc) / 100.0,
         )
-        charge_current_a = max(1.0, self._runtime_float("inverter_charge_current_a", 80.0))
-        nominal_voltage_v = max(12.0, self._runtime_float("battery_nominal_voltage_v", 51.2))
-        efficiency = min(
-            1.0,
-            max(0.5, self._runtime_float("battery_charge_efficiency_percent", 94.0) / 100.0),
-        )
-        estimated_charge_kw = max(0.5, charge_current_a * nominal_voltage_v * efficiency / 1000.0)
-        required_hours = 0 if missing_kwh <= 0.05 else min(3, max(1, math.ceil(missing_kwh / estimated_charge_kw)))
+        inverter_power_kw = max(0.5, self._runtime_float("inverter_rated_power_kw", 20.0))
+        battery_c_rate = min(2.0, max(0.05, self._runtime_float("battery_max_charge_c_rate", 0.5)))
+        battery_charge_limit_kw = max(0.5, battery_capacity_kwh * battery_c_rate)
+        estimated_charge_kw = min(inverter_power_kw, battery_charge_limit_kw)
+        required_hours = 0 if missing_kwh <= 0.05 else max(1, math.ceil(missing_kwh / estimated_charge_kw))
 
         selected = sorted(hours, key=lambda item: (item["price"], item["dt"]))[:required_hours]
         selected = sorted(selected, key=lambda item: item["dt"])
@@ -759,6 +756,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "required_hours": required_hours,
             "missing_kwh": round(missing_kwh, 2),
             "estimated_charge_kw": round(estimated_charge_kw, 2),
+            "inverter_power_kw": round(inverter_power_kw, 2),
+            "battery_c_rate": round(battery_c_rate, 2),
             "windows": windows,
             "reason": (
                 f"Wybrane najtańsze godziny: {windows}; do celu brakuje {missing_kwh:.2f} kWh"
@@ -1023,7 +1022,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["deye_command_confirmation_reason"] = "Nie wysłano komend Deye"
 
         # HOMEON_HOME_BATTERY_PRIORITY_EXEC_GUARD
-        if str(data.get("home_battery_protection", "OFF")).upper() == "ON" and not bool(store.get("battery_trade", False)):
+        charging_override_modes = {"CHEAP_CHARGE", "NEGATIVE_IMPORT", "EMERGENCY_RESERVE"}
+        requested_mode = str(data.get("mode", "NORMAL")).upper()
+        if (
+            str(data.get("home_battery_protection", "OFF")).upper() == "ON"
+            and not bool(store.get("battery_trade", False))
+            and requested_mode not in charging_override_modes
+        ):
             data["deye_driver_safety_status"] = "BLOCKED_HOME_PRIORITY"
             data["deye_driver_block_reason"] = "Ochrona zasilania domu"
             data["inverter_control_action"] = "Ochrona domu — bateria zasila gospodarstwo, nie zmieniam nastaw Deye"
@@ -1813,7 +1818,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             + learned_daily_kwh * learning_weight
         )
 
-        pv_coverage_ratio = pv_tomorrow / max(target_expected_24h_consumption_kwh, 0.1)
+        pv_forecast_factor = min(1.35, max(0.35, self._as_float(learn.get("pv_forecast_factor"), 1.0) or 1.0))
+        pv_tomorrow_for_control = max(0.0, pv_tomorrow * pv_forecast_factor)
+        pv_coverage_ratio = pv_tomorrow_for_control / max(target_expected_24h_consumption_kwh, 0.1)
 
         if pv_coverage_ratio >= 1.15:
             target_weather_class = "PV bardzo dobre"
@@ -1832,7 +1839,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             weather_factor = 1.00
             pv_target_soc = 90.0
 
-        tomorrow_deficit_kwh = max(0.0, target_expected_24h_consumption_kwh - pv_tomorrow)
+        tomorrow_deficit_kwh = max(0.0, target_expected_24h_consumption_kwh - pv_tomorrow_for_control)
 
         target_required_reserve_kwh = (
             target_expected_night_consumption_kwh
@@ -1890,7 +1897,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             target_source = "Konfiguracja startowa"
 
         target_reason = (
-            f"{target_weather_class}: PV jutro {pv_tomorrow:.1f} kWh, "
+            f"{target_weather_class}: PV jutro po korekcie {pv_tomorrow_for_control:.1f} kWh, "
             f"prognoza zużycia {target_expected_24h_consumption_kwh:.1f} kWh, "
             f"noc {target_expected_night_consumption_kwh:.1f} kWh, "
             f"rezerwa {target_required_reserve_kwh:.1f} kWh, "
@@ -2280,10 +2287,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "cheap_charge_required_hours": cheap_grid_charge_plan.get("required_hours", 0),
             "cheap_charge_missing_kwh": cheap_grid_charge_plan.get("missing_kwh", 0.0),
             "cheap_charge_estimated_power_kw": cheap_grid_charge_plan.get("estimated_charge_kw", 0.0),
+            "cheap_charge_inverter_power_kw": cheap_grid_charge_plan.get("inverter_power_kw", 0.0),
+            "cheap_charge_battery_c_rate": cheap_grid_charge_plan.get("battery_c_rate", 0.0),
             "cheap_charge_reason": str(cheap_grid_charge_plan.get("reason", "-"))[:240],
 
             "pv_forecast_today": round(pv_today, 1),
             "pv_forecast_tomorrow": round(pv_tomorrow, 1),
+            "pv_forecast_tomorrow_control": round(pv_tomorrow_for_control, 1),
+            "pv_forecast_control_factor": round(pv_forecast_factor, 3),
 
             "battery_capacity_kwh": round(battery_capacity_kwh, 1),
             "min_soc": round(min_soc, 1),
