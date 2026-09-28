@@ -270,6 +270,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                     or "price" in key_l
                     or "cena" in key_l
                 ):
+                    # Pstryk exposes daily averages next to data_timestamp.
+                    # That metadata pair is not an hourly price point and must
+                    # never replace the current price from today_prices.
+                    if any(marker in key_l for marker in ("average", "avg", "mean", "srednia", "średnia")):
+                        continue
                     parsed_price = self._as_float(val, None)
                     if parsed_price is not None:
                         price_candidate = parsed_price
