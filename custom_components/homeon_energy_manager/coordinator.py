@@ -2194,6 +2194,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             )
         elif (
             pv_low_price_plan.get("windows_completed", False)
+            and soc >= charge_target_soc - 1.0
             and sell_price > max(0.0, economic_negative_sell_price)
             and pv_power > load_power + 50.0
         ):
@@ -2205,7 +2206,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             )
         elif pv_power > 1000 and soc < charge_target_soc:
             mode = "PV_CHARGE"
-            reason = "Produkcja PV ładuje magazyn"
+            if pv_low_price_plan.get("windows_completed", False):
+                reason = (
+                    f"Godziny preferowanego ładowania zakończone, ale magazyn ma {soc:.0f}% "
+                    f"przy celu {charge_target_soc:.0f}% — kontynuuję ładowanie z PV"
+                )
+            else:
+                reason = "Produkcja PV ładuje magazyn"
         elif soc <= self_use_reserve_soc + 1.0 and pv_power < load_power + 250.0:
             mode = "MORNING_RESERVE_HOLD"
             reason = (
