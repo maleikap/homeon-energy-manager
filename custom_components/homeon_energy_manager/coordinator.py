@@ -2088,6 +2088,21 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             economic_sell_reason = f"Sprzedaż ekonomicznie dozwolona: szacowany zysk {economic_estimated_sell_profit:.2f} PLN"
         # HOMEON_ECONOMIC_PROFIT_END
 
+        # After sunrise the night reserve must not force an expensive grid
+        # import for loads measured by Deye's CT clamps (for example a heat
+        # pump connected on the GRID side). During the morning PV window the
+        # battery may support Zero Export To CT down to the emergency floor.
+        # Before sunrise the calculated night reserve remains fully protected.
+        local_hour = dt_util.now().hour
+        morning_ct_self_use_active = bool(
+            6 <= local_hour < 12
+            and pv_power >= 300.0
+            and buy_price >= economic_expensive_buy_price
+        )
+        active_self_use_floor_soc = (
+            emergency_soc if morning_ct_self_use_active else self_use_reserve_soc
+        )
+
         if not enabled:
             mode = "DISABLED"
             reason = "HomeOn EMS jest wyłączony"
@@ -2164,17 +2179,17 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif pv_power > 1000 and soc < charge_target_soc:
             mode = "PV_CHARGE"
             reason = "Produkcja PV ładuje magazyn"
-        elif soc <= self_use_reserve_soc + 1.0 and pv_power < load_power + 250.0:
+        elif soc <= active_self_use_floor_soc + 1.0 and pv_power < load_power + 250.0:
             mode = "MORNING_RESERVE_HOLD"
             reason = (
                 f"Chronię energię do rana — SOC {soc:.0f}%, "
-                f"minimalna rezerwa dla domu {self_use_reserve_soc:.0f}%"
+                f"minimalna rezerwa dla domu {active_self_use_floor_soc:.0f}%"
             )
-        elif buy_price >= economic_expensive_buy_price and soc > self_use_reserve_soc + 1.0:
+        elif buy_price >= economic_expensive_buy_price and soc > active_self_use_floor_soc + 1.0:
             mode = "EXPENSIVE_SELF_USE"
             reason = (
                 f"Droga energia — używam baterii na dom do rezerwy "
-                f"{self_use_reserve_soc:.0f}%"
+                f"{active_self_use_floor_soc:.0f}%"
             )
         else:
             mode = "NORMAL"
@@ -2324,6 +2339,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "emergency_soc": round(emergency_soc, 1),
             "night_reserve_soc": round(night_reserve_soc, 1),
             "self_use_reserve_soc": round(self_use_reserve_soc, 1),
+            "active_self_use_floor_soc": round(active_self_use_floor_soc, 1),
+            "morning_ct_self_use_active": "ON" if morning_ct_self_use_active else "OFF",
             "morning_target_soc": round(morning_target_soc, 1),
             "charge_target_soc": round(charge_target_soc, 1),
             "discharge_target_soc": round(discharge_target_soc, 1),
