@@ -1842,9 +1842,21 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         for hour in (*range(22, 24), *range(0, 6)):
             bucket = hourly_profile.get(f"{hour:02d}")
             if isinstance(bucket, dict):
-                learned_night_profile_kwh += max(
+                profile_load_w = max(
                     0.0,
                     self._as_float(bucket.get("avg_load_w"), 0.0) or 0.0,
+                )
+                profile_ct_balance_w = max(
+                    0.0,
+                    (self._as_float(bucket.get("avg_pv_w"), 0.0) or 0.0)
+                    + (self._as_float(bucket.get("avg_grid_import_w"), 0.0) or 0.0)
+                    + (self._as_float(bucket.get("avg_battery_discharge_w"), 0.0) or 0.0)
+                    - (self._as_float(bucket.get("avg_grid_export_w"), 0.0) or 0.0)
+                    - (self._as_float(bucket.get("avg_battery_charge_w"), 0.0) or 0.0)
+                )
+                learned_night_profile_kwh += max(
+                    profile_load_w,
+                    profile_ct_balance_w,
                 ) / 1000.0
 
         configured_night_kwh = max(0.0, night_consumption_kwh * night_safety_margin)
