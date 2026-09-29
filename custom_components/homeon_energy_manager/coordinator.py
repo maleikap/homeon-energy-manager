@@ -1671,6 +1671,20 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             grid_export_w = max(grid_power, 0.0)
             grid_status = "Import" if grid_power < -20 else "Eksport" if grid_power > 20 else "Zero"
 
+        inverter_load_power_raw = load_power
+        ct_balanced_load_power = max(
+            0.0,
+            pv_power
+            + grid_import_w
+            + battery_discharge_w
+            - grid_export_w
+            - battery_charge_w,
+        )
+        # The inverter LOAD sensor does not include appliances connected on
+        # the GRID side. CT clamps do see them, so use the larger of the LOAD
+        # reading and the complete energy balance for planning and learning.
+        load_power = max(load_power, ct_balanced_load_power)
+
 
 
 
@@ -1821,8 +1835,24 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         avg_load_w = self._as_float(learn.get("avg_load_w"), load_power) or load_power
         avg_night_load_w = self._as_float(learn.get("avg_night_load_w"), avg_load_w) or avg_load_w
 
+        hourly_profile = learn.get("hourly_profile")
+        if not isinstance(hourly_profile, dict):
+            hourly_profile = {}
+        learned_night_profile_kwh = 0.0
+        for hour in (*range(22, 24), *range(0, 6)):
+            bucket = hourly_profile.get(f"{hour:02d}")
+            if isinstance(bucket, dict):
+                learned_night_profile_kwh += max(
+                    0.0,
+                    self._as_float(bucket.get("avg_load_w"), 0.0) or 0.0,
+                ) / 1000.0
+
         configured_night_kwh = max(0.0, night_consumption_kwh * night_safety_margin)
-        learned_night_kwh = max(0.0, avg_night_load_w * 8.0 / 1000.0 * night_safety_margin)
+        learned_night_kwh = max(
+            0.0,
+            avg_night_load_w * 8.0 / 1000.0 * night_safety_margin,
+            learned_night_profile_kwh * night_safety_margin,
+        )
 
         target_expected_night_consumption_kwh = (
             configured_night_kwh * (1.0 - learning_weight)
@@ -2284,6 +2314,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "battery_status": battery_status,
             "pv_power": round(pv_power, 0),
             "load_power": round(load_power, 0),
+            "inverter_load_power_raw": round(inverter_load_power_raw, 0),
+            "ct_balanced_load_power": round(ct_balanced_load_power, 0),
             "grid_power": round(grid_power, 0),
             "grid_status": grid_status,
 

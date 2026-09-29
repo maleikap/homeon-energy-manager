@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.28
+
+- zużycie domu jest liczone z pełnego bilansu PV, sieci i baterii, dzięki czemu obejmuje również pompę podłączoną po stronie GRID za przekładnikami CT,
+- profil nocny i plan rezerwy uwzględniają godzinowe zużycie odbiorników niewidocznych na wyjściu LOAD,
+- wieczorna sprzedaż pozostawia energię potrzebną na przewidywaną pracę pompy w nocy,
+- diagnostyka pokazuje osobno surowy odczyt LOAD oraz całkowite obciążenie obliczone z bilansu CT.
+
+
 ## 1.2.27
 
 - planer handlu łączy teraz bieżący i jutrzejszy harmonogram cen Pstryk AIO,

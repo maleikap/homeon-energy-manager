@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.27", manifest["version"])
+        self.assertEqual("1.2.28", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.27"', source)
+            self.assertIn('"sw_version": "1.2.28"', source)
 
     def test_evening_sale_waits_only_for_next_morning(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -124,6 +124,16 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
         sensors = (COMPONENT / "sensor.py").read_text(encoding="utf-8")
         self.assertIn('"self_use_reserve_soc"', sensors)
+
+    def test_grid_side_ct_load_is_included_in_night_reserve(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+
+        self.assertIn("ct_balanced_load_power = max(", source)
+        self.assertIn("load_power = max(load_power, ct_balanced_load_power)", source)
+        self.assertIn('"inverter_load_power_raw"', source)
+        self.assertIn('"ct_balanced_load_power"', source)
+        self.assertIn('hourly_profile.get(f"{hour:02d}")', source)
+        self.assertIn("learned_night_profile_kwh * night_safety_margin", source)
 
     def test_pstryk_aio_is_the_automatic_price_source(self) -> None:
         constants = (COMPONENT / "const.py").read_text(encoding="utf-8")
