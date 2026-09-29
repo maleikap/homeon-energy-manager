@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.27", manifest["version"])
+        self.assertEqual("1.2.28", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.27"', source)
+            self.assertIn('"sw_version": "1.2.28"', source)
 
     def test_evening_sale_waits_only_for_next_morning(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -114,7 +114,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
         self.assertIn('self_use_reserve_soc = min(', source)
         self.assertIn('mode = "MORNING_RESERVE_HOLD"', source)
-        self.assertIn('soc > self_use_reserve_soc + 1.0', source)
+        self.assertIn('soc > active_self_use_floor_soc + 1.0', source)
 
         branch_start = source.index('elif mode == "MORNING_RESERVE_HOLD":')
         branch_end = source.index('\n        else:', branch_start)
@@ -124,6 +124,21 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
         sensors = (COMPONENT / "sensor.py").read_text(encoding="utf-8")
         self.assertIn('"self_use_reserve_soc"', sensors)
+
+    def test_morning_ct_load_can_use_battery_after_sunrise(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+
+        self.assertIn("morning_ct_self_use_active = bool(", source)
+        self.assertIn("6 <= local_hour < 12", source)
+        self.assertIn("pv_power >= 300.0", source)
+        self.assertIn(
+            "emergency_soc if morning_ct_self_use_active else self_use_reserve_soc",
+            source,
+        )
+        self.assertIn(
+            '"morning_ct_self_use_active": "ON" if morning_ct_self_use_active else "OFF"',
+            source,
+        )
 
     def test_pstryk_aio_is_the_automatic_price_source(self) -> None:
         constants = (COMPONENT / "const.py").read_text(encoding="utf-8")
