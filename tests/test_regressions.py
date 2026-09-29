@@ -114,7 +114,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
         self.assertIn('self_use_reserve_soc = min(', source)
         self.assertIn('mode = "MORNING_RESERVE_HOLD"', source)
-        self.assertIn('soc > active_self_use_floor_soc + 1.0', source)
+        self.assertIn('soc > self_use_reserve_soc + 1.0', source)
 
         branch_start = source.index('elif mode == "MORNING_RESERVE_HOLD":')
         branch_end = source.index('\n        else:', branch_start)
@@ -125,20 +125,15 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         sensors = (COMPONENT / "sensor.py").read_text(encoding="utf-8")
         self.assertIn('"self_use_reserve_soc"', sensors)
 
-    def test_morning_ct_load_can_use_battery_after_sunrise(self) -> None:
+    def test_grid_side_ct_load_is_included_in_night_reserve(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
 
-        self.assertIn("morning_ct_self_use_active = bool(", source)
-        self.assertIn("6 <= local_hour < 12", source)
-        self.assertIn("pv_power >= 300.0", source)
-        self.assertIn(
-            "emergency_soc if morning_ct_self_use_active else self_use_reserve_soc",
-            source,
-        )
-        self.assertIn(
-            '"morning_ct_self_use_active": "ON" if morning_ct_self_use_active else "OFF"',
-            source,
-        )
+        self.assertIn("ct_balanced_load_power = max(", source)
+        self.assertIn("load_power = max(load_power, ct_balanced_load_power)", source)
+        self.assertIn('"inverter_load_power_raw"', source)
+        self.assertIn('"ct_balanced_load_power"', source)
+        self.assertIn('hourly_profile.get(f"{hour:02d}")', source)
+        self.assertIn("learned_night_profile_kwh * night_safety_margin", source)
 
     def test_pstryk_aio_is_the_automatic_price_source(self) -> None:
         constants = (COMPONENT / "const.py").read_text(encoding="utf-8")
