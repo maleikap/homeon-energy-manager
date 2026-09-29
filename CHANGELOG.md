@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.28
+
+- po rozpoczęciu porannej produkcji PV tryb `Zero Export To CT` może zasilać odbiorniki po stronie GRID z baterii,
+- droga energia rano nie jest pobierana z sieci tylko dlatego, że SOC osiągnął obliczoną rezerwę nocną,
+- przed wschodem słońca rezerwa nocna nadal pozostaje chroniona, a poranne rozładowanie kończy się na SOC awaryjnym,
+- diagnostyka pokazuje aktywny próg SOC dla autokonsumpcji i stan porannego wsparcia CT.
+
+
 ## 1.2.27
 
 - planer handlu łączy teraz bieżący i jutrzejszy harmonogram cen Pstryk AIO,
