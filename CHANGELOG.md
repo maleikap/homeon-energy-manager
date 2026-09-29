@@ -2,10 +2,10 @@
 
 ## 1.2.28
 
-- po rozpoczęciu porannej produkcji PV tryb `Zero Export To CT` może zasilać odbiorniki po stronie GRID z baterii,
-- droga energia rano nie jest pobierana z sieci tylko dlatego, że SOC osiągnął obliczoną rezerwę nocną,
-- przed wschodem słońca rezerwa nocna nadal pozostaje chroniona, a poranne rozładowanie kończy się na SOC awaryjnym,
-- diagnostyka pokazuje aktywny próg SOC dla autokonsumpcji i stan porannego wsparcia CT.
+- zużycie domu jest liczone z pełnego bilansu PV, sieci i baterii, dzięki czemu obejmuje również pompę podłączoną po stronie GRID za przekładnikami CT,
+- profil nocny i plan rezerwy uwzględniają godzinowe zużycie odbiorników niewidocznych na wyjściu LOAD,
+- wieczorna sprzedaż pozostawia energię potrzebną na przewidywaną pracę pompy w nocy,
+- diagnostyka pokazuje osobno surowy odczyt LOAD oraz całkowite obciążenie obliczone z bilansu CT.
 
 
 ## 1.2.27
