@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.30
+
+- zakończenie wybranych godzin ładowania nie uruchamia eksportu PV, jeżeli magazyn nie osiągnął jeszcze celu SOC,
+- po zakończeniu preferowanych godzin Manager kontynuuje ładowanie z PV do dynamicznego celu,
+- eksport bieżącej nadwyżki po zakończeniu godzin jest dozwolony po osiągnięciu celu z tolerancją 1 punktu procentowego.
+
+
 ## 1.2.29
 
 - nocne obciążenie po stronie GRID jest odtwarzane także z już zapisanej historii importu, PV i baterii,
