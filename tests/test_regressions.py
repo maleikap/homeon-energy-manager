@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.29", manifest["version"])
+        self.assertEqual("1.2.30", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.29"', source)
+            self.assertIn('"sw_version": "1.2.30"', source)
 
     def test_evening_sale_waits_only_for_next_morning(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -175,6 +175,16 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("DEFAULT_PSTRYK_BUY_PRICE_TOMORROW_SENSOR", source)
         self.assertIn("DEFAULT_PSTRYK_SELL_PRICE_TOMORROW_SENSOR", source)
         self.assertIn("for price_entity_id in coordinator._entity_id_list(entity_id):", source)
+
+    def test_completed_charge_windows_do_not_export_below_soc_target(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        branch_start = source.index('pv_low_price_plan.get("windows_completed", False)')
+        branch_end = source.index('elif soc <= self_use_reserve_soc', branch_start)
+        branch = source[branch_start:branch_end]
+
+        self.assertIn("soc >= charge_target_soc - 1.0", branch)
+        self.assertIn('mode = "PV_CHARGE"', branch)
+        self.assertIn("kontynuuję ładowanie z PV", branch)
 
     def test_wait_for_better_price_charges_pv_instead_of_exporting(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
