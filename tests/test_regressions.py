@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.28", manifest["version"])
+        self.assertEqual("1.2.29", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.28"', source)
+            self.assertIn('"sw_version": "1.2.29"', source)
 
     def test_evening_sale_waits_only_for_next_morning(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -134,6 +134,9 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn('"ct_balanced_load_power"', source)
         self.assertIn('hourly_profile.get(f"{hour:02d}")', source)
         self.assertIn("learned_night_profile_kwh * night_safety_margin", source)
+        self.assertIn("profile_ct_balance_w = max(", source)
+        self.assertIn('bucket.get("avg_grid_import_w")', source)
+        self.assertIn('bucket.get("avg_battery_discharge_w")', source)
 
     def test_pstryk_aio_is_the_automatic_price_source(self) -> None:
         constants = (COMPONENT / "const.py").read_text(encoding="utf-8")
