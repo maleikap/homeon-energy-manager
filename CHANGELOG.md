@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.29
+
+- nocne obciążenie po stronie GRID jest odtwarzane także z już zapisanej historii importu, PV i baterii,
+- Manager może uwzględnić wcześniejszą pracę pompy od razu po aktualizacji, bez czekania na kolejną noc,
+- rezerwa nocna nadal zachowuje ustawiony margines bezpieczeństwa.
+
+
 ## 1.2.28
 
 - zużycie domu jest liczone z pełnego bilansu PV, sieci i baterii, dzięki czemu obejmuje również pompę podłączoną po stronie GRID za przekładnikami CT,
