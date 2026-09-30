@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.31
+
+- rezerwa odłożona na noc jest wykorzystywana przez dom i odbiorniki widoczne za przekładnikami CT,
+- w godzinach 20:00–09:00 tryb Zero Export To CT otrzymuje pełny skonfigurowany prąd rozładowania aż do minimalnego SOC,
+- ograniczenie 5 A pozostaje aktywne dopiero po osiągnięciu minimalnego SOC, aby zachować synchronizację falownika z siecią,
+- wyjście ze starej blokady nocnej nie czeka na zakończenie histerezy trybu.
+
+
 ## 1.2.30
 
 - zakończenie wybranych godzin ładowania nie uruchamia eksportu PV, jeżeli magazyn nie osiągnął jeszcze celu SOC,
