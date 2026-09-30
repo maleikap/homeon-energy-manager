@@ -1116,6 +1116,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         inverter_safe_discharge_current_a = self._runtime_float("inverter_safe_discharge_current_a", HOMEON_SAFE_DISCHARGE_CURRENT_A)
         inverter_block_discharge_current_a = self._runtime_float("inverter_block_discharge_current_a", HOMEON_BLOCK_DISCHARGE_CURRENT_A)
         current_soc = float(self._as_float(data.get("soc"), 0.0) or 0.0)
+        minimum_soc = float(self._as_float(data.get("min_soc"), 0.0) or 0.0)
+        night_self_use_active = bool(data.get("night_self_use_active", False))
         full_soc_charge_lock = bool(getattr(self, "_homeon_full_soc_charge_lock", False))
         if current_soc >= 95.0:
             full_soc_charge_lock = True
@@ -1387,13 +1389,21 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         else:
             executor_mode = "NORMAL_SAFE"
-            action = "Normalna praca — Zero Export To CT; Deye sam zarządza domem, magazynem i nadwyżką PV"
+            if night_self_use_active and current_soc > minimum_soc + 1.0:
+                action = (
+                    "Nocna autokonsumpcja — Zero Export To CT; bateria pokrywa odbiory domu "
+                    f"do minimalnego SOC {minimum_soc:.0f}%"
+                )
+                discharge_current = inverter_discharge_current_a
+            else:
+                action = "Normalna praca — Zero Export To CT; Deye sam zarządza domem, magazynem i nadwyżką PV"
+                discharge_current = inverter_safe_discharge_current_a
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, sell_solar_allowed)
             num(inverter_max_charge_current, inverter_charge_current_a)
-            num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+            num(inverter_max_discharge_current, discharge_current)
 
         if full_soc_charge_lock:
             desired = [
@@ -1947,6 +1957,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             max(min_soc, night_reserve_soc),
         )
 
+        # The reserve is saved for the night, not frozen throughout it.  From
+        # 20:00 until 09:00 normal Zero Export To CT operation may consume it
+        # to the configured minimum SOC.  Only that hard floor keeps the 5 A
+        # synchronization current.
+        local_hour = dt_util.now().hour
+        night_self_use_active = bool(local_hour >= 20 or local_hour < 9)
+
         charge_target_soc = min(
             95.0,
             max(morning_target_soc + 5.0, pv_target_soc),
@@ -2213,11 +2230,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 )
             else:
                 reason = "Produkcja PV ładuje magazyn"
-        elif soc <= self_use_reserve_soc + 1.0 and pv_power < load_power + 250.0:
+        elif soc <= min_soc + 1.0 and pv_power < load_power + 250.0:
             mode = "MORNING_RESERVE_HOLD"
             reason = (
-                f"Chronię energię do rana — SOC {soc:.0f}%, "
-                f"minimalna rezerwa dla domu {self_use_reserve_soc:.0f}%"
+                f"Minimalny SOC osiągnięty — SOC {soc:.0f}%, "
+                f"dolna granica magazynu {min_soc:.0f}%"
             )
         elif buy_price >= economic_expensive_buy_price and soc > self_use_reserve_soc + 1.0:
             mode = "EXPENSIVE_SELF_USE"
@@ -2282,6 +2299,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             and elapsed_minutes < mode_min_hold_minutes
             and str(last_mode) not in urgent_modes
             and str(mode) not in urgent_modes
+            and not (
+                str(last_mode) == "MORNING_RESERVE_HOLD"
+                and night_self_use_active
+                and soc > min_soc + 1.0
+            )
         ):
             last_priority = int(mode_priority.get(str(last_mode), 10))
             new_priority = int(mode_priority.get(str(mode), 10))
@@ -2375,6 +2397,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "emergency_soc": round(emergency_soc, 1),
             "night_reserve_soc": round(night_reserve_soc, 1),
             "self_use_reserve_soc": round(self_use_reserve_soc, 1),
+            "night_self_use_active": night_self_use_active,
             "morning_target_soc": round(morning_target_soc, 1),
             "charge_target_soc": round(charge_target_soc, 1),
             "discharge_target_soc": round(discharge_target_soc, 1),
