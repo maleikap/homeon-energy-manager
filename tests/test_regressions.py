@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.30", manifest["version"])
+        self.assertEqual("1.2.31", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.30"', source)
+            self.assertIn('"sw_version": "1.2.31"', source)
 
     def test_evening_sale_waits_only_for_next_morning(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -109,18 +109,32 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("target_expected_24h_consumption_kwh - pv_tomorrow_for_control", source)
         self.assertIn('"pv_forecast_tomorrow_control"', source)
 
-    def test_morning_reserve_protects_house_energy(self) -> None:
+    def test_night_reserve_is_consumed_down_to_minimum_soc(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
 
         self.assertIn('self_use_reserve_soc = min(', source)
+        self.assertIn('night_self_use_active = bool(local_hour >= 20 or local_hour < 9)', source)
         self.assertIn('mode = "MORNING_RESERVE_HOLD"', source)
         self.assertIn('soc > self_use_reserve_soc + 1.0', source)
+
+        decision_start = source.index('elif soc <= min_soc + 1.0')
+        decision_end = source.index('elif buy_price >= economic_expensive_buy_price', decision_start)
+        decision = source[decision_start:decision_end]
+        self.assertIn('mode = "MORNING_RESERVE_HOLD"', decision)
+        self.assertIn('dolna granica magazynu', decision)
 
         branch_start = source.index('elif mode == "MORNING_RESERVE_HOLD":')
         branch_end = source.index('\n        else:', branch_start)
         branch = source[branch_start:branch_end]
         self.assertIn("inverter_block_discharge_current_a", branch)
         self.assertIn("sw(inverter_grid_charging, False)", branch)
+
+        normal_start = source.index('else:\n            executor_mode = "NORMAL_SAFE"', branch_end)
+        normal_end = source.index('\n        if full_soc_charge_lock:', normal_start)
+        normal = source[normal_start:normal_end]
+        self.assertIn('night_self_use_active and current_soc > minimum_soc + 1.0', normal)
+        self.assertIn('discharge_current = inverter_discharge_current_a', normal)
+        self.assertIn('num(inverter_max_discharge_current, discharge_current)', normal)
 
         sensors = (COMPONENT / "sensor.py").read_text(encoding="utf-8")
         self.assertIn('"self_use_reserve_soc"', sensors)
@@ -179,7 +193,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
     def test_completed_charge_windows_do_not_export_below_soc_target(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
         branch_start = source.index('pv_low_price_plan.get("windows_completed", False)')
-        branch_end = source.index('elif soc <= self_use_reserve_soc', branch_start)
+        branch_end = source.index('elif soc <= min_soc + 1.0', branch_start)
         branch = source[branch_start:branch_end]
 
         self.assertIn("soc >= charge_target_soc - 1.0", branch)
