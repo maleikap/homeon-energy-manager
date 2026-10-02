@@ -23,6 +23,7 @@ from .const import (
     CONF_SELL_PRICE_SENSOR,
     CONF_PV_FORECAST_TODAY_SENSOR,
     CONF_PV_FORECAST_TOMORROW_SENSOR,
+    CONF_INSTALLATION_TYPE,
     CONF_BATTERY_CAPACITY_KWH,
     CONF_MIN_SOC,
     CONF_EMERGENCY_SOC,
@@ -59,6 +60,9 @@ from .const import (
     DEFAULT_INVERTER_WORK_MODE_SELECT,
     DEFAULT_INVERTER_WORK_MODE_SELL_OPTION,
     DEFAULT_INVERTER_WORK_MODE_PV_CHARGE_OPTION,
+    DEFAULT_INVERTER_WORK_MODE_LOAD_OPTION,
+    DEFAULT_INSTALLATION_TYPE,
+    INSTALLATION_TYPE_LOAD,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -1128,6 +1132,17 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         inverter_work_mode_select = conf_entity(CONF_INVERTER_WORK_MODE_SELECT, DEFAULT_INVERTER_WORK_MODE_SELECT)
         inverter_work_mode_sell_option = conf_entity(CONF_INVERTER_WORK_MODE_SELL_OPTION, DEFAULT_INVERTER_WORK_MODE_SELL_OPTION)
         inverter_work_mode_pv_charge_option = conf_entity(CONF_INVERTER_WORK_MODE_PV_CHARGE_OPTION, DEFAULT_INVERTER_WORK_MODE_PV_CHARGE_OPTION)
+        installation_type = str(data.get("installation_type", DEFAULT_INSTALLATION_TYPE)).lower()
+        if (
+            installation_type == INSTALLATION_TYPE_LOAD
+            and inverter_work_mode_pv_charge_option == DEFAULT_INVERTER_WORK_MODE_PV_CHARGE_OPTION
+        ):
+            inverter_work_mode_pv_charge_option = DEFAULT_INVERTER_WORK_MODE_LOAD_OPTION
+        elif (
+            installation_type != INSTALLATION_TYPE_LOAD
+            and inverter_work_mode_pv_charge_option == DEFAULT_INVERTER_WORK_MODE_LOAD_OPTION
+        ):
+            inverter_work_mode_pv_charge_option = DEFAULT_INVERTER_WORK_MODE_PV_CHARGE_OPTION
         inverter_work_mode_state = self.hass.states.get(inverter_work_mode_select)
         inverter_work_mode_current = str(inverter_work_mode_state.state) if inverter_work_mode_state is not None else "BRAK_ENCJI"
 
@@ -1702,6 +1717,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             grid_export_w = max(grid_power, 0.0)
             grid_status = "Import" if grid_power < -20 else "Eksport" if grid_power > 20 else "Zero"
 
+        installation_type = str(
+            self._conf_value(CONF_INSTALLATION_TYPE, DEFAULT_INSTALLATION_TYPE)
+            or DEFAULT_INSTALLATION_TYPE
+        ).strip().lower()
         inverter_load_power_raw = load_power
         ct_balanced_load_power = max(
             0.0,
@@ -1711,10 +1730,17 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             - grid_export_w
             - battery_charge_w,
         )
-        # The inverter LOAD sensor does not include appliances connected on
-        # the GRID side. CT clamps do see them, so use the larger of the LOAD
-        # reading and the complete energy balance for planning and learning.
-        load_power = max(load_power, ct_balanced_load_power)
+        if installation_type == INSTALLATION_TYPE_LOAD:
+            # With Zero Export To Load every consumer is behind LOAD. Deye can
+            # report a small negative value around zero; retain the raw value
+            # for diagnostics while using zero for planning and learning.
+            load_power = max(0.0, inverter_load_power_raw)
+            load_power_source = "LOAD"
+        else:
+            # LOAD does not include appliances connected on the GRID side.
+            # CT clamps see them, so use the larger value for planning.
+            load_power = max(inverter_load_power_raw, ct_balanced_load_power)
+            load_power_source = "BILANS_CT"
 
 
 
@@ -1767,7 +1793,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         _check_required_number("SOC", CONF_SOC_SENSOR, 0.0, 100.0)
         _check_required_number("Moc baterii", CONF_BATTERY_POWER_SENSOR, -200000.0, 200000.0)
         _check_required_number("Moc PV", CONF_PV_POWER_SENSOR, -1000.0, 200000.0)
-        _check_required_number("Moc domu", CONF_LOAD_POWER_SENSOR, 0.0, 200000.0)
+        load_power_minimum = -100.0 if installation_type == INSTALLATION_TYPE_LOAD else 0.0
+        _check_required_number("Moc domu", CONF_LOAD_POWER_SENSOR, load_power_minimum, 200000.0)
+        if installation_type == INSTALLATION_TYPE_LOAD and -100.0 <= inverter_load_power_raw < 0.0:
+            data_quality_warnings.append(
+                f"Moc LOAD {inverter_load_power_raw:g} W została skorygowana do 0 W"
+            )
         _check_required_number("Moc sieci", CONF_GRID_POWER_SENSOR, -200000.0, 200000.0)
         _check_required_number("Cena zakupu", CONF_BUY_PRICE_SENSOR, -5.0, 5.0, buy_price_entities[0])
         _check_required_number("Cena sprzedaży", CONF_SELL_PRICE_SENSOR, -5.0, 5.0, sell_price_entities[0])
@@ -2376,6 +2407,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "battery_status": battery_status,
             "pv_power": round(pv_power, 0),
             "load_power": round(load_power, 0),
+            "installation_type": installation_type.upper(),
+            "load_power_source": load_power_source,
             "inverter_load_power_raw": round(inverter_load_power_raw, 0),
             "ct_balanced_load_power": round(ct_balanced_load_power, 0),
             "grid_power": round(grid_power, 0),
