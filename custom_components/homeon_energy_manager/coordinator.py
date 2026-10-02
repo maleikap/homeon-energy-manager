@@ -45,6 +45,8 @@ from .const import (
     DEFAULT_PSTRYK_BUY_PRICE_TOMORROW_SENSOR,
     DEFAULT_PSTRYK_SELL_PRICE_SENSOR,
     DEFAULT_PSTRYK_SELL_PRICE_TOMORROW_SENSOR,
+    MODERN_PSTRYK_BUY_PRICE_SENSOR,
+    MODERN_PSTRYK_SELL_PRICE_SENSOR,
     DEFAULT_BATTERY_CAPACITY_KWH,
     DEFAULT_MIN_SOC,
     DEFAULT_EMERGENCY_SOC,
@@ -130,12 +132,31 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         if explicit_text == pstryk_tomorrow:
             explicit_text = pstryk_current
 
-        if explicit_text and self.hass.states.get(explicit_text) is not None:
+        modern_current = (
+            MODERN_PSTRYK_BUY_PRICE_SENSOR
+            if key == CONF_BUY_PRICE_SENSOR
+            else MODERN_PSTRYK_SELL_PRICE_SENSOR
+        )
+
+        def usable(entity_id: str | None) -> bool:
+            if not entity_id:
+                return False
+            state = self.hass.states.get(entity_id)
+            return bool(
+                state is not None
+                and state.state not in (None, "", "unknown", "unavailable")
+            )
+
+        if usable(explicit_text):
             current = explicit_text
-        elif self.hass.states.get(pstryk_current) is not None:
+        elif usable(pstryk_current):
             current = pstryk_current
+        elif usable(modern_current):
+            current = modern_current
         elif configured_text:
             current = configured_text
+        elif self.hass.states.get(modern_current) is not None:
+            current = modern_current
         else:
             current = pstryk_current
 
@@ -2365,8 +2386,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "buy_price_source_entity": buy_price_entities[0],
             "sell_price_source_entity": sell_price_entities[0],
             "pstryk_aio_price_schedule": "ON" if (
-                buy_price_entities[0] == DEFAULT_PSTRYK_BUY_PRICE_SENSOR
-                and sell_price_entities[0] == DEFAULT_PSTRYK_SELL_PRICE_SENSOR
+                buy_price_entities[0] in (DEFAULT_PSTRYK_BUY_PRICE_SENSOR, MODERN_PSTRYK_BUY_PRICE_SENSOR)
+                and sell_price_entities[0] in (DEFAULT_PSTRYK_SELL_PRICE_SENSOR, MODERN_PSTRYK_SELL_PRICE_SENSOR)
             ) else "OFF",
 
             "economic_good_sell_price": round(economic_good_sell_price, 3),

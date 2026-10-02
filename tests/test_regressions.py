@@ -40,10 +40,23 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.31", manifest["version"])
+        self.assertEqual("1.2.32", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.31"', source)
+            self.assertIn('"sw_version": "1.2.32"', source)
+
+    def test_daily_financial_stats_are_calculated_live(self) -> None:
+        learning = (COMPONENT / "learning.py").read_text(encoding="utf-8")
+        sensors = (COMPONENT / "sensor.py").read_text(encoding="utf-8")
+
+        self.assertIn('learn["financial_daily_key"] = day_key', learning)
+        self.assertIn("interval_import_kwh * buy_price", learning)
+        self.assertIn("interval_export_kwh * sell_price", learning)
+        self.assertIn('"learn_daily_purchase_cost_pln"', learning)
+        self.assertIn('"learn_daily_sale_value_pln"', learning)
+        self.assertIn('"learn_daily_financial_balance_pln"', learning)
+        self.assertIn('"learn_daily_grid_import_kwh"', sensors)
+        self.assertIn('"learn_daily_grid_export_kwh"', sensors)
 
     def test_evening_sale_waits_only_for_next_morning(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -161,12 +174,15 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("sensor.pstryk_aio_cena_zakupu_pradu_jutro", constants)
         self.assertIn("sensor.pstryk_aio_obecna_cena_sprzedazy_pradu", constants)
         self.assertIn("sensor.pstryk_aio_cena_sprzedazy_pradu_jutro", constants)
+        self.assertIn("sensor.pstryk_current_buy_price", constants)
+        self.assertIn("sensor.pstryk_current_sell_price", constants)
         self.assertIn("DEFAULT_PSTRYK_BUY_PRICE_SENSOR", config_flow)
         self.assertIn("DEFAULT_PSTRYK_SELL_PRICE_SENSOR", config_flow)
         self.assertIn("buy_price_entities = self._price_entity_ids(", coordinator)
         self.assertIn("sell_price_entities = self._price_entity_ids(", coordinator)
         self.assertIn("for price_entity_id in self._entity_id_list(entity_id):", coordinator)
         self.assertIn("buy_price_entities,\n            buy_price,\n            sell_price,", coordinator)
+        self.assertIn("elif usable(modern_current):", coordinator)
 
     def test_pstryk_tomorrow_average_is_never_the_current_price(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")

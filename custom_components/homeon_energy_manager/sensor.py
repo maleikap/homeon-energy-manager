@@ -146,6 +146,11 @@ SENSORS = [
     ("learn_pv_forecast_accuracy", "Realizacja prognozy PV", PERCENT, "mdi:target"),
     ("learn_daily_pv_kwh", "EMS produkcja PV dzisiaj", UnitOfEnergy.KILO_WATT_HOUR, "mdi:solar-power"),
     ("learn_daily_load_kwh", "EMS zużycie domu dzisiaj", UnitOfEnergy.KILO_WATT_HOUR, "mdi:home-lightning-bolt"),
+    ("learn_daily_grid_import_kwh", "EMS import z sieci dzisiaj", UnitOfEnergy.KILO_WATT_HOUR, "mdi:transmission-tower-import"),
+    ("learn_daily_grid_export_kwh", "EMS eksport do sieci dzisiaj", UnitOfEnergy.KILO_WATT_HOUR, "mdi:transmission-tower-export"),
+    ("learn_daily_purchase_cost_pln", "EMS koszt zakupu dzisiaj", "PLN", "mdi:cash-minus"),
+    ("learn_daily_sale_value_pln", "EMS wartość sprzedaży dzisiaj", "PLN", "mdi:cash-plus"),
+    ("learn_daily_financial_balance_pln", "EMS bilans finansowy dzisiaj", "PLN", "mdi:scale-balance"),
     ("pv_forecast_today_calibrated", "Skalibrowana prognoza PV dziś", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-sunny"),
     ("pv_forecast_tomorrow_calibrated", "Skalibrowana prognoza PV jutro", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-sunny-alert"),
     ("optimizer_status", "Optymalizator 24h", None, "mdi:chart-timeline-variant"),
@@ -259,7 +264,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.31",
+            "sw_version": "1.2.32",
         }
 
     @property

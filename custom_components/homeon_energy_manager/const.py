@@ -36,6 +36,8 @@ DEFAULT_PSTRYK_BUY_PRICE_SENSOR = "sensor.pstryk_aio_obecna_cena_zakupu_pradu"
 DEFAULT_PSTRYK_BUY_PRICE_TOMORROW_SENSOR = "sensor.pstryk_aio_cena_zakupu_pradu_jutro"
 DEFAULT_PSTRYK_SELL_PRICE_SENSOR = "sensor.pstryk_aio_obecna_cena_sprzedazy_pradu"
 DEFAULT_PSTRYK_SELL_PRICE_TOMORROW_SENSOR = "sensor.pstryk_aio_cena_sprzedazy_pradu_jutro"
+MODERN_PSTRYK_BUY_PRICE_SENSOR = "sensor.pstryk_current_buy_price"
+MODERN_PSTRYK_SELL_PRICE_SENSOR = "sensor.pstryk_current_sell_price"
 
 DEFAULT_BATTERY_CAPACITY_KWH = 30.0
 DEFAULT_MIN_SOC = 15.0

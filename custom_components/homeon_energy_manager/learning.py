@@ -115,6 +115,36 @@ async def update_learning(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         learn["daily_load_kwh"] = 0.0
         learn["daily_forecast_kwh"] = 0.0
 
+    financial_day_key = str(learn.get("financial_daily_key", ""))
+
+    if not financial_day_key:
+        # Preserve the part of the current day already reported by Pstryk when
+        # this feature is first installed.  From this point HomeOn updates the
+        # totals live from CT power and the active hourly prices.
+        pstryk_cost = coordinator.hass.states.get(
+            "sensor.pstryk_aio_dzienne_koszty_zuzycia_energii"
+        )
+        pstryk_sale = coordinator.hass.states.get(
+            "sensor.pstryk_aio_dzienna_wartosc_produkcji_energii"
+        )
+        learn["daily_purchase_cost_pln"] = _f(
+            pstryk_cost.state if pstryk_cost is not None else None,
+            0.0,
+        )
+        learn["daily_sale_value_pln"] = _f(
+            pstryk_sale.state if pstryk_sale is not None else None,
+            0.0,
+        )
+        learn["daily_grid_import_kwh"] = 0.0
+        learn["daily_grid_export_kwh"] = 0.0
+    elif financial_day_key != day_key:
+        learn["daily_purchase_cost_pln"] = 0.0
+        learn["daily_sale_value_pln"] = 0.0
+        learn["daily_grid_import_kwh"] = 0.0
+        learn["daily_grid_export_kwh"] = 0.0
+
+    learn["financial_daily_key"] = day_key
+
     learn["daily_key"] = day_key
     learn["daily_pv_kwh"] = _f(learn.get("daily_pv_kwh"), 0.0) + pv_w * dt_hours / 1000.0
     learn["daily_load_kwh"] = _f(learn.get("daily_load_kwh"), 0.0) + load_w * dt_hours / 1000.0
@@ -122,6 +152,13 @@ async def update_learning(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         _f(learn.get("daily_forecast_kwh"), 0.0),
         pv_forecast_today_kwh,
     )
+
+    interval_import_kwh = grid_import_w * dt_hours / 1000.0
+    interval_export_kwh = grid_export_w * dt_hours / 1000.0
+    learn["daily_grid_import_kwh"] = _f(learn.get("daily_grid_import_kwh"), 0.0) + interval_import_kwh
+    learn["daily_grid_export_kwh"] = _f(learn.get("daily_grid_export_kwh"), 0.0) + interval_export_kwh
+    learn["daily_purchase_cost_pln"] = _f(learn.get("daily_purchase_cost_pln"), 0.0) + interval_import_kwh * buy_price
+    learn["daily_sale_value_pln"] = _f(learn.get("daily_sale_value_pln"), 0.0) + interval_export_kwh * sell_price
 
     pv_forecast_factor = min(1.35, max(0.35, _f(learn.get("pv_forecast_factor"), 1.0)))
 
@@ -259,6 +296,15 @@ async def update_learning(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         "learn_pv_forecast_accuracy": _round(min(100.0, pv_forecast_factor * 100.0), 1),
         "learn_daily_pv_kwh": _round(learn.get("daily_pv_kwh"), 2),
         "learn_daily_load_kwh": _round(learn.get("daily_load_kwh"), 2),
+        "learn_daily_grid_import_kwh": _round(learn.get("daily_grid_import_kwh"), 3),
+        "learn_daily_grid_export_kwh": _round(learn.get("daily_grid_export_kwh"), 3),
+        "learn_daily_purchase_cost_pln": _round(learn.get("daily_purchase_cost_pln"), 2),
+        "learn_daily_sale_value_pln": _round(learn.get("daily_sale_value_pln"), 2),
+        "learn_daily_financial_balance_pln": _round(
+            _f(learn.get("daily_sale_value_pln"), 0.0)
+            - _f(learn.get("daily_purchase_cost_pln"), 0.0),
+            2,
+        ),
         "learn_previous_day_pv_kwh": _round(learn.get("previous_day_pv_kwh"), 2),
         "learn_previous_day_forecast_kwh": _round(learn.get("previous_day_forecast_kwh"), 2),
         "pv_forecast_today_calibrated": _round(pv_forecast_today_kwh * pv_forecast_factor, 2),
