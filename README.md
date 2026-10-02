@@ -117,6 +117,7 @@ HACS instaluje integrację automatycznie. Nie należy ręcznie kopiować plików
 
 Podczas dodawania integracji należy wskazać:
 
+- typ instalacji: **CT** albo **LOAD**,
 - sensory SOC, mocy baterii, PV, domu i sieci,
 - sensory aktualnej ceny zakupu i sprzedaży,
 - opcjonalne sensory prognozy PV,
@@ -128,6 +129,13 @@ Podczas dodawania integracji należy wskazać:
 Po instalacji sterowanie falownikiem jest wyłączone, a `dry-run` włączony. Pozwala to sprawdzić decyzje managera przed wysłaniem rzeczywistych poleceń.
 
 Encje i parametry można później zmienić przez **Ustawienia → Urządzenia i usługi → HomeOn Energy Manager → Konfiguruj**, bez usuwania integracji. W tym miejscu można również dopasować encję trybu pracy falownika oraz dokładne nazwy opcji Deye.
+
+### Typ instalacji CT lub LOAD
+
+- **CT** — wybierz, gdy część odbiorników jest podłączona po stronie GRID i falownik mierzy cały obiekt przekładnikami CT. HomeOn uwzględnia bilans CT i w normalnej pracy używa `Zero Export To CT`.
+- **LOAD** — wybierz, gdy wszystkie odbiorniki są podłączone za wyjściem LOAD falownika i instalacja nie ma przekładników CT. HomeOn korzysta bezpośrednio z mocy LOAD i w normalnej pracy używa `Zero Export To Load`.
+
+W instalacji LOAD niewielki ujemny odczyt mocy domu od `-100 W` do `0 W` jest traktowany jako tolerancja pomiarowa i nie uruchamia `SAFE MODE`. Większa wartość ujemna nadal jest zgłaszana jako błąd danych.
 
 Ustawiając pojemność magazynu, należy sprawdzić również **Zużycie nocne** i **Margines bezpieczeństwa nocy**. Jeżeli zużycie nocne pomnożone przez margines jest równe pojemności magazynu lub ją przekracza, rezerwa zostanie ograniczona do 95% i może zablokować zmienność celów SOC. HomeOn pokaże wtedy ostrzeżenie diagnostyczne.
 
