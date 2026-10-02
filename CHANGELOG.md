@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.33
+
+- dodano wybór typu instalacji `CT` albo `LOAD` w konfiguracji i opcjach integracji,
+- instalacja LOAD korzysta bezpośrednio z odczytu LOAD i ustawia `Zero Export To Load`,
+- instalacja CT zachowuje dotychczasowy pełny bilans odbiorników oraz `Zero Export To CT`,
+- małe ujemne odchylenie mocy LOAD do `-100 W` nie uruchamia już `SAFE MODE`,
+- dodano diagnostykę wybranego typu instalacji i źródła mocy domu.
+
 ## 1.2.32
 
 - dodano bieżące dzienne liczenie kosztu zakupu i wartości sprzedaży na podstawie mocy CT oraz godzinowych cen Pstryk AIO,
