@@ -60,6 +60,13 @@ Z atrybutów `today_prices` i `tomorrow_prices` pobierany jest godzinowy harmono
 
 Manager nie korzysta z dziennego kosztu ani dziennej wartości sprzedaży jako aktualnej ceny. Te encje są przeznaczone do prezentacji bilansu finansowego w HomeOn Energy Card.
 
+Starsza integracja `Pstryk-all-in-one` korzysta z wyłączonego API i może zwracać błędy `403`, `404` lub `auth_test_failed`. HomeOn automatycznie obsługuje również aktualną integrację `balgerion/ha_Pstryk`, która korzysta z endpointu `unified-metrics` i udostępnia encje:
+
+- `sensor.pstryk_current_buy_price`,
+- `sensor.pstryk_current_sell_price`.
+
+Jeżeli stare encje Pstryk AIO są niedostępne, a nowe sensory istnieją, Manager przełączy się na nie automatycznie bez ponownej konfiguracji strategii.
+
 ### Prognoza produkcji PV
 
 Do dokładnego planowania magazynu zalecana jest jedna z integracji:
