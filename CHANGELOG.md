@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.32
+
+- dodano bieżące dzienne liczenie kosztu zakupu i wartości sprzedaży na podstawie mocy CT oraz godzinowych cen Pstryk AIO,
+- dodano dzienne liczniki energii importowanej i eksportowanej oraz wynik finansowy,
+- statystyki są zapisywane w pamięci integracji i zerowane automatycznie po zmianie dnia,
+- przy pierwszej aktualizacji dzisiejsze wartości Pstryk AIO są używane jako punkt początkowy, aby nie zgubić wcześniejszych godzin.
+- dodano automatyczne przejście ze starej, niedziałającej integracji Pstryk AIO na sensory `pstryk_current_buy_price` i `pstryk_current_sell_price` z nowego API `unified-metrics`.
+
+
 ## 1.2.31
 
 - rezerwa odłożona na noc jest wykorzystywana przez dom i odbiorniki widoczne za przekładnikami CT,
