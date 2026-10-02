@@ -16,6 +16,7 @@ from .const import (
     CONF_SELL_PRICE_SENSOR,
     CONF_PV_FORECAST_TODAY_SENSOR,
     CONF_PV_FORECAST_TOMORROW_SENSOR,
+    CONF_INSTALLATION_TYPE,
     CONF_BATTERY_CAPACITY_KWH,
     CONF_MIN_SOC,
     CONF_EMERGENCY_SOC,
@@ -52,6 +53,9 @@ from .const import (
     DEFAULT_INVERTER_WORK_MODE_SELECT,
     DEFAULT_INVERTER_WORK_MODE_SELL_OPTION,
     DEFAULT_INVERTER_WORK_MODE_PV_CHARGE_OPTION,
+    DEFAULT_INSTALLATION_TYPE,
+    INSTALLATION_TYPE_CT,
+    INSTALLATION_TYPE_LOAD,
 )
 
 
@@ -71,6 +75,16 @@ SELECT_SELECTOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="select")
 )
 
+INSTALLATION_TYPE_SELECTOR = selector.SelectSelector(
+    selector.SelectSelectorConfig(
+        options=[
+            selector.SelectOptionDict(value=INSTALLATION_TYPE_CT, label="CT — odbiorniki GRID mierzone przekładnikami"),
+            selector.SelectOptionDict(value=INSTALLATION_TYPE_LOAD, label="LOAD — wszystkie odbiorniki za wyjściem LOAD"),
+        ],
+        mode=selector.SelectSelectorMode.DROPDOWN,
+    )
+)
+
 
 def _schema(defaults: dict | None = None) -> vol.Schema:
     values = defaults or {}
@@ -88,6 +102,7 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
 
     return vol.Schema(
         {
+            vol.Required(CONF_INSTALLATION_TYPE, default=value(CONF_INSTALLATION_TYPE, DEFAULT_INSTALLATION_TYPE)): INSTALLATION_TYPE_SELECTOR,
             required_entity(CONF_SOC_SENSOR): SENSOR_SELECTOR,
             required_entity(CONF_BATTERY_POWER_SENSOR): SENSOR_SELECTOR,
             required_entity(CONF_PV_POWER_SENSOR): SENSOR_SELECTOR,
