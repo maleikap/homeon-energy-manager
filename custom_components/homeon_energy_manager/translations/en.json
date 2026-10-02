@@ -6,6 +6,7 @@
         "title": "HomeOn Energy Manager",
         "description": "Select inverter, battery, energy price and PV forecast entities.",
         "data": {
+          "installation_type": "Installation type",
           "soc_sensor": "Battery SOC",
           "battery_power_sensor": "Battery power",
           "pv_power_sensor": "PV power",
@@ -35,6 +36,7 @@
           "inverter_work_mode_pv_charge_option": "Normal operation and PV charging mode name"
         },
         "data_description": {
+          "installation_type": "CT: loads may be on the GRID side and are measured by current transformers; the inverter uses Zero Export To CT. LOAD: all loads are behind LOAD without CT clamps; the inverter uses Zero Export To Load.",
           "battery_capacity_kwh": "Actual usable capacity of the complete battery system.",
           "night_consumption_kwh": "Review this value after changing battery capacity. Night consumption with its margin should not exceed battery capacity.",
           "night_safety_margin": "Night reserve multiplier. An excessive value can raise the minimum SOC target to 95%."
@@ -51,6 +53,7 @@
         "title": "HomeOn Energy Manager settings",
         "description": "Change entities and parameters without removing the integration.",
         "data": {
+          "installation_type": "Installation type",
           "soc_sensor": "Battery SOC",
           "battery_power_sensor": "Battery power",
           "pv_power_sensor": "PV power",
@@ -80,6 +83,7 @@
           "inverter_work_mode_pv_charge_option": "Normal operation and PV charging mode name"
         },
         "data_description": {
+          "installation_type": "CT: loads may be on the GRID side and are measured by current transformers; the inverter uses Zero Export To CT. LOAD: all loads are behind LOAD without CT clamps; the inverter uses Zero Export To Load.",
           "battery_capacity_kwh": "Actual usable capacity of the complete battery system.",
           "night_consumption_kwh": "Review this value after changing battery capacity. Night consumption with its margin should not exceed battery capacity.",
           "night_safety_margin": "Night reserve multiplier. An excessive value can raise the minimum SOC target to 95%."

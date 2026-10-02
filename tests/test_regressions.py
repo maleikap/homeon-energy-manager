@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.32", manifest["version"])
+        self.assertEqual("1.2.33", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.32"', source)
+            self.assertIn('"sw_version": "1.2.33"', source)
 
     def test_daily_financial_stats_are_calculated_live(self) -> None:
         learning = (COMPONENT / "learning.py").read_text(encoding="utf-8")
@@ -156,7 +156,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
 
         self.assertIn("ct_balanced_load_power = max(", source)
-        self.assertIn("load_power = max(load_power, ct_balanced_load_power)", source)
+        self.assertIn("load_power = max(inverter_load_power_raw, ct_balanced_load_power)", source)
         self.assertIn('"inverter_load_power_raw"', source)
         self.assertIn('"ct_balanced_load_power"', source)
         self.assertIn('hourly_profile.get(f"{hour:02d}")', source)
@@ -164,6 +164,19 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("profile_ct_balance_w = max(", source)
         self.assertIn('bucket.get("avg_grid_import_w")', source)
         self.assertIn('bucket.get("avg_battery_discharge_w")', source)
+
+    def test_load_installation_uses_load_reading_and_matching_deye_mode(self) -> None:
+        constants = (COMPONENT / "const.py").read_text(encoding="utf-8")
+        config_flow = (COMPONENT / "config_flow.py").read_text(encoding="utf-8")
+        coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+
+        self.assertIn('CONF_INSTALLATION_TYPE = "installation_type"', constants)
+        self.assertIn('DEFAULT_INVERTER_WORK_MODE_LOAD_OPTION = "Zero Export To Load"', constants)
+        self.assertIn("INSTALLATION_TYPE_SELECTOR", config_flow)
+        self.assertIn("installation_type == INSTALLATION_TYPE_LOAD", coordinator)
+        self.assertIn("load_power = max(0.0, inverter_load_power_raw)", coordinator)
+        self.assertIn("load_power_minimum = -100.0", coordinator)
+        self.assertIn("DEFAULT_INVERTER_WORK_MODE_LOAD_OPTION", coordinator)
 
     def test_pstryk_aio_is_the_automatic_price_source(self) -> None:
         constants = (COMPONENT / "const.py").read_text(encoding="utf-8")

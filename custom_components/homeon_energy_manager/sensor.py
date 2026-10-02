@@ -50,6 +50,10 @@ SENSORS = [
     ("battery_charge_w", "Ładowanie baterii", UnitOfPower.WATT, "mdi:battery-arrow-up"),
     ("pv_power", "Moc PV", UnitOfPower.WATT, "mdi:solar-power"),
     ("load_power", "Moc domu", UnitOfPower.WATT, "mdi:home-lightning-bolt"),
+    ("installation_type", "Typ instalacji", None, "mdi:home-switch"),
+    ("load_power_source", "Źródło mocy domu", None, "mdi:source-branch"),
+    ("inverter_load_power_raw", "Surowa moc LOAD", UnitOfPower.WATT, "mdi:home-lightning-bolt-outline"),
+    ("ct_balanced_load_power", "Moc domu z bilansu CT", UnitOfPower.WATT, "mdi:current-ac"),
     ("grid_power", "Moc sieci", UnitOfPower.WATT, "mdi:transmission-tower"),
     ("grid_status", "Status sieci", None, "mdi:transmission-tower-import"),
     ("grid_import_w", "Import z sieci", UnitOfPower.WATT, "mdi:transmission-tower-import"),
@@ -264,7 +268,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.32",
+            "sw_version": "1.2.33",
         }
 
     @property

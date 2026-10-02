@@ -5,6 +5,7 @@
         "title": "HomeOn Energy Manager",
         "description": "Wybierz sensory energii oraz encje falownika Deye/Solarman, którymi HomeOn może sterować.",
         "data": {
+          "installation_type": "Typ instalacji",
           "soc_sensor": "SOC magazynu energii",
           "battery_power_sensor": "Moc baterii",
           "pv_power_sensor": "Moc PV",
@@ -34,6 +35,7 @@
           "inverter_work_mode_pv_charge_option": "Nazwa trybu normalnej pracy i ładowania PV"
         },
         "data_description": {
+          "installation_type": "CT: odbiorniki mogą być po stronie GRID i są mierzone przekładnikami; falownik używa Zero Export To CT. LOAD: wszystkie odbiorniki są za wyjściem LOAD, bez przekładników; falownik używa Zero Export To Load.",
           "battery_capacity_kwh": "Rzeczywista użyteczna pojemność całego magazynu.",
           "night_consumption_kwh": "Sprawdź tę wartość po zmianie pojemności magazynu. Zużycie nocne z marginesem nie powinno przekraczać pojemności baterii.",
           "night_safety_margin": "Mnożnik rezerwy nocnej. Zbyt wysoka wartość może podnieść minimalny cel SOC do 95%."
@@ -50,6 +52,7 @@
         "title": "Ustawienia HomeOn Energy Manager",
         "description": "Zmień encje i parametry bez usuwania integracji.",
         "data": {
+          "installation_type": "Typ instalacji",
           "soc_sensor": "SOC magazynu energii",
           "battery_power_sensor": "Moc baterii",
           "pv_power_sensor": "Moc PV",
@@ -79,6 +82,7 @@
           "inverter_work_mode_pv_charge_option": "Nazwa trybu normalnej pracy i ładowania PV"
         },
         "data_description": {
+          "installation_type": "CT: odbiorniki mogą być po stronie GRID i są mierzone przekładnikami; falownik używa Zero Export To CT. LOAD: wszystkie odbiorniki są za wyjściem LOAD, bez przekładników; falownik używa Zero Export To Load.",
           "battery_capacity_kwh": "Rzeczywista użyteczna pojemność całego magazynu.",
           "night_consumption_kwh": "Sprawdź tę wartość po zmianie pojemności magazynu. Zużycie nocne z marginesem nie powinno przekraczać pojemności baterii.",
           "night_safety_margin": "Mnożnik rezerwy nocnej. Zbyt wysoka wartość może podnieść minimalny cel SOC do 95%."
