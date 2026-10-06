@@ -191,6 +191,18 @@ SENSORS = [
     ("pv_reality_reason", "PV powód oceny pogody", None, "mdi:text-box-check"),
     ("pv_reality_installed_kwp", "PV moc instalacji", "kWp", "mdi:solar-power-variant"),
     ("battery_trade_enabled", "Tryb handlu baterią", None, "mdi:cash-sync"),
+    ("profit_mode_enabled", "Tryb zarabiania", None, "mdi:finance"),
+    ("profit_mode_status", "Tryb zarabiania — status", None, "mdi:finance"),
+    ("profit_mode_reason", "Tryb zarabiania — decyzja", None, "mdi:text-box-check"),
+    ("profit_mode_cheapest_buy_price", "Najtańszy zakup dla arbitrażu", "PLN/kWh", "mdi:cash-minus"),
+    ("profit_mode_best_sell_price", "Najlepsza sprzedaż dla arbitrażu", "PLN/kWh", "mdi:cash-plus"),
+    ("profit_mode_profit_per_kwh", "Zysk arbitrażu na kWh", "PLN/kWh", "mdi:cash-check"),
+    ("profit_mode_sale_energy_kwh", "Planowana energia sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-arrow-down"),
+    ("profit_mode_expected_revenue", "Planowany przychód sprzedaży", "PLN", "mdi:cash-multiple"),
+    ("profit_mode_expected_purchase_cost", "Planowany koszt odkupienia", "PLN", "mdi:cash-minus"),
+    ("profit_mode_expected_cycle_cost", "Planowany koszt baterii", "PLN", "mdi:battery-sync"),
+    ("profit_mode_expected_net_profit", "Planowany zysk netto", "PLN", "mdi:finance"),
+    ("profit_mode_round_trip_efficiency", "Sprawność cyklu magazynu", PERCENT, "mdi:battery-sync"),
     ("home_battery_protection", "Ochrona domu bateria zasila dom", None, "mdi:home-battery"),
     ("home_battery_load_w", "Moc baterii dla domu", UnitOfPower.WATT, "mdi:home-lightning-bolt"),
     ("home_battery_protection_reason", "Powód ochrony domu", None, "mdi:text-box-check"),
@@ -268,7 +280,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.33",
+            "sw_version": "1.2.34",
         }
 
     @property
