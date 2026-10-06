@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.34
+
+- dodano osobny przełącznik `Tryb zarabiania`, działający razem z nadrzędnym zezwoleniem na handel baterią,
+- zysk netto uwzględnia cenę sprzedaży, koszt późniejszego zakupu, sprawność ładowania i rozładowania oraz koszt cyklu baterii,
+- pełny magazyn jest sprzedawany wyłącznie w najlepszym opłacalnym oknie z dostępnego harmonogramu,
+- brakująca energia jest ładowana tylko w najtańszych godzinach przed planowaną sprzedażą,
+- zachowano dynamiczną rezerwę domu, rezerwę nocną, minimalny SOC, SAFE MODE i zabezpieczenia Deye,
+- dodano sensory diagnostyczne przychodu, kosztów i przewidywanego zysku netto.
+
 ## 1.2.33
 
 - dodano wybór typu instalacji `CT` albo `LOAD` w konfiguracji i opcjach integracji,
