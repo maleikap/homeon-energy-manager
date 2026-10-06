@@ -40,10 +40,25 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.33", manifest["version"])
+        self.assertEqual("1.2.34", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.33"', source)
+            self.assertIn('"sw_version": "1.2.34"', source)
+
+    def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
+        coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        switches = (COMPONENT / "switch.py").read_text(encoding="utf-8")
+        sensors = (COMPONENT / "sensor.py").read_text(encoding="utf-8")
+        planner = (COMPONENT / "planner.py").read_text(encoding="utf-8")
+
+        self.assertIn('("profit_mode", "Tryb zarabiania"', switches)
+        self.assertIn("def _profit_mode_plan(", coordinator)
+        self.assertIn("purchase_cost_per_sold_kwh", coordinator)
+        self.assertIn("charge_efficiency * discharge_efficiency", coordinator)
+        self.assertIn("expected_revenue - expected_purchase_cost - expected_cycle_cost", coordinator)
+        self.assertIn('soc >= 94.0', coordinator)
+        self.assertIn('"profit_mode_expected_net_profit"', sensors)
+        self.assertIn("and not profit_mode_enabled", planner)
 
     def test_daily_financial_stats_are_calculated_live(self) -> None:
         learning = (COMPONENT / "learning.py").read_text(encoding="utf-8")
