@@ -814,6 +814,129 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             ),
         }
 
+    def _profit_mode_plan(
+        self,
+        buy_price_entity: str | list[str] | tuple[str, ...] | None,
+        sell_price_entity: str | list[str] | tuple[str, ...] | None,
+        current_buy_price: float,
+        current_sell_price: float,
+        soc: float,
+        battery_capacity_kwh: float,
+        reserve_soc: float,
+        enabled: bool,
+    ) -> dict[str, Any]:
+        """Plan one profitable buy/store/sell cycle over the next 24 hours."""
+        buy_points = self._price_points_for_entity(
+            buy_price_entity, current_buy_price, horizon_hours=24
+        )
+        sell_points = self._price_points_for_entity(
+            sell_price_entity, current_sell_price, horizon_hours=24
+        )
+        best_sell = max(sell_points, key=lambda item: item["price"], default=None)
+        if best_sell is not None and soc >= 94.0:
+            eligible_buy_points = [
+                item for item in buy_points if item["dt"] > best_sell["dt"]
+            ]
+        elif best_sell is not None:
+            eligible_buy_points = [
+                item for item in buy_points if item["dt"] <= best_sell["dt"]
+            ]
+        else:
+            eligible_buy_points = []
+        cheapest = min(eligible_buy_points, key=lambda item: item["price"], default=None)
+        schedule_available = len(sell_points) >= 2 and cheapest is not None
+        cheapest_buy = float(cheapest["price"]) if cheapest else current_buy_price
+        best_sell_price = float(best_sell["price"]) if best_sell else current_sell_price
+        charge_efficiency = min(
+            1.0,
+            max(0.50, self._runtime_float("battery_charge_efficiency_percent", 94.0) / 100.0),
+        )
+        discharge_efficiency = min(
+            1.0,
+            max(0.50, self._runtime_float("battery_discharge_efficiency_percent", 94.0) / 100.0),
+        )
+        cycle_cost = max(0.0, self._runtime_float("economic_battery_cycle_cost", 0.15))
+        minimum_profit = max(0.0, self._runtime_float("economic_min_arbitrage_profit", 1.0))
+        round_trip_efficiency = charge_efficiency * discharge_efficiency
+        purchase_cost_per_sold_kwh = cheapest_buy / max(round_trip_efficiency, 0.01)
+        profit_per_kwh = best_sell_price - purchase_cost_per_sold_kwh - cycle_cost
+        usable_stored_kwh = max(
+            0.0,
+            battery_capacity_kwh * (95.0 - max(0.0, reserve_soc)) / 100.0,
+        )
+        sale_energy_kwh = usable_stored_kwh * discharge_efficiency
+        expected_revenue = sale_energy_kwh * best_sell_price
+        expected_purchase_cost = sale_energy_kwh * purchase_cost_per_sold_kwh
+        expected_cycle_cost = sale_energy_kwh * cycle_cost
+        expected_net_profit = expected_revenue - expected_purchase_cost - expected_cycle_cost
+        profitable = bool(
+            schedule_available
+            and profit_per_kwh > 0.0
+            and expected_net_profit >= minimum_profit
+        )
+        sell_now = bool(
+            enabled
+            and profitable
+            and soc >= 94.0
+            and current_sell_price >= best_sell_price - 0.01
+        )
+        prepare_charge = bool(
+            enabled
+            and profitable
+            and soc < 94.0
+            and cheapest is not None
+            and best_sell is not None
+            and cheapest["dt"] <= best_sell["dt"]
+        )
+        if not enabled:
+            status = "WYŁĄCZONY"
+            reason = "Tryb zarabiania jest wyłączony."
+        elif not schedule_available:
+            status = "BRAK CEN"
+            reason = "Brak pełnego harmonogramu cen zakupu i sprzedaży na 24 godziny."
+        elif not profitable:
+            status = "NIEOPŁACALNY"
+            reason = (
+                f"Przewidywany wynik {expected_net_profit:.2f} PLN jest niższy od minimum "
+                f"{minimum_profit:.2f} PLN po zakupie energii, stratach i koszcie baterii."
+            )
+        elif sell_now:
+            status = "SPRZEDAŻ"
+            reason = (
+                f"Najlepsza cena sprzedaży {current_sell_price:.3f} PLN/kWh; po odkupieniu "
+                f"energii po {cheapest_buy:.3f} PLN/kWh przewidywany zysk netto "
+                f"wynosi {expected_net_profit:.2f} PLN."
+            )
+        elif prepare_charge:
+            status = "TANIE ŁADOWANIE"
+            reason = (
+                f"Przygotowuję magazyn na sprzedaż po {best_sell_price:.3f} PLN/kWh; "
+                f"najtańszy zakup {cheapest_buy:.3f} PLN/kWh."
+            )
+        else:
+            status = "OCZEKIWANIE"
+            reason = (
+                f"Cykl jest opłacalny ({expected_net_profit:.2f} PLN netto), ale czekam "
+                f"na najlepszą cenę sprzedaży {best_sell_price:.3f} PLN/kWh."
+            )
+        return {
+            "enabled": enabled,
+            "profitable": profitable,
+            "sell_now": sell_now,
+            "prepare_charge": prepare_charge,
+            "status": status,
+            "reason": reason[:240],
+            "cheapest_buy_price": round(cheapest_buy, 3),
+            "best_sell_price": round(best_sell_price, 3),
+            "profit_per_kwh": round(profit_per_kwh, 3),
+            "sale_energy_kwh": round(sale_energy_kwh, 2),
+            "expected_revenue": round(expected_revenue, 2),
+            "expected_purchase_cost": round(expected_purchase_cost, 2),
+            "expected_cycle_cost": round(expected_cycle_cost, 2),
+            "expected_net_profit": round(expected_net_profit, 2),
+            "round_trip_efficiency": round(round_trip_efficiency * 100.0, 1),
+        }
+
     def _negative_price_plan(
         self,
         price_entity: str | list[str] | tuple[str, ...] | None,
@@ -1859,6 +1982,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         # HOMEON_DATA_QUALITY_END
         # HOMEON_HOME_BATTERY_PRIORITY_START
         battery_trade_enabled = bool(store.get("battery_trade", False))
+        profit_mode_enabled = bool(store.get("profit_mode", False))
         home_battery_load_w = min(max(load_power, 0.0), max(battery_discharge_w, 0.0))
         home_battery_protection_active = bool(
             not battery_trade_enabled
@@ -2088,11 +2212,28 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             battery_trade_enabled,
         )
 
+        profit_mode_plan = self._profit_mode_plan(
+            buy_price_entities,
+            sell_price_entities,
+            buy_price,
+            sell_price,
+            soc,
+            battery_capacity_kwh,
+            max(discharge_target_soc, night_reserve_soc),
+            profit_mode_enabled and battery_trade_enabled,
+        )
+
+        cheap_charge_target_soc = (
+            max(charge_target_soc, 95.0)
+            if profit_mode_plan.get("prepare_charge", False)
+            else charge_target_soc
+        )
+
         cheap_grid_charge_plan = self._cheap_grid_charge_plan(
             buy_price_entities,
             buy_price,
             soc,
-            charge_target_soc,
+            cheap_charge_target_soc,
             battery_capacity_kwh,
         )
         # HOMEON_NEGATIVE_PRICE_WINDOW_END
@@ -2151,6 +2292,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             and available_to_sell_kwh > 0.3
             and battery_trade_enabled
         )
+        if profit_mode_enabled:
+            wait_for_better_sell = bool(
+                profit_mode_plan.get("profitable", False)
+                and not profit_mode_plan.get("sell_now", False)
+                and soc >= 94.0
+                and available_to_sell_kwh > 0.3
+            )
 
         economic_estimated_sell_profit = max(
             0.0,
@@ -2162,7 +2310,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         )
 
         sell_ready = bool(
-            sell_price_trigger
+            (profit_mode_plan.get("sell_now", False) if profit_mode_enabled else sell_price_trigger)
             and soc > discharge_target_soc + 1
             and not pv_reality_lock
             and battery_trade_enabled
@@ -2175,7 +2323,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             )
         )
 
-        if not battery_trade_enabled:
+        if profit_mode_enabled:
+            economic_sell_reason = str(profit_mode_plan.get("reason", "Tryb zarabiania analizuje ceny"))
+        elif not battery_trade_enabled:
             economic_sell_reason = "Handel baterią OFF — HomeOn nie sprzedaje energii z magazynu"
         elif home_battery_protection_active:
             economic_sell_reason = "Bateria zasila dom — sprzedaż zablokowana przez ochronę domu"
@@ -2250,17 +2400,23 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             reason = str(pv_low_price_plan.get("reason", "Przed najgorszymi godzinami sprzedaję PV i zachowuję miejsce w magazynie"))
         elif wait_for_better_sell:
             mode = "WAIT_BETTER_SELL_PRICE"
-            reason = (
-                f"Zachowuję energię na lepszą sprzedaż: teraz {sell_price:.2f} PLN/kWh, "
-                f"najlepsza cena {best_sell_price:.2f} PLN/kWh o "
-                f"{sell_stats.get('best_sell_time_before_morning', '-')}"
-            )
+            if profit_mode_enabled:
+                reason = str(profit_mode_plan.get("reason", "Czekam na najlepszą cenę sprzedaży"))
+            else:
+                reason = (
+                    f"Zachowuję energię na lepszą sprzedaż: teraz {sell_price:.2f} PLN/kWh, "
+                    f"najlepsza cena {best_sell_price:.2f} PLN/kWh o "
+                    f"{sell_stats.get('best_sell_time_before_morning', '-')}"
+                )
         elif sell_ready:
             mode = "SELL_BATTERY_HIGH_PRICE"
-            reason = (
-                f"Sprzedaję teraz — cena {sell_price:.2f} PLN/kWh "
-                f"osiągnęła ustawiony próg {economic_good_sell_price:.2f} PLN/kWh"
-            )
+            if profit_mode_enabled:
+                reason = str(profit_mode_plan.get("reason", "Sprzedaję energię z zyskiem"))
+            else:
+                reason = (
+                    f"Sprzedaję teraz — cena {sell_price:.2f} PLN/kWh "
+                    f"osiągnęła ustawiony próg {economic_good_sell_price:.2f} PLN/kWh"
+                )
         elif (
             pv_low_price_plan.get("windows_completed", False)
             and soc >= charge_target_soc - 1.0
@@ -2484,6 +2640,18 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "grid_export_w": round(grid_export_w, 0),
 
             "battery_trade_enabled": "ON" if battery_trade_enabled else "OFF",
+            "profit_mode_enabled": "ON" if profit_mode_enabled else "OFF",
+            "profit_mode_status": str(profit_mode_plan.get("status", "WYŁĄCZONY")),
+            "profit_mode_reason": str(profit_mode_plan.get("reason", "-")),
+            "profit_mode_cheapest_buy_price": profit_mode_plan.get("cheapest_buy_price", 0.0),
+            "profit_mode_best_sell_price": profit_mode_plan.get("best_sell_price", 0.0),
+            "profit_mode_profit_per_kwh": profit_mode_plan.get("profit_per_kwh", 0.0),
+            "profit_mode_sale_energy_kwh": profit_mode_plan.get("sale_energy_kwh", 0.0),
+            "profit_mode_expected_revenue": profit_mode_plan.get("expected_revenue", 0.0),
+            "profit_mode_expected_purchase_cost": profit_mode_plan.get("expected_purchase_cost", 0.0),
+            "profit_mode_expected_cycle_cost": profit_mode_plan.get("expected_cycle_cost", 0.0),
+            "profit_mode_expected_net_profit": profit_mode_plan.get("expected_net_profit", 0.0),
+            "profit_mode_round_trip_efficiency": profit_mode_plan.get("round_trip_efficiency", 0.0),
             "home_battery_protection": "ON" if home_battery_protection_active else "OFF",
             "home_battery_load_w": round(home_battery_load_w, 0),
             "home_battery_protection_reason": home_battery_protection_reason[:240],

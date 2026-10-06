@@ -14,6 +14,7 @@ DEFAULT_RUNTIME_OPTIONS = {
     "dry_run": True,
     "inverter_control": False,
     "battery_trade": False,
+    "profit_mode": False,
     "inverter_export_target_w": 10000,
     "inverter_charge_current_a": 80,
     "inverter_discharge_current_a": 120,

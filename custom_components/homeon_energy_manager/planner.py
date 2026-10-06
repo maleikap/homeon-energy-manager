@@ -347,6 +347,7 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
 
     current_phase = _phase(now.hour)
     current_mode = str(data.get("mode", "NORMAL"))
+    profit_mode_enabled = str(data.get("profit_mode_enabled", "OFF")).upper() == "ON"
 
     if (
         current_mode == "WAIT_BETTER_SELL_PRICE"
@@ -379,6 +380,7 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
 
     if (
         current_mode == "WAIT_BETTER_SELL_PRICE"
+        and not profit_mode_enabled
         and feasible_sale_kwh > 0.3
         and required_sale_hours > 0.25
         and now >= recommended_sell_start_dt
