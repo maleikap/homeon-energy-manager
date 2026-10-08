@@ -823,6 +823,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         soc: float,
         battery_capacity_kwh: float,
         reserve_soc: float,
+        pv_forecast_today_kwh: float,
+        pv_produced_today_kwh: float,
+        expected_daily_consumption_kwh: float,
+        consumed_today_kwh: float,
         enabled: bool,
     ) -> dict[str, Any]:
         """Plan one profitable buy/store/sell cycle over the next 24 hours."""
@@ -859,15 +863,32 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         cycle_cost = max(0.0, self._runtime_float("economic_battery_cycle_cost", 0.15))
         minimum_profit = max(0.0, self._runtime_float("economic_min_arbitrage_profit", 1.0))
         round_trip_efficiency = charge_efficiency * discharge_efficiency
-        purchase_cost_per_sold_kwh = cheapest_buy / max(round_trip_efficiency, 0.01)
         morning_profit_window = 6 <= dt_util.as_local(now).hour < 10
         sale_price_used = current_sell_price if morning_profit_window else best_sell_price
-        profit_per_kwh = sale_price_used - purchase_cost_per_sold_kwh - cycle_cost
         sale_energy_kwh = stored_energy_above_reserve_kwh * discharge_efficiency
+        # Energy sold from the battery does not always have to be bought back
+        # from the grid.  First reserve the rest of today's PV forecast for the
+        # remaining household demand, then use only the genuine PV surplus to
+        # rebuild the battery.  Grid purchase is costed solely for any deficit.
+        remaining_pv_kwh = max(0.0, pv_forecast_today_kwh - pv_produced_today_kwh)
+        remaining_home_consumption_kwh = max(
+            0.0,
+            expected_daily_consumption_kwh - consumed_today_kwh,
+        )
+        pv_surplus_for_refill_kwh = max(
+            0.0,
+            remaining_pv_kwh - remaining_home_consumption_kwh,
+        )
+        replacement_input_kwh = sale_energy_kwh / max(round_trip_efficiency, 0.01)
+        pv_refill_kwh = min(replacement_input_kwh, pv_surplus_for_refill_kwh)
+        grid_repurchase_kwh = max(0.0, replacement_input_kwh - pv_refill_kwh)
         expected_revenue = sale_energy_kwh * sale_price_used
-        expected_purchase_cost = sale_energy_kwh * purchase_cost_per_sold_kwh
+        expected_purchase_cost = grid_repurchase_kwh * cheapest_buy
         expected_cycle_cost = sale_energy_kwh * cycle_cost
         expected_net_profit = expected_revenue - expected_purchase_cost - expected_cycle_cost
+        profit_per_kwh = (
+            expected_net_profit / sale_energy_kwh if sale_energy_kwh > 0.01 else 0.0
+        )
         profitable = bool(
             schedule_available
             and profit_per_kwh > 0.0
@@ -877,10 +898,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             enabled
             and profitable
             and stored_energy_above_reserve_kwh > 0.3
-            and (
-                morning_profit_window
-                or current_sell_price >= best_sell_price - 0.01
-            )
+            and current_sell_price >= best_sell_price - 0.01
         )
         # Profit mode does not buy energy merely to resell it. Grid charging
         # remains controlled by the existing PV-deficit target, so it happens
@@ -902,8 +920,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             status = "SPRZEDAŻ"
             reason = (
                 f"Sprzedaję {sale_energy_kwh:.2f} kWh ponad rezerwę {reserve_soc:.0f}% "
-                f"po {current_sell_price:.3f} PLN/kWh; po ewentualnym odkupieniu energii "
-                f"po {cheapest_buy:.3f} PLN/kWh przewidywany zysk netto wynosi "
+                f"po {current_sell_price:.3f} PLN/kWh; PV uzupełni {pv_refill_kwh:.2f} kWh, "
+                f"a z sieci trzeba będzie odkupić {grid_repurchase_kwh:.2f} kWh. Zysk netto: "
                 f"{expected_net_profit:.2f} PLN."
             )
         elif stored_energy_above_reserve_kwh <= 0.3:
@@ -934,6 +952,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "expected_purchase_cost": round(expected_purchase_cost, 2),
             "expected_cycle_cost": round(expected_cycle_cost, 2),
             "expected_net_profit": round(expected_net_profit, 2),
+            "remaining_pv_kwh": round(remaining_pv_kwh, 2),
+            "remaining_home_consumption_kwh": round(remaining_home_consumption_kwh, 2),
+            "pv_refill_kwh": round(pv_refill_kwh, 2),
+            "grid_repurchase_kwh": round(grid_repurchase_kwh, 2),
             "round_trip_efficiency": round(round_trip_efficiency * 100.0, 1),
         }
 
@@ -2220,6 +2242,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             soc,
             battery_capacity_kwh,
             max(discharge_target_soc, night_reserve_soc),
+            pv_today,
+            self._as_float(learn.get("daily_pv_kwh"), 0.0) or 0.0,
+            target_expected_24h_consumption_kwh,
+            self._as_float(learn.get("daily_load_kwh"), 0.0) or 0.0,
             profit_mode_enabled and battery_trade_enabled,
         )
 
@@ -2657,6 +2683,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "profit_mode_expected_purchase_cost": profit_mode_plan.get("expected_purchase_cost", 0.0),
             "profit_mode_expected_cycle_cost": profit_mode_plan.get("expected_cycle_cost", 0.0),
             "profit_mode_expected_net_profit": profit_mode_plan.get("expected_net_profit", 0.0),
+            "profit_mode_remaining_pv_kwh": profit_mode_plan.get("remaining_pv_kwh", 0.0),
+            "profit_mode_remaining_home_consumption_kwh": profit_mode_plan.get(
+                "remaining_home_consumption_kwh", 0.0
+            ),
+            "profit_mode_pv_refill_kwh": profit_mode_plan.get("pv_refill_kwh", 0.0),
+            "profit_mode_grid_repurchase_kwh": profit_mode_plan.get("grid_repurchase_kwh", 0.0),
             "profit_mode_round_trip_efficiency": profit_mode_plan.get("round_trip_efficiency", 0.0),
             "home_battery_protection": "ON" if home_battery_protection_active else "OFF",
             "home_battery_load_w": round(home_battery_load_w, 0),
