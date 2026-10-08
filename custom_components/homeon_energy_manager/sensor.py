@@ -198,6 +198,7 @@ SENSORS = [
     ("profit_mode_best_sell_price", "Najlepsza sprzedaż dla arbitrażu", "PLN/kWh", "mdi:cash-plus"),
     ("profit_mode_profit_per_kwh", "Zysk arbitrażu na kWh", "PLN/kWh", "mdi:cash-check"),
     ("profit_mode_sale_energy_kwh", "Planowana energia sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-arrow-down"),
+    ("profit_mode_reserve_soc", "Chroniona rezerwa trybu zarabiania", PERCENT, "mdi:battery-lock"),
     ("profit_mode_expected_revenue", "Planowany przychód sprzedaży", "PLN", "mdi:cash-multiple"),
     ("profit_mode_expected_purchase_cost", "Planowany koszt odkupienia", "PLN", "mdi:cash-minus"),
     ("profit_mode_expected_cycle_cost", "Planowany koszt baterii", "PLN", "mdi:battery-sync"),
@@ -280,7 +281,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.34",
+            "sw_version": "1.2.35",
         }
 
     @property
