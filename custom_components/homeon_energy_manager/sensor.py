@@ -203,6 +203,30 @@ SENSORS = [
     ("profit_mode_expected_purchase_cost", "Planowany koszt odkupienia", "PLN", "mdi:cash-minus"),
     ("profit_mode_expected_cycle_cost", "Planowany koszt baterii", "PLN", "mdi:battery-sync"),
     ("profit_mode_expected_net_profit", "Planowany zysk netto", "PLN", "mdi:finance"),
+    (
+        "profit_mode_remaining_pv_kwh",
+        "Pozostała prognoza PV dla trybu zarabiania",
+        UnitOfEnergy.KILO_WATT_HOUR,
+        "mdi:solar-power",
+    ),
+    (
+        "profit_mode_remaining_home_consumption_kwh",
+        "Pozostałe zużycie domu dla trybu zarabiania",
+        UnitOfEnergy.KILO_WATT_HOUR,
+        "mdi:home-lightning-bolt",
+    ),
+    (
+        "profit_mode_pv_refill_kwh",
+        "Uzupełnienie magazynu z PV",
+        UnitOfEnergy.KILO_WATT_HOUR,
+        "mdi:battery-charging-medium",
+    ),
+    (
+        "profit_mode_grid_repurchase_kwh",
+        "Energia do odkupienia z sieci",
+        UnitOfEnergy.KILO_WATT_HOUR,
+        "mdi:transmission-tower-import",
+    ),
     ("profit_mode_round_trip_efficiency", "Sprawność cyklu magazynu", PERCENT, "mdi:battery-sync"),
     ("home_battery_protection", "Ochrona domu bateria zasila dom", None, "mdi:home-battery"),
     ("home_battery_load_w", "Moc baterii dla domu", UnitOfPower.WATT, "mdi:home-lightning-bolt"),
@@ -281,7 +305,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.35",
+            "sw_version": "1.2.36",
         }
 
     @property
