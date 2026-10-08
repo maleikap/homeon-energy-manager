@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.36
+
+- Tryb zarabiania uwzględnia prognozowaną nadwyżkę PV jako bezpłatne źródło ponownego uzupełnienia magazynu.
+- Koszt zakupu energii po sprzedaży jest liczony wyłącznie dla części, której nie pokryje PV po zabezpieczeniu prognozowanego zużycia domu.
+- Dodano diagnostykę pozostałej prognozy PV, pozostałego zużycia domu, uzupełnienia z PV i energii wymagającej odkupienia z sieci.
+
 ## 1.2.35
 
 - tryb zarabiania nie wymaga już pełnego magazynu ani SOC 94–95%,
