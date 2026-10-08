@@ -832,17 +832,18 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         sell_points = self._price_points_for_entity(
             sell_price_entity, current_sell_price, horizon_hours=24
         )
+        now = dt_util.now()
         best_sell = max(sell_points, key=lambda item: item["price"], default=None)
-        if best_sell is not None and soc >= 94.0:
-            eligible_buy_points = [
-                item for item in buy_points if item["dt"] > best_sell["dt"]
-            ]
-        elif best_sell is not None:
-            eligible_buy_points = [
-                item for item in buy_points if item["dt"] <= best_sell["dt"]
-            ]
-        else:
-            eligible_buy_points = []
+        # The energy already stored above the protected reserve may be sold
+        # now. Replenishment is evaluated only against cheaper hours that are
+        # still ahead, never against a price from before the sale.
+        stored_energy_above_reserve_kwh = max(
+            0.0,
+            battery_capacity_kwh * (soc - max(0.0, reserve_soc)) / 100.0,
+        )
+        eligible_buy_points = [
+            item for item in buy_points if item["dt"] > now + timedelta(minutes=20)
+        ]
         cheapest = min(eligible_buy_points, key=lambda item: item["price"], default=None)
         schedule_available = len(sell_points) >= 2 and cheapest is not None
         cheapest_buy = float(cheapest["price"]) if cheapest else current_buy_price
@@ -859,13 +860,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         minimum_profit = max(0.0, self._runtime_float("economic_min_arbitrage_profit", 1.0))
         round_trip_efficiency = charge_efficiency * discharge_efficiency
         purchase_cost_per_sold_kwh = cheapest_buy / max(round_trip_efficiency, 0.01)
-        profit_per_kwh = best_sell_price - purchase_cost_per_sold_kwh - cycle_cost
-        usable_stored_kwh = max(
-            0.0,
-            battery_capacity_kwh * (95.0 - max(0.0, reserve_soc)) / 100.0,
-        )
-        sale_energy_kwh = usable_stored_kwh * discharge_efficiency
-        expected_revenue = sale_energy_kwh * best_sell_price
+        morning_profit_window = 6 <= dt_util.as_local(now).hour < 10
+        sale_price_used = current_sell_price if morning_profit_window else best_sell_price
+        profit_per_kwh = sale_price_used - purchase_cost_per_sold_kwh - cycle_cost
+        sale_energy_kwh = stored_energy_above_reserve_kwh * discharge_efficiency
+        expected_revenue = sale_energy_kwh * sale_price_used
         expected_purchase_cost = sale_energy_kwh * purchase_cost_per_sold_kwh
         expected_cycle_cost = sale_energy_kwh * cycle_cost
         expected_net_profit = expected_revenue - expected_purchase_cost - expected_cycle_cost
@@ -877,17 +876,16 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         sell_now = bool(
             enabled
             and profitable
-            and soc >= 94.0
-            and current_sell_price >= best_sell_price - 0.01
+            and stored_energy_above_reserve_kwh > 0.3
+            and (
+                morning_profit_window
+                or current_sell_price >= best_sell_price - 0.01
+            )
         )
-        prepare_charge = bool(
-            enabled
-            and profitable
-            and soc < 94.0
-            and cheapest is not None
-            and best_sell is not None
-            and cheapest["dt"] <= best_sell["dt"]
-        )
+        # Profit mode does not buy energy merely to resell it. Grid charging
+        # remains controlled by the existing PV-deficit target, so it happens
+        # only when the forecasted PV cannot rebuild the required reserve.
+        prepare_charge = False
         if not enabled:
             status = "WYŁĄCZONY"
             reason = "Tryb zarabiania jest wyłączony."
@@ -903,15 +901,16 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif sell_now:
             status = "SPRZEDAŻ"
             reason = (
-                f"Najlepsza cena sprzedaży {current_sell_price:.3f} PLN/kWh; po odkupieniu "
-                f"energii po {cheapest_buy:.3f} PLN/kWh przewidywany zysk netto "
-                f"wynosi {expected_net_profit:.2f} PLN."
+                f"Sprzedaję {sale_energy_kwh:.2f} kWh ponad rezerwę {reserve_soc:.0f}% "
+                f"po {current_sell_price:.3f} PLN/kWh; po ewentualnym odkupieniu energii "
+                f"po {cheapest_buy:.3f} PLN/kWh przewidywany zysk netto wynosi "
+                f"{expected_net_profit:.2f} PLN."
             )
-        elif prepare_charge:
-            status = "TANIE ŁADOWANIE"
+        elif stored_energy_above_reserve_kwh <= 0.3:
+            status = "REZERWA"
             reason = (
-                f"Przygotowuję magazyn na sprzedaż po {best_sell_price:.3f} PLN/kWh; "
-                f"najtańszy zakup {cheapest_buy:.3f} PLN/kWh."
+                f"SOC {soc:.0f}% nie daje co najmniej 0.3 kWh nad chronioną rezerwą "
+                f"{reserve_soc:.0f}%. Nie sprzedaję energii potrzebnej domowi."
             )
         else:
             status = "OCZEKIWANIE"
@@ -930,6 +929,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "best_sell_price": round(best_sell_price, 3),
             "profit_per_kwh": round(profit_per_kwh, 3),
             "sale_energy_kwh": round(sale_energy_kwh, 2),
+            "reserve_soc": round(reserve_soc, 1),
             "expected_revenue": round(expected_revenue, 2),
             "expected_purchase_cost": round(expected_purchase_cost, 2),
             "expected_cycle_cost": round(expected_cycle_cost, 2),
@@ -2296,7 +2296,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             wait_for_better_sell = bool(
                 profit_mode_plan.get("profitable", False)
                 and not profit_mode_plan.get("sell_now", False)
-                and soc >= 94.0
+                and float(profit_mode_plan.get("sale_energy_kwh", 0.0)) > 0.3
                 and available_to_sell_kwh > 0.3
             )
 
@@ -2312,13 +2312,18 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         sell_ready = bool(
             (profit_mode_plan.get("sell_now", False) if profit_mode_enabled else sell_price_trigger)
             and soc > discharge_target_soc + 1
-            and not pv_reality_lock
+            and (not pv_reality_lock or profit_mode_enabled)
             and battery_trade_enabled
             and not home_battery_protection_active
             and not negative_price_plan.get("now", False)
             and sell_price > economic_negative_sell_price
             and (
-                economic_estimated_sell_profit >= economic_min_arbitrage_profit
+                (
+                    float(profit_mode_plan.get("expected_net_profit", 0.0))
+                    >= economic_min_arbitrage_profit
+                    if profit_mode_enabled
+                    else economic_estimated_sell_profit >= economic_min_arbitrage_profit
+                )
                 or pv_export_opportunity
             )
         )
@@ -2647,6 +2652,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "profit_mode_best_sell_price": profit_mode_plan.get("best_sell_price", 0.0),
             "profit_mode_profit_per_kwh": profit_mode_plan.get("profit_per_kwh", 0.0),
             "profit_mode_sale_energy_kwh": profit_mode_plan.get("sale_energy_kwh", 0.0),
+            "profit_mode_reserve_soc": profit_mode_plan.get("reserve_soc", 0.0),
             "profit_mode_expected_revenue": profit_mode_plan.get("expected_revenue", 0.0),
             "profit_mode_expected_purchase_cost": profit_mode_plan.get("expected_purchase_cost", 0.0),
             "profit_mode_expected_cycle_cost": profit_mode_plan.get("expected_cycle_cost", 0.0),
