@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.35
+
+- tryb zarabiania nie wymaga już pełnego magazynu ani SOC 94–95%,
+- poranna sprzedaż w godzinach 06:00–10:00 obejmuje energię dostępną ponad dynamiczną rezerwę domu i nocy,
+- opłacalność porannej sprzedaży jest liczona względem bieżącej ceny oraz najtańszego późniejszego zakupu,
+- do kalkulacji nie jest już używana cena zakupu, która wystąpiła przed sprzedażą,
+- tryb zarabiania nie ładuje magazynu z sieci tylko po to, aby ponownie sprzedać energię,
+- późniejsze ładowanie z sieci pozostaje zależne od deficytu po uwzględnieniu prognozy PV,
+- zachowano minimalny SOC, dynamiczną rezerwę, SAFE MODE oraz ograniczenie synchronizacyjne Deye.
+
 ## 1.2.34
 
 - dodano osobny przełącznik `Tryb zarabiania`, działający razem z nadrzędnym zezwoleniem na handel baterią,
