@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.35", manifest["version"])
+        self.assertEqual("1.2.36", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.35"', source)
+            self.assertIn('"sw_version": "1.2.36"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -53,11 +53,15 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
         self.assertIn('("profit_mode", "Tryb zarabiania"', switches)
         self.assertIn("def _profit_mode_plan(", coordinator)
-        self.assertIn("purchase_cost_per_sold_kwh", coordinator)
+        self.assertIn("replacement_input_kwh", coordinator)
         self.assertIn("charge_efficiency * discharge_efficiency", coordinator)
         self.assertIn("expected_revenue - expected_purchase_cost - expected_cycle_cost", coordinator)
+        self.assertIn("pv_surplus_for_refill_kwh", coordinator)
+        self.assertIn("grid_repurchase_kwh = max(0.0, replacement_input_kwh - pv_refill_kwh)", coordinator)
+        self.assertIn("expected_purchase_cost = grid_repurchase_kwh * cheapest_buy", coordinator)
         self.assertIn("stored_energy_above_reserve_kwh", coordinator)
         self.assertIn("morning_profit_window", coordinator)
+        self.assertIn("current_sell_price >= best_sell_price - 0.01", coordinator)
         self.assertIn('item["dt"] > now + timedelta(minutes=20)', coordinator)
         self.assertIn("prepare_charge = False", coordinator)
         self.assertIn('"profit_mode_expected_net_profit"', sensors)
