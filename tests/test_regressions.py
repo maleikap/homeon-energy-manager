@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.37", manifest["version"])
+        self.assertEqual("1.2.38", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.37"', source)
+            self.assertIn('"sw_version": "1.2.38"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -147,8 +147,15 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn('f"time.inverter_program_{slot}_time"', executor)
         self.assertIn('f"select.inverter_program_{slot}_charging"', executor)
         self.assertIn('f"number.inverter_program_{slot}_soc"', executor)
-        self.assertIn("add_tou_grid_charge_commands()", executor)
+        self.assertIn("def add_tou_commands(*, grid_charge: bool, target_soc: float, reason: str)", executor)
+        self.assertIn("_tou_charge_options", executor)
+        self.assertIn('"no grid"', executor)
+        self.assertIn("add_tou_commands(grid_charge=tou_grid_charge", executor)
+        self.assertIn("and not full_soc_charge_lock", executor)
         self.assertIn('data.get("charge_target_soc")', executor)
+        self.assertIn('data.get("discharge_target_soc")', executor)
+        self.assertIn('data.get("self_use_reserve_soc")', executor)
+        self.assertIn('"AKTYWNE — PRZYWRÓCONO TRYB I CEL ROZŁADOWANIA"', executor)
         self.assertIn('"inverter_tou_control_status"', executor)
 
     def test_control_target_uses_calibrated_pv_forecast(self) -> None:
