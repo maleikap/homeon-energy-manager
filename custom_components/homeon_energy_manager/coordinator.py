@@ -1397,6 +1397,84 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         def sel(entity_id: str, option: str) -> None:
             desired.append(("select", str(entity_id), str(option)))
 
+        def _time_minutes(value: Any) -> int | None:
+            text = str(value or "").strip()
+            try:
+                parts = text.split(":")
+                if len(parts) < 2:
+                    return None
+                hour = int(parts[0])
+                minute = int(parts[1])
+                if 0 <= hour <= 23 and 0 <= minute <= 59:
+                    return hour * 60 + minute
+            except (TypeError, ValueError):
+                return None
+            return None
+
+        def _active_tou_slot() -> int | None:
+            """Return the Deye TOU slot whose configured end time is next."""
+            now_local = dt_util.as_local(dt_util.now())
+            now_minutes = now_local.hour * 60 + now_local.minute
+            configured: list[tuple[int, int]] = []
+            for slot in range(1, 7):
+                state = self.hass.states.get(f"time.inverter_program_{slot}_time")
+                end_minutes = _time_minutes(state.state if state is not None else None)
+                if end_minutes is not None:
+                    configured.append((slot, end_minutes))
+            if not configured:
+                return None
+            future = [(slot, end) for slot, end in configured if end > now_minutes]
+            if future:
+                return min(future, key=lambda item: item[1])[0]
+            return min(configured, key=lambda item: item[1])[0]
+
+        def _grid_charge_option(entity_id: str) -> str | None:
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                return None
+            options = state.attributes.get("options")
+            if not isinstance(options, (list, tuple)):
+                return None
+            rejected = ("no grid", "without grid", "disable", "disabled", "off", "brak sieci")
+            candidates = [
+                str(option)
+                for option in options
+                if "grid" in str(option).strip().lower()
+                and not any(word in str(option).strip().lower() for word in rejected)
+            ]
+            if not candidates:
+                return None
+            return min(candidates, key=lambda option: (len(option), option.lower()))
+
+        def add_tou_grid_charge_commands() -> None:
+            """Make the active Deye TOU slot accept grid charging to HomeOn's SOC target."""
+            slot = _active_tou_slot()
+            data["inverter_tou_active_slot"] = slot or 0
+            data["inverter_tou_control_status"] = "BRAK ENCJI TIME OF USE"
+            if slot is None:
+                return
+            charging_entity = f"select.inverter_program_{slot}_charging"
+            soc_entity = f"number.inverter_program_{slot}_soc"
+            option = _grid_charge_option(charging_entity)
+            data["inverter_tou_charging_entity"] = charging_entity
+            data["inverter_tou_soc_entity"] = soc_entity
+            data["inverter_tou_grid_option"] = option or "NIE ROZPOZNANO"
+            target_soc = max(
+                current_soc,
+                min(100.0, float(self._as_float(data.get("charge_target_soc"), 95.0) or 95.0)),
+            )
+            data["inverter_tou_target_soc"] = round(target_soc, 0)
+            if option is not None:
+                sel(charging_entity, option)
+            if self.hass.states.get(soc_entity) is not None:
+                num(soc_entity, target_soc)
+            if option is not None and self.hass.states.get(soc_entity) is not None:
+                data["inverter_tou_control_status"] = "AKTYWNE — GRID CHARGE I CEL SOC"
+            elif option is not None:
+                data["inverter_tou_control_status"] = "CZĘŚCIOWE — GRID CHARGE BEZ ENCJI SOC"
+            else:
+                data["inverter_tou_control_status"] = "BŁĄD — NIE ROZPOZNANO OPCJI GRID CHARGE"
+
         if mode == "SAFE_MODE":
             executor_mode = "SAFE_MODE"
             action = "SAFE_MODE — błąd danych, ustawiam Zero Export To CT i blokuję handel"
@@ -1438,6 +1516,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_grid_charging, True)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+            add_tou_grid_charge_commands()
 
         elif mode == "PREPARE_NEGATIVE_PRICE_WINDOW":
             neg_energy_to_free_kwh = self._as_float(data.get("negative_price_energy_to_free_kwh"), 0.0) or 0.0
@@ -1467,6 +1546,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_grid_charging, True)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+            add_tou_grid_charge_commands()
 
         elif mode == "PV_LOW_PRICE_CHARGE":
             action = "Najgorsza godzina sprzedaży — Zero Export To CT; Deye ładuje magazyn z PV i sprzedaje pozostałą nadwyżkę"

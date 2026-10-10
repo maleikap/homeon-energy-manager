@@ -46,6 +46,9 @@ SENSORS = [
     ("soc", "SOC magazynu", PERCENT, "mdi:battery"),
     ("battery_status", "Status baterii", None, "mdi:battery-sync"),
     ("battery_power", "Moc baterii", UnitOfPower.WATT, "mdi:battery-charging"),
+    ("inverter_tou_active_slot", "Aktywny program Time of Use", None, "mdi:clock-check-outline"),
+    ("inverter_tou_target_soc", "Cel SOC programu Time of Use", PERCENT, "mdi:battery-clock-outline"),
+    ("inverter_tou_control_status", "Sterowanie Time of Use", None, "mdi:calendar-sync"),
     ("battery_discharge_w", "Rozładowanie baterii", UnitOfPower.WATT, "mdi:battery-arrow-down"),
     ("battery_charge_w", "Ładowanie baterii", UnitOfPower.WATT, "mdi:battery-arrow-up"),
     ("pv_power", "Moc PV", UnitOfPower.WATT, "mdi:solar-power"),
@@ -305,7 +308,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.36",
+            "sw_version": "1.2.37",
         }
 
     @property
