@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.39
+
+- Decyzja o rozładowaniu ustawia w aktywnym programie Time of Use minimalny SOC falownika zamiast dynamicznej rezerwy.
+- Dla minimalnego SOC 16% i aktualnego SOC 35% Deye otrzymuje cel 16%, a HomeOn sam zatrzymuje rozładowanie po zmianie decyzji.
+- Wyższy cel Time of Use pozostaje używany wyłącznie podczas ładowania oraz świadomego zatrzymania rozładowania.
+
 ## 1.2.38
 
 - Każda decyzja sterująca synchronizuje aktywny program Deye Time of Use.
