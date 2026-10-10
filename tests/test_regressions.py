@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.38", manifest["version"])
+        self.assertEqual("1.2.39", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.38"', source)
+            self.assertIn('"sw_version": "1.2.39"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -155,6 +155,9 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn('data.get("charge_target_soc")', executor)
         self.assertIn('data.get("discharge_target_soc")', executor)
         self.assertIn('data.get("self_use_reserve_soc")', executor)
+        self.assertIn('tou_target_soc = minimum_soc', executor)
+        self.assertIn('"rozładowanie do minimalnego SOC falownika"', executor)
+        self.assertNotIn('executor_mode == "PREPARE_NEGATIVE_PRICE_WINDOW"', executor)
         self.assertIn('"AKTYWNE — PRZYWRÓCONO TRYB I CEL ROZŁADOWANIA"', executor)
         self.assertIn('"inverter_tou_control_status"', executor)
 
