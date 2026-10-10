@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.37
+
+- Ładowanie z sieci ustawia teraz aktywny program Deye Time of Use na Grid Charge.
+- Docelowy SOC aktywnego programu Time of Use jest synchronizowany z celem wyznaczonym przez HomeOn.
+- Dodano diagnostykę numeru aktywnego programu oraz statusu sterowania Time of Use.
+
 ## 1.2.36
 
 - Tryb zarabiania uwzględnia prognozowaną nadwyżkę PV jako bezpłatne źródło ponownego uzupełnienia magazynu.
