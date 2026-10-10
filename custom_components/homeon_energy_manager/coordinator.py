@@ -1691,24 +1691,25 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         if tou_grid_charge:
             tou_target_soc = float(self._as_float(data.get("charge_target_soc"), 95.0) or 95.0)
             tou_reason = "ładowanie z sieci"
-        elif executor_mode == "PREPARE_NEGATIVE_PRICE_WINDOW":
-            tou_target_soc = float(
-                self._as_float(data.get("negative_price_target_soc_before"), data.get("discharge_target_soc"))
-                or minimum_soc
-            )
-            tou_reason = "przygotowanie miejsca przed ceną ujemną"
         elif executor_mode == "MORNING_RESERVE_HOLD":
             tou_target_soc = float(self._as_float(data.get("self_use_reserve_soc"), minimum_soc) or minimum_soc)
             tou_reason = "ochrona rezerwy do rana"
+        elif executor_mode in {
+            "DISCHARGE_TARGET_HOLD",
+            "WEATHER_HOLD_RESERVE",
+            "PV_REALITY_HOLD",
+            "NEGATIVE_PRICE_EXPORT_BLOCK",
+        }:
+            tou_target_soc = float(self._as_float(data.get("discharge_target_soc"), minimum_soc) or minimum_soc)
+            tou_reason = "świadome zatrzymanie rozładowania na rezerwie"
         elif executor_mode in {"PV_LOW_PRICE_CHARGE", "PV_CHARGE"}:
             tou_target_soc = float(self._as_float(data.get("charge_target_soc"), 95.0) or 95.0)
             tou_reason = "ładowanie z PV bez zakupu z sieci"
-        elif executor_mode in {"EXPENSIVE_SELF_USE", "NORMAL_SAFE"} and night_self_use_active:
-            tou_target_soc = minimum_soc
-            tou_reason = "nocna autokonsumpcja do minimalnego SOC"
         else:
-            tou_target_soc = float(self._as_float(data.get("discharge_target_soc"), minimum_soc) or minimum_soc)
-            tou_reason = "cel rozładowania bieżącej decyzji"
+            # TOU must not stop Deye at a higher dynamic reserve while HomeOn
+            # is actively requesting discharge. HomeOn changes to HOLD itself.
+            tou_target_soc = minimum_soc
+            tou_reason = "rozładowanie do minimalnego SOC falownika"
         add_tou_commands(grid_charge=tou_grid_charge, target_soc=tou_target_soc, reason=tou_reason)
 
         if full_soc_charge_lock:
