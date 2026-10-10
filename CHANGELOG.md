@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.38
+
+- Każda decyzja sterująca synchronizuje aktywny program Deye Time of Use.
+- Po zakończeniu ładowania z sieci HomeOn wyłącza `Grid Charge` w aktywnym slocie i przywraca właściwy cel rozładowania.
+- Cel SOC programu jest dobierany osobno dla ładowania, sprzedaży, autokonsumpcji nocnej, ochrony rezerwy i ładowania z PV.
+
 ## 1.2.37
 
 - Ładowanie z sieci ustawia teraz aktywny program Deye Time of Use na Grid Charge.
