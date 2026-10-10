@@ -1428,26 +1428,39 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 return min(future, key=lambda item: item[1])[0]
             return min(configured, key=lambda item: item[1])[0]
 
-        def _grid_charge_option(entity_id: str) -> str | None:
+        def _tou_charge_options(entity_id: str) -> tuple[str | None, str | None]:
             state = self.hass.states.get(entity_id)
             if state is None:
-                return None
+                return None, None
             options = state.attributes.get("options")
             if not isinstance(options, (list, tuple)):
-                return None
+                return None, None
             rejected = ("no grid", "without grid", "disable", "disabled", "off", "brak sieci")
-            candidates = [
+            grid_candidates = [
                 str(option)
                 for option in options
                 if "grid" in str(option).strip().lower()
                 and not any(word in str(option).strip().lower() for word in rejected)
             ]
-            if not candidates:
-                return None
-            return min(candidates, key=lambda option: (len(option), option.lower()))
+            no_grid_candidates = [
+                str(option)
+                for option in options
+                if any(word in str(option).strip().lower() for word in rejected)
+            ]
+            grid_option = (
+                min(grid_candidates, key=lambda option: (len(option), option.lower()))
+                if grid_candidates
+                else None
+            )
+            no_grid_option = (
+                min(no_grid_candidates, key=lambda option: (len(option), option.lower()))
+                if no_grid_candidates
+                else None
+            )
+            return grid_option, no_grid_option
 
-        def add_tou_grid_charge_commands() -> None:
-            """Make the active Deye TOU slot accept grid charging to HomeOn's SOC target."""
+        def add_tou_commands(*, grid_charge: bool, target_soc: float, reason: str) -> None:
+            """Synchronize the active Deye TOU slot with every HomeOn decision."""
             slot = _active_tou_slot()
             data["inverter_tou_active_slot"] = slot or 0
             data["inverter_tou_control_status"] = "BRAK ENCJI TIME OF USE"
@@ -1455,25 +1468,32 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 return
             charging_entity = f"select.inverter_program_{slot}_charging"
             soc_entity = f"number.inverter_program_{slot}_soc"
-            option = _grid_charge_option(charging_entity)
+            grid_option, no_grid_option = _tou_charge_options(charging_entity)
+            option = grid_option if grid_charge else no_grid_option
             data["inverter_tou_charging_entity"] = charging_entity
             data["inverter_tou_soc_entity"] = soc_entity
-            data["inverter_tou_grid_option"] = option or "NIE ROZPOZNANO"
-            target_soc = max(
-                current_soc,
-                min(100.0, float(self._as_float(data.get("charge_target_soc"), 95.0) or 95.0)),
-            )
+            data["inverter_tou_grid_option"] = grid_option or "NIE ROZPOZNANO"
+            data["inverter_tou_no_grid_option"] = no_grid_option or "NIE ROZPOZNANO"
+            data["inverter_tou_requested_mode"] = "GRID CHARGE" if grid_charge else "BEZ ŁADOWANIA Z SIECI"
+            data["inverter_tou_reason"] = reason
+            target_soc = min(100.0, max(0.0, float(target_soc)))
+            if grid_charge:
+                target_soc = max(current_soc, target_soc)
             data["inverter_tou_target_soc"] = round(target_soc, 0)
             if option is not None:
                 sel(charging_entity, option)
             if self.hass.states.get(soc_entity) is not None:
                 num(soc_entity, target_soc)
             if option is not None and self.hass.states.get(soc_entity) is not None:
-                data["inverter_tou_control_status"] = "AKTYWNE — GRID CHARGE I CEL SOC"
+                data["inverter_tou_control_status"] = (
+                    "AKTYWNE — GRID CHARGE I CEL SOC"
+                    if grid_charge
+                    else "AKTYWNE — PRZYWRÓCONO TRYB I CEL ROZŁADOWANIA"
+                )
             elif option is not None:
-                data["inverter_tou_control_status"] = "CZĘŚCIOWE — GRID CHARGE BEZ ENCJI SOC"
+                data["inverter_tou_control_status"] = "CZĘŚCIOWE — USTAWIONO TRYB BEZ ENCJI SOC"
             else:
-                data["inverter_tou_control_status"] = "BŁĄD — NIE ROZPOZNANO OPCJI GRID CHARGE"
+                data["inverter_tou_control_status"] = "BŁĄD — NIE ROZPOZNANO OPCJI TIME OF USE"
 
         if mode == "SAFE_MODE":
             executor_mode = "SAFE_MODE"
@@ -1516,7 +1536,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_grid_charging, True)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
-            add_tou_grid_charge_commands()
 
         elif mode == "PREPARE_NEGATIVE_PRICE_WINDOW":
             neg_energy_to_free_kwh = self._as_float(data.get("negative_price_energy_to_free_kwh"), 0.0) or 0.0
@@ -1546,7 +1565,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_grid_charging, True)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_block_discharge_current_a)
-            add_tou_grid_charge_commands()
 
         elif mode == "PV_LOW_PRICE_CHARGE":
             action = "Najgorsza godzina sprzedaży — Zero Export To CT; Deye ładuje magazyn z PV i sprzedaje pozostałą nadwyżkę"
@@ -1665,6 +1683,33 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_export_surplus, sell_solar_allowed)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, discharge_current)
+
+        tou_grid_charge = (
+            executor_mode in {"CHEAP_CHARGE", "NEGATIVE_IMPORT", "EMERGENCY_RESERVE"}
+            and not full_soc_charge_lock
+        )
+        if tou_grid_charge:
+            tou_target_soc = float(self._as_float(data.get("charge_target_soc"), 95.0) or 95.0)
+            tou_reason = "ładowanie z sieci"
+        elif executor_mode == "PREPARE_NEGATIVE_PRICE_WINDOW":
+            tou_target_soc = float(
+                self._as_float(data.get("negative_price_target_soc_before"), data.get("discharge_target_soc"))
+                or minimum_soc
+            )
+            tou_reason = "przygotowanie miejsca przed ceną ujemną"
+        elif executor_mode == "MORNING_RESERVE_HOLD":
+            tou_target_soc = float(self._as_float(data.get("self_use_reserve_soc"), minimum_soc) or minimum_soc)
+            tou_reason = "ochrona rezerwy do rana"
+        elif executor_mode in {"PV_LOW_PRICE_CHARGE", "PV_CHARGE"}:
+            tou_target_soc = float(self._as_float(data.get("charge_target_soc"), 95.0) or 95.0)
+            tou_reason = "ładowanie z PV bez zakupu z sieci"
+        elif executor_mode in {"EXPENSIVE_SELF_USE", "NORMAL_SAFE"} and night_self_use_active:
+            tou_target_soc = minimum_soc
+            tou_reason = "nocna autokonsumpcja do minimalnego SOC"
+        else:
+            tou_target_soc = float(self._as_float(data.get("discharge_target_soc"), minimum_soc) or minimum_soc)
+            tou_reason = "cel rozładowania bieżącej decyzji"
+        add_tou_commands(grid_charge=tou_grid_charge, target_soc=tou_target_soc, reason=tou_reason)
 
         if full_soc_charge_lock:
             desired = [
