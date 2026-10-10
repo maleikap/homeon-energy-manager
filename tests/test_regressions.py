@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.36", manifest["version"])
+        self.assertEqual("1.2.37", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.36"', source)
+            self.assertIn('"sw_version": "1.2.37"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -136,6 +136,20 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
         self.assertIn('charging_override_modes = {"CHEAP_CHARGE", "NEGATIVE_IMPORT", "EMERGENCY_RESERVE"}', executor)
         self.assertIn("requested_mode not in charging_override_modes", executor)
+
+    def test_grid_charging_programs_active_deye_tou_slot(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        executor_start = source.index("async def _async_apply_inverter_control")
+        executor_end = source.index("async def _async_update_data", executor_start)
+        executor = source[executor_start:executor_end]
+
+        self.assertIn("def _active_tou_slot()", executor)
+        self.assertIn('f"time.inverter_program_{slot}_time"', executor)
+        self.assertIn('f"select.inverter_program_{slot}_charging"', executor)
+        self.assertIn('f"number.inverter_program_{slot}_soc"', executor)
+        self.assertIn("add_tou_grid_charge_commands()", executor)
+        self.assertIn('data.get("charge_target_soc")', executor)
+        self.assertIn('"inverter_tou_control_status"', executor)
 
     def test_control_target_uses_calibrated_pv_forecast(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
