@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.42
+
+- HomeOn przewiduje godzinę osiągnięcia bezpiecznej granicy SOC na podstawie energii w magazynie, bieżącego poboru i wyuczonego profilu godzinowego.
+- Co najmniej jedno z wybranych okien ładowania musi wystąpić przed przewidywanym wyczerpaniem bezpiecznej rezerwy; manager wybiera najtańszą dostępną godzinę przed tą granicą.
+- Poziom awaryjny pozostaje wyłącznie ostatnim zabezpieczeniem, a nie normalnym momentem rozpoczęcia zakupu energii.
+- Dodano diagnostykę przewidywanej godziny wyczerpania, bezpiecznej granicy SOC i ładowania wyprzedzającego.
+
 ## 1.2.41
 
 - HomeOn nie uruchamia taniego ładowania z sieci, gdy bieżąca nadwyżka PV może ładować magazyn.
