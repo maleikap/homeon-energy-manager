@@ -753,11 +753,18 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         soc: float,
         target_soc: float,
         battery_capacity_kwh: float,
+        reserve_ready_by_hour: int = 6,
     ) -> dict[str, Any]:
-        """Choose only the cheapest hours required to reach the SOC target."""
+        """Choose the cheapest hours that finish before the reserve is needed."""
         now = dt_util.now()
         current_hour = now.replace(minute=0, second=0, microsecond=0)
         points = self._price_points_for_entity(price_entity, current_price, horizon_hours=24)
+
+        ready_hour = min(9, max(0, int(reserve_ready_by_hour)))
+        reserve_deadline = current_hour.replace(hour=ready_hour)
+        deadline_missed = now >= reserve_deadline and now.hour < 9
+        if now >= reserve_deadline:
+            reserve_deadline += timedelta(days=1)
 
         by_hour: dict[str, dict[str, Any]] = {}
         for point in points:
@@ -774,7 +781,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 by_hour[key] = {"dt": hour, "price": float(price)}
 
         hours = sorted(by_hour.values(), key=lambda item: item["dt"])
-        schedule_available = len(hours) >= 2
+        hours_before_reserve = [
+            item for item in hours if item["dt"] < reserve_deadline
+        ]
+        if hours_before_reserve:
+            hours = hours_before_reserve
         missing_kwh = max(
             0.0,
             battery_capacity_kwh * (target_soc - soc) / 100.0,
@@ -784,8 +795,22 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         battery_charge_limit_kw = max(0.5, battery_capacity_kwh * battery_c_rate)
         estimated_charge_kw = min(inverter_power_kw, battery_charge_limit_kw)
         required_hours = 0 if missing_kwh <= 0.05 else max(1, math.ceil(missing_kwh / estimated_charge_kw))
+        deadline_imminent = (
+            missing_kwh > 0.05
+            and reserve_deadline <= current_hour + timedelta(hours=max(1, required_hours))
+        )
+        schedule_available = len(hours) >= 2 or bool(hours) and (
+            deadline_missed or deadline_imminent
+        )
 
         selected = sorted(hours, key=lambda item: (item["price"], item["dt"]))[:required_hours]
+        # If the planned readiness time has already passed and the reserve is
+        # still missing, recover immediately instead of waiting for another
+        # cheap hour later in the day.
+        if deadline_missed and missing_kwh > 0.05 and hours:
+            current = next((item for item in hours if item["dt"] == current_hour), None)
+            if current is not None and current not in selected:
+                selected = [current, *selected[: max(0, required_hours - 1)]]
         selected = sorted(selected, key=lambda item: item["dt"])
         charge_now = bool(
             schedule_available
@@ -806,9 +831,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "estimated_charge_kw": round(estimated_charge_kw, 2),
             "inverter_power_kw": round(inverter_power_kw, 2),
             "battery_c_rate": round(battery_c_rate, 2),
+            "reserve_ready_by": self._fmt_dt_hour(reserve_deadline),
             "windows": windows,
             "reason": (
-                f"Wybrane najtańsze godziny: {windows}; do celu brakuje {missing_kwh:.2f} kWh"
+                f"Rezerwa ma być gotowa przed {self._fmt_dt_hour(reserve_deadline)}; "
+                f"wybrane godziny: {windows}; do celu brakuje {missing_kwh:.2f} kWh"
                 if schedule_available
                 else "Brak pełnego harmonogramu Pstryk — używam awaryjnego progu ceny"
             ),
@@ -2173,6 +2200,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         if not isinstance(hourly_profile, dict):
             hourly_profile = {}
         learned_night_profile_kwh = 0.0
+        reserve_ready_by_hour = 6
+        early_load_threshold_w = max(1000.0, avg_night_load_w * 1.5)
         for hour in (*range(22, 24), *range(0, 6)):
             bucket = hourly_profile.get(f"{hour:02d}")
             if isinstance(bucket, dict):
@@ -2192,6 +2221,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                     profile_load_w,
                     profile_ct_balance_w,
                 ) / 1000.0
+                # A repeatable large early-morning load (for example a heat
+                # pump at 03:00) moves the charging deadline ahead of it.
+                if 0 <= hour < reserve_ready_by_hour and max(
+                    profile_load_w,
+                    profile_ct_balance_w,
+                ) >= early_load_threshold_w:
+                    reserve_ready_by_hour = hour
 
         configured_night_kwh = max(0.0, night_consumption_kwh * night_safety_margin)
         learned_night_kwh = max(
@@ -2387,6 +2423,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             soc,
             cheap_charge_target_soc,
             battery_capacity_kwh,
+            reserve_ready_by_hour,
         )
         # HOMEON_NEGATIVE_PRICE_WINDOW_END
 

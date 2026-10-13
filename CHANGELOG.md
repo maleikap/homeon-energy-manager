@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.40
+
+- Nocne ładowanie wybiera tanie godziny wyłącznie przed porannym terminem gotowości rezerwy.
+- Powtarzalne duże obciążenie nad ranem (np. pompa ciepła) przesuwa termin naładowania przed godzinę jego wystąpienia.
+- Jeśli termin został pominięty, a energii nadal brakuje, HomeOn rozpoczyna ładowanie od razu zamiast czekać do kolejnej nocy.
+
 ## 1.2.39
 
 - Decyzja o rozładowaniu ustawia w aktywnym programie Time of Use minimalny SOC falownika zamiast dynamicznej rezerwy.
