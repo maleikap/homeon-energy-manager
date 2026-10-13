@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.39", manifest["version"])
+        self.assertEqual("1.2.40", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.39"', source)
+            self.assertIn('"sw_version": "1.2.40"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -119,10 +119,16 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("min(inverter_power_kw, battery_charge_limit_kw)", helper)
         self.assertIn("schedule_available", helper)
         self.assertIn('"charge_now": charge_now', helper)
+        self.assertIn("hours_before_reserve", helper)
+        self.assertIn("item[\"dt\"] < reserve_deadline", helper)
+        self.assertIn("deadline_missed", helper)
+        self.assertIn("deadline_imminent", helper)
 
         self.assertIn('cheap_grid_charge_plan.get("charge_now", False)', source)
         self.assertIn('not cheap_grid_charge_plan.get("schedule_available", False)', source)
         self.assertIn('"cheap_charge_windows"', source)
+        self.assertIn("reserve_ready_by_hour", source)
+        self.assertIn("early_load_threshold_w", source)
 
         cheap_mode = source.index('mode = "CHEAP_CHARGE"')
         home_protection = source.index('elif home_battery_protection_active:', cheap_mode)
