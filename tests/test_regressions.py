@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.41", manifest["version"])
+        self.assertEqual("1.2.42", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.41"', source)
+            self.assertIn('"sw_version": "1.2.42"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -128,6 +128,12 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("item[\"dt\"] < reserve_deadline", helper)
         self.assertIn("deadline_missed", helper)
         self.assertIn("deadline_imminent", helper)
+        self.assertIn("predictive_floor_soc", helper)
+        self.assertIn("predicted_depletion_deadline", helper)
+        self.assertIn("predictive_precharge", helper)
+        self.assertIn("survival_hours", helper)
+        self.assertIn("prediction_safety_margin", helper)
+        self.assertIn("hourly_profile", helper)
 
         self.assertIn('cheap_grid_charge_plan.get("charge_now", False)', source)
         self.assertIn('not cheap_grid_charge_plan.get("schedule_available", False)', source)

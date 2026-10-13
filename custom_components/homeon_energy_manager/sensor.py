@@ -265,6 +265,10 @@ SENSORS = [
     ("cheap_charge_inverter_power_kw", "Tanie ładowanie — moc falownika", "kW", "mdi:solar-power-variant"),
     ("cheap_charge_battery_c_rate", "Tanie ładowanie — limit C-rate", "C", "mdi:battery-clock"),
     ("cheap_charge_reason", "Tanie ładowanie — decyzja", None, "mdi:text-box-check"),
+    ("cheap_charge_predictive_floor_soc", "Tanie ładowanie — przewidywana bezpieczna granica SOC", PERCENT, "mdi:battery-alert"),
+    ("cheap_charge_predicted_depletion_by", "Tanie ładowanie — przewidywane osiągnięcie granicy", None, "mdi:clock-alert"),
+    ("cheap_charge_predicted_use_kwh", "Tanie ładowanie — przewidywane zużycie do ładowania", UnitOfEnergy.KILO_WATT_HOUR, "mdi:home-lightning-bolt"),
+    ("cheap_charge_predictive_precharge", "Tanie ładowanie — wyprzedzające ładowanie", None, "mdi:battery-clock"),
     ("grid_charge_blocked_by_pv", "Blokada ładowania z sieci przez PV", None, "mdi:transmission-tower-off"),
     ("live_pv_surplus_for_charge_w", "Bieżąca nadwyżka PV dla magazynu", UnitOfPower.WATT, "mdi:solar-power"),
     ("forecast_pv_surplus_for_charge_kwh", "Prognozowana nadwyżka PV dla magazynu", UnitOfEnergy.KILO_WATT_HOUR, "mdi:solar-power"),
@@ -313,7 +317,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.41",
+            "sw_version": "1.2.42",
         }
 
     @property
