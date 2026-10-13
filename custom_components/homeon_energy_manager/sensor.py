@@ -231,6 +231,8 @@ SENSORS = [
         "mdi:transmission-tower-import",
     ),
     ("profit_mode_round_trip_efficiency", "Sprawność cyklu magazynu", PERCENT, "mdi:battery-sync"),
+    ("profit_mode_forecast_refill_allowed", "Tryb zarabiania — późniejsze uzupełnienie z PV", None, "mdi:solar-power"),
+    ("profit_mode_current_good_pv_sale", "Tryb zarabiania — sprzedaż teraz przed ładowaniem PV", None, "mdi:battery-arrow-down"),
     ("home_battery_protection", "Ochrona domu bateria zasila dom", None, "mdi:home-battery"),
     ("home_battery_load_w", "Moc baterii dla domu", UnitOfPower.WATT, "mdi:home-lightning-bolt"),
     ("home_battery_protection_reason", "Powód ochrony domu", None, "mdi:text-box-check"),
@@ -263,6 +265,9 @@ SENSORS = [
     ("cheap_charge_inverter_power_kw", "Tanie ładowanie — moc falownika", "kW", "mdi:solar-power-variant"),
     ("cheap_charge_battery_c_rate", "Tanie ładowanie — limit C-rate", "C", "mdi:battery-clock"),
     ("cheap_charge_reason", "Tanie ładowanie — decyzja", None, "mdi:text-box-check"),
+    ("grid_charge_blocked_by_pv", "Blokada ładowania z sieci przez PV", None, "mdi:transmission-tower-off"),
+    ("live_pv_surplus_for_charge_w", "Bieżąca nadwyżka PV dla magazynu", UnitOfPower.WATT, "mdi:solar-power"),
+    ("forecast_pv_surplus_for_charge_kwh", "Prognozowana nadwyżka PV dla magazynu", UnitOfEnergy.KILO_WATT_HOUR, "mdi:solar-power"),
     ("economic_battery_cycle_cost", "Koszt cyklu baterii", "PLN/kWh", "mdi:battery-sync"),
     ("mode_candidate", "Kandydat trybu EMS", None, "mdi:swap-horizontal"),
     ("mode_hysteresis", "Histereza trybu EMS", None, "mdi:timer-sync"),
@@ -308,7 +313,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.40",
+            "sw_version": "1.2.41",
         }
 
     @property

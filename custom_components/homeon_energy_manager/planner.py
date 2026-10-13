@@ -122,6 +122,7 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     buy_price_now = _f(data.get("buy_price"), 0.0)
     sell_price_now = _f(data.get("sell_price"), 0.0)
     soc = _f(data.get("soc"), 0.0)
+    profit_mode_enabled = str(data.get("profit_mode_enabled", "OFF")).upper() == "ON"
 
     battery_capacity = _f(
         data.get(
@@ -291,6 +292,23 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     safe_min_soc = 100.0 * energy_to_keep_kwh / max(battery_capacity, 0.1)
     safe_min_soc = min(100.0, max(night_reserve_soc, safe_min_soc))
 
+    # The coordinator may deliberately lower the daytime trading floor when
+    # live PV and the calibrated remaining forecast can replenish everything
+    # sold now. Keep that decision intact instead of restoring the overnight
+    # reserve in the presentation/planning pass.
+    if (
+        profit_mode_enabled
+        and str(data.get("profit_mode_current_good_pv_sale", "OFF")).upper() == "ON"
+    ):
+        safe_to_sell_kwh = max(
+            0.0,
+            _f(data.get("profit_mode_sale_energy_kwh"), safe_to_sell_kwh),
+        )
+        safe_min_soc = min(
+            100.0,
+            max(0.0, _f(data.get("profit_mode_reserve_soc"), safe_min_soc)),
+        )
+
     profitable_sell_floor = max(cycle_cost / max(discharge_efficiency, 0.01), best_sell_price * 0.90)
     sell_hours = [
         item for item in hours
@@ -347,8 +365,6 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
 
     current_phase = _phase(now.hour)
     current_mode = str(data.get("mode", "NORMAL"))
-    profit_mode_enabled = str(data.get("profit_mode_enabled", "OFF")).upper() == "ON"
-
     if (
         current_mode == "WAIT_BETTER_SELL_PRICE"
         and soc >= 95.0

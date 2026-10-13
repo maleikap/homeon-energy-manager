@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.41
+
+- HomeOn nie uruchamia taniego ładowania z sieci, gdy bieżąca nadwyżka PV może ładować magazyn.
+- Dobra, skalibrowana prognoza pozostałej produkcji blokuje zakup, jeżeli pokryje brakującą energię magazynu i domu.
+- Wyjście z trybu ładowania sieciowego następuje od razu po pojawieniu się wystarczającego PV, bez 10-minutowego podtrzymania trybu.
+- W trybie zarabiania dobra bieżąca cena sprzedaży ma pierwszeństwo przed tanim zakupem, jeżeli pracujące PV i prognoza pozwolą później uzupełnić sprzedaną energię.
+- Przy potwierdzonym uzupełnieniu z PV magazyn może być bezpiecznie sprzedawany do minimalnego SOC falownika; rezerwa nocna nadal obowiązuje, gdy prognoza lub rzeczywista produkcja tego nie potwierdzają.
+- Ładowanie awaryjne i zakup przy cenie ujemnej zachowują pierwszeństwo.
+
 ## 1.2.40
 
 - Nocne ładowanie wybiera tanie godziny wyłącznie przed porannym terminem gotowości rezerwy.
