@@ -854,6 +854,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         pv_produced_today_kwh: float,
         expected_daily_consumption_kwh: float,
         consumed_today_kwh: float,
+        minimum_soc: float,
+        pv_power_w: float,
+        load_power_w: float,
         enabled: bool,
     ) -> dict[str, Any]:
         """Plan one profitable buy/store/sell cycle over the next 24 hours."""
@@ -865,18 +868,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         )
         now = dt_util.now()
         best_sell = max(sell_points, key=lambda item: item["price"], default=None)
-        # The energy already stored above the protected reserve may be sold
-        # now. Replenishment is evaluated only against cheaper hours that are
-        # still ahead, never against a price from before the sale.
-        stored_energy_above_reserve_kwh = max(
-            0.0,
-            battery_capacity_kwh * (soc - max(0.0, reserve_soc)) / 100.0,
-        )
         eligible_buy_points = [
             item for item in buy_points if item["dt"] > now + timedelta(minutes=20)
         ]
         cheapest = min(eligible_buy_points, key=lambda item: item["price"], default=None)
-        schedule_available = len(sell_points) >= 2 and cheapest is not None
         cheapest_buy = float(cheapest["price"]) if cheapest else current_buy_price
         best_sell_price = float(best_sell["price"]) if best_sell else current_sell_price
         charge_efficiency = min(
@@ -890,9 +885,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         cycle_cost = max(0.0, self._runtime_float("economic_battery_cycle_cost", 0.15))
         minimum_profit = max(0.0, self._runtime_float("economic_min_arbitrage_profit", 1.0))
         round_trip_efficiency = charge_efficiency * discharge_efficiency
-        morning_profit_window = 6 <= dt_util.as_local(now).hour < 10
-        sale_price_used = current_sell_price if morning_profit_window else best_sell_price
-        sale_energy_kwh = stored_energy_above_reserve_kwh * discharge_efficiency
         # Energy sold from the battery does not always have to be bought back
         # from the grid.  First reserve the rest of today's PV forecast for the
         # remaining household demand, then use only the genuine PV surplus to
@@ -906,15 +898,55 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             0.0,
             remaining_pv_kwh - remaining_home_consumption_kwh,
         )
+        # When PV is already producing a clear surplus and the remaining,
+        # calibrated forecast can rebuild the battery, the daytime trading
+        # floor may be lowered to the inverter minimum SOC.  The evening/night
+        # reserve remains untouched when either confirmation is missing.
+        minimum_trade_soc = max(0.0, minimum_soc)
+        maximum_daylight_sale_input_kwh = max(
+            0.0,
+            battery_capacity_kwh * (soc - minimum_trade_soc) / 100.0,
+        )
+        maximum_daylight_replacement_kwh = (
+            maximum_daylight_sale_input_kwh * discharge_efficiency
+            / max(round_trip_efficiency, 0.01)
+        )
+        local_hour = dt_util.as_local(now).hour
+        forecast_refill_allowed = bool(
+            6 <= local_hour < 16
+            and pv_power_w >= load_power_w + 500.0
+            and maximum_daylight_sale_input_kwh > 0.3
+            and pv_surplus_for_refill_kwh >= maximum_daylight_replacement_kwh + 0.5
+        )
+        effective_reserve_soc = (
+            minimum_trade_soc if forecast_refill_allowed else max(0.0, reserve_soc)
+        )
+        # The energy already stored above the effective protected reserve may
+        # be sold now. Replenishment is evaluated only against cheaper hours
+        # that are still ahead, never against a price from before the sale.
+        stored_energy_above_reserve_kwh = max(
+            0.0,
+            battery_capacity_kwh * (soc - effective_reserve_soc) / 100.0,
+        )
+        sale_energy_kwh = stored_energy_above_reserve_kwh * discharge_efficiency
         replacement_input_kwh = sale_energy_kwh / max(round_trip_efficiency, 0.01)
         pv_refill_kwh = min(replacement_input_kwh, pv_surplus_for_refill_kwh)
         grid_repurchase_kwh = max(0.0, replacement_input_kwh - pv_refill_kwh)
+        current_good_pv_sale = bool(
+            forecast_refill_allowed
+            and current_sell_price >= self._runtime_float("economic_good_sell_price", 0.55)
+        )
+        sale_price_used = current_sell_price if current_good_pv_sale else best_sell_price
         expected_revenue = sale_energy_kwh * sale_price_used
         expected_purchase_cost = grid_repurchase_kwh * cheapest_buy
         expected_cycle_cost = sale_energy_kwh * cycle_cost
         expected_net_profit = expected_revenue - expected_purchase_cost - expected_cycle_cost
         profit_per_kwh = (
             expected_net_profit / sale_energy_kwh if sale_energy_kwh > 0.01 else 0.0
+        )
+        schedule_available = bool(
+            len(sell_points) >= 2
+            and (cheapest is not None or grid_repurchase_kwh <= 0.01)
         )
         profitable = bool(
             schedule_available
@@ -925,7 +957,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             enabled
             and profitable
             and stored_energy_above_reserve_kwh > 0.3
-            and current_sell_price >= best_sell_price - 0.01
+            and (
+                current_good_pv_sale
+                or current_sell_price >= best_sell_price - 0.01
+            )
         )
         # Profit mode does not buy energy merely to resell it. Grid charging
         # remains controlled by the existing PV-deficit target, so it happens
@@ -946,7 +981,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif sell_now:
             status = "SPRZEDAŻ"
             reason = (
-                f"Sprzedaję {sale_energy_kwh:.2f} kWh ponad rezerwę {reserve_soc:.0f}% "
+                f"Sprzedaję {sale_energy_kwh:.2f} kWh ponad rezerwę {effective_reserve_soc:.0f}% "
                 f"po {current_sell_price:.3f} PLN/kWh; PV uzupełni {pv_refill_kwh:.2f} kWh, "
                 f"a z sieci trzeba będzie odkupić {grid_repurchase_kwh:.2f} kWh. Zysk netto: "
                 f"{expected_net_profit:.2f} PLN."
@@ -974,7 +1009,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "best_sell_price": round(best_sell_price, 3),
             "profit_per_kwh": round(profit_per_kwh, 3),
             "sale_energy_kwh": round(sale_energy_kwh, 2),
-            "reserve_soc": round(reserve_soc, 1),
+            "reserve_soc": round(effective_reserve_soc, 1),
+            "configured_reserve_soc": round(reserve_soc, 1),
+            "forecast_refill_allowed": forecast_refill_allowed,
+            "current_good_pv_sale": current_good_pv_sale,
             "expected_revenue": round(expected_revenue, 2),
             "expected_purchase_cost": round(expected_purchase_cost, 2),
             "expected_cycle_cost": round(expected_cycle_cost, 2),
@@ -2396,6 +2434,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             battery_trade_enabled,
         )
 
+        pv_today_for_control = max(0.0, pv_today * pv_forecast_factor)
         profit_mode_plan = self._profit_mode_plan(
             buy_price_entities,
             sell_price_entities,
@@ -2404,10 +2443,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             soc,
             battery_capacity_kwh,
             max(discharge_target_soc, night_reserve_soc),
-            pv_today,
+            pv_today_for_control,
             self._as_float(learn.get("daily_pv_kwh"), 0.0) or 0.0,
             target_expected_24h_consumption_kwh,
             self._as_float(learn.get("daily_load_kwh"), 0.0) or 0.0,
+            min_soc,
+            pv_power,
+            load_power,
             profit_mode_enabled and battery_trade_enabled,
         )
 
@@ -2425,6 +2467,52 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             battery_capacity_kwh,
             reserve_ready_by_hour,
         )
+
+        # During daylight, do not buy energy when the live PV surplus or the
+        # calibrated remaining forecast can rebuild the missing reserve.  The
+        # emergency and negative-price modes are evaluated separately and keep
+        # their higher priority.
+        pv_produced_today_kwh = max(
+            0.0,
+            self._as_float(learn.get("daily_pv_kwh"), 0.0) or 0.0,
+        )
+        load_consumed_today_kwh = max(
+            0.0,
+            self._as_float(learn.get("daily_load_kwh"), 0.0) or 0.0,
+        )
+        remaining_pv_today_kwh = max(0.0, pv_today_for_control - pv_produced_today_kwh)
+        remaining_home_today_kwh = max(
+            0.0,
+            target_expected_24h_consumption_kwh - load_consumed_today_kwh,
+        )
+        forecast_pv_surplus_for_charge_kwh = max(
+            0.0,
+            remaining_pv_today_kwh - remaining_home_today_kwh,
+        )
+        live_pv_surplus_for_charge_w = max(0.0, pv_power - load_power)
+        cheap_charge_missing_kwh = max(
+            0.0,
+            self._as_float(cheap_grid_charge_plan.get("missing_kwh"), 0.0) or 0.0,
+        )
+        grid_charge_blocked_by_pv = bool(
+            6 <= local_hour < 18
+            and soc > emergency_soc + 1.0
+            and (
+                live_pv_surplus_for_charge_w >= 500.0
+                or (
+                    (self._as_float(pv_reality.get("score"), 0.0) or 0.0) >= 50.0
+                    and forecast_pv_surplus_for_charge_kwh
+                    >= cheap_charge_missing_kwh + 0.5
+                )
+            )
+        )
+        if grid_charge_blocked_by_pv and cheap_grid_charge_plan.get("charge_now", False):
+            cheap_grid_charge_plan["charge_now"] = False
+            cheap_grid_charge_plan["reason"] = (
+                f"Nie ładuję z sieci: bieżąca nadwyżka PV "
+                f"{live_pv_surplus_for_charge_w:.0f} W, prognozowana energia dostępna "
+                f"na magazyn {forecast_pv_surplus_for_charge_kwh:.2f} kWh"
+            )
         # HOMEON_NEGATIVE_PRICE_WINDOW_END
 
         available_to_sell_kwh = max(0.0, battery_capacity_kwh * (soc - discharge_target_soc) / 100.0)
@@ -2498,9 +2586,16 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             and pv_power > max(1000.0, load_power + 500.0)
         )
 
+        profit_safe_sale_kwh = max(
+            0.0,
+            self._as_float(profit_mode_plan.get("sale_energy_kwh"), 0.0) or 0.0,
+        )
+        profit_sale_above_reserve = bool(
+            profit_mode_enabled and profit_safe_sale_kwh > 0.3
+        )
         sell_ready = bool(
             (profit_mode_plan.get("sell_now", False) if profit_mode_enabled else sell_price_trigger)
-            and soc > discharge_target_soc + 1
+            and (profit_sale_above_reserve or soc > discharge_target_soc + 1)
             and (not pv_reality_lock or profit_mode_enabled)
             and battery_trade_enabled
             and not home_battery_protection_active
@@ -2568,11 +2663,26 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             mode = "NEGATIVE_IMPORT"
             reason = "Cena zakupu jest ujemna lub zerowa — opłaca się ładować"
         elif (
-            cheap_grid_charge_plan.get("charge_now", False)
-            or (
-                not cheap_grid_charge_plan.get("schedule_available", False)
-                and buy_price < economic_cheap_charge_price
-                and soc < charge_target_soc
+            sell_ready
+            and profit_mode_enabled
+            and profit_mode_plan.get("current_good_pv_sale", False)
+        ):
+            mode = "SELL_BATTERY_HIGH_PRICE"
+            reason = str(
+                profit_mode_plan.get(
+                    "reason",
+                    "Sprzedaję energię teraz, ponieważ późniejsza produkcja PV uzupełni magazyn",
+                )
+            )
+        elif (
+            not grid_charge_blocked_by_pv
+            and (
+                cheap_grid_charge_plan.get("charge_now", False)
+                or (
+                    not cheap_grid_charge_plan.get("schedule_available", False)
+                    and buy_price < economic_cheap_charge_price
+                    and soc < charge_target_soc
+                )
             )
         ):
             mode = "CHEAP_CHARGE"
@@ -2706,6 +2816,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 and night_self_use_active
                 and soc > min_soc + 1.0
             )
+            and not (
+                str(last_mode) == "CHEAP_CHARGE"
+                and grid_charge_blocked_by_pv
+            )
         ):
             last_priority = int(mode_priority.get(str(last_mode), 10))
             new_priority = int(mode_priority.get(str(mode), 10))
@@ -2790,6 +2904,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "cheap_charge_inverter_power_kw": cheap_grid_charge_plan.get("inverter_power_kw", 0.0),
             "cheap_charge_battery_c_rate": cheap_grid_charge_plan.get("battery_c_rate", 0.0),
             "cheap_charge_reason": str(cheap_grid_charge_plan.get("reason", "-"))[:240],
+            "grid_charge_blocked_by_pv": grid_charge_blocked_by_pv,
+            "live_pv_surplus_for_charge_w": round(live_pv_surplus_for_charge_w, 0),
+            "forecast_pv_surplus_for_charge_kwh": round(forecast_pv_surplus_for_charge_kwh, 2),
 
             "pv_forecast_today": round(pv_today, 1),
             "pv_forecast_tomorrow": round(pv_tomorrow, 1),
@@ -2853,6 +2970,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "profit_mode_pv_refill_kwh": profit_mode_plan.get("pv_refill_kwh", 0.0),
             "profit_mode_grid_repurchase_kwh": profit_mode_plan.get("grid_repurchase_kwh", 0.0),
             "profit_mode_round_trip_efficiency": profit_mode_plan.get("round_trip_efficiency", 0.0),
+            "profit_mode_forecast_refill_allowed": "ON" if profit_mode_plan.get("forecast_refill_allowed", False) else "OFF",
+            "profit_mode_current_good_pv_sale": "ON" if profit_mode_plan.get("current_good_pv_sale", False) else "OFF",
             "home_battery_protection": "ON" if home_battery_protection_active else "OFF",
             "home_battery_load_w": round(home_battery_load_w, 0),
             "home_battery_protection_reason": home_battery_protection_reason[:240],

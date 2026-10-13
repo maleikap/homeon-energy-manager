@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.40", manifest["version"])
+        self.assertEqual("1.2.41", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.40"', source)
+            self.assertIn('"sw_version": "1.2.41"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -57,15 +57,20 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("charge_efficiency * discharge_efficiency", coordinator)
         self.assertIn("expected_revenue - expected_purchase_cost - expected_cycle_cost", coordinator)
         self.assertIn("pv_surplus_for_refill_kwh", coordinator)
+        self.assertIn("forecast_refill_allowed", coordinator)
+        self.assertIn("current_good_pv_sale", coordinator)
+        self.assertIn("effective_reserve_soc", coordinator)
         self.assertIn("grid_repurchase_kwh = max(0.0, replacement_input_kwh - pv_refill_kwh)", coordinator)
         self.assertIn("expected_purchase_cost = grid_repurchase_kwh * cheapest_buy", coordinator)
         self.assertIn("stored_energy_above_reserve_kwh", coordinator)
-        self.assertIn("morning_profit_window", coordinator)
+        self.assertIn("current_good_pv_sale", coordinator)
         self.assertIn("current_sell_price >= best_sell_price - 0.01", coordinator)
         self.assertIn('item["dt"] > now + timedelta(minutes=20)', coordinator)
         self.assertIn("prepare_charge = False", coordinator)
         self.assertIn('"profit_mode_expected_net_profit"', sensors)
         self.assertIn("and not profit_mode_enabled", planner)
+        self.assertIn('data.get("profit_mode_current_good_pv_sale", "OFF")', planner)
+        self.assertIn('data.get("profit_mode_sale_energy_kwh")', planner)
 
     def test_daily_financial_stats_are_calculated_live(self) -> None:
         learning = (COMPONENT / "learning.py").read_text(encoding="utf-8")
@@ -129,8 +134,18 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn('"cheap_charge_windows"', source)
         self.assertIn("reserve_ready_by_hour", source)
         self.assertIn("early_load_threshold_w", source)
+        self.assertIn("grid_charge_blocked_by_pv", source)
+        self.assertIn("live_pv_surplus_for_charge_w >= 500.0", source)
+        self.assertIn("forecast_pv_surplus_for_charge_kwh", source)
+        self.assertIn("not grid_charge_blocked_by_pv", source)
+        self.assertIn('str(last_mode) == "CHEAP_CHARGE"', source)
 
-        cheap_mode = source.index('mode = "CHEAP_CHARGE"')
+        pv_sale_mode = source.index(
+            'profit_mode_plan.get("current_good_pv_sale", False)'
+        )
+        cheap_mode = source.index('mode = "CHEAP_CHARGE"', pv_sale_mode)
+        self.assertLess(pv_sale_mode, cheap_mode)
+
         home_protection = source.index('elif home_battery_protection_active:', cheap_mode)
         self.assertLess(cheap_mode, home_protection)
 
