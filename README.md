@@ -263,6 +263,14 @@ Przed restartem zalecane jest wykonanie:
 ha core check
 ```
 
+## Testy strategii
+
+Repozytorium zawiera testy zachowania, które uruchamiają planer cenowy i sterownik Deye na symulowanych encjach Home Assistanta. Scenariusze obejmują między innymi 48 godzin pracy magazynu, pompę ciepła uruchamianą o 03:00, ceny szczytowe, zmienną produkcję PV, pełny magazyn i Time of Use.
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
 ## Powiązane projekty
 
 - [HomeOn Energy Card](https://github.com/maleikap/homeon-energy-card)

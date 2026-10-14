@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.47
+
+- Dodano testy zachowania uruchamiające prawdziwy planer i sterownik Deye na atrapach Home Assistanta, w tym pełną symulację 48 godzin.
+- Oczekiwanie na lepszą cenę nie jest już automatycznie zamieniane na blokadę rezerwy pogodowej; Time of Use wraca wtedy do minimalnego SOC falownika i bateria może zasilać dom.
+- Po przekroczeniu planowanej godziny rezerwy manager nie kupuje drogiej energii tylko z powodu niewielkiej różnicy do celu. Natychmiastowe odzyskiwanie działa dopiero blisko chronionego minimum SOC.
+- Dodano scenariusze pompy ciepła o 03:00, niepełnej bieżącej godziny, dobrego PV, sprzedaży w najlepszej cenie, pełnej baterii oraz przywracania ustawień Deye.
+
 ## 1.2.46
 
 - Tryb oczekiwania i priorytet domu zawsze przywracają właściwy tryb autokonsumpcji (`Zero Export To CT` albo `Zero Export To Load`) zamiast pozostawiać falownik w poprzednim trybie sprzedaży lub ładowania.

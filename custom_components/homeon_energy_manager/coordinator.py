@@ -849,8 +849,15 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         current_energy_kwh = battery_capacity_kwh * soc / 100.0
         target_energy_kwh = battery_capacity_kwh * target_soc / 100.0
         direct_reserve_missing_kwh = max(0.0, target_energy_kwh - current_energy_kwh)
+        # Missing the preferred reserve target by a few percent after its
+        # deadline is not a reason to buy peak-priced energy. Recover
+        # immediately only when the battery is already close to the protected
+        # floor; otherwise the normal schedule may wait for cheaper energy or
+        # incoming PV.
         recover_missed_reserve_now = bool(
-            deadline_missed and direct_reserve_missing_kwh > 0.05
+            deadline_missed
+            and direct_reserve_missing_kwh > 0.05
+            and soc <= predictive_floor_soc + 1.0
         )
         missing_kwh = max(
             0.0,
@@ -1543,14 +1550,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         sell_solar_allowed = sell_price_for_inverter > 0.0
         sell_solar_limit_w = inverter_export_target_w if sell_solar_allowed else 0.0
 
-        weather_lock = bool(
-            mode == "WEATHER_HOLD_RESERVE"
-            or (
-                mode in ("SELL_BATTERY_HIGH_PRICE", "WAIT_BETTER_SELL_PRICE")
-                and plan_safe_to_sell_kwh <= 0.2
-                and not pv_export_opportunity
-            )
-        )
+        # Waiting for a better selling price must not freeze household
+        # self-consumption at the dynamic reserve.  The strategy selects the
+        # explicit WEATHER_HOLD_RESERVE mode when that reserve really needs to
+        # be protected; otherwise TOU returns to the inverter minimum SOC.
+        weather_lock = mode == "WEATHER_HOLD_RESERVE"
 
         data["inverter_control_enabled"] = inverter_control
         data["inverter_control_dry_run"] = "ON" if dry_run else "OFF"

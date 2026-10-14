@@ -1,0 +1,308 @@
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+from pathlib import Path
+import sys
+import unittest
+
+from ha_test_support import (
+    Clock,
+    FakeEntry,
+    FakeHass,
+    FakeState,
+    WARSAW,
+    install_homeassistant_stubs,
+)
+
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+install_homeassistant_stubs()
+
+from custom_components.homeon_energy_manager.const import DOMAIN  # noqa: E402
+from custom_components.homeon_energy_manager.coordinator import (  # noqa: E402
+    HomeOnEnergyCoordinator,
+)
+
+
+BUY = "sensor.test_buy"
+SELL = "sensor.test_sell"
+
+
+def rows(start: datetime, prices: list[float]) -> list[dict]:
+    return [
+        {
+            "start": (start + timedelta(hours=index)).isoformat(),
+            "end": (start + timedelta(hours=index + 1)).isoformat(),
+            "price": price,
+        }
+        for index, price in enumerate(prices)
+    ]
+
+
+class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
+    def make_coordinator(self, now: datetime, runtime: dict | None = None):
+        Clock.set(now)
+        hass = FakeHass()
+        entry = FakeEntry()
+        hass.data = {
+            DOMAIN: {
+                entry.entry_id: {
+                    "enabled": True,
+                    "dry_run": False,
+                    "inverter_control": True,
+                    "battery_trade": True,
+                    "profit_mode": True,
+                    "deye_min_command_interval_seconds": 0,
+                    "deye_max_changes_per_run": 20,
+                    "inverter_discharge_current_a": 120,
+                    "inverter_charge_current_a": 80,
+                    "inverter_safe_discharge_current_a": 20,
+                    "min_soc": 16,
+                    **(runtime or {}),
+                }
+            }
+        }
+        coordinator = HomeOnEnergyCoordinator.__new__(HomeOnEnergyCoordinator)
+        coordinator.hass = hass
+        coordinator.entry = entry
+        return coordinator
+
+    @staticmethod
+    def set_prices(coordinator, start: datetime, buy: list[float], sell: list[float]):
+        coordinator.hass.states.set(BUY, buy[0], {"today_prices": rows(start, buy)})
+        coordinator.hass.states.set(SELL, sell[0], {"today_prices": rows(start, sell)})
+
+    def test_night_plan_charges_before_three_oclock_heat_pump(self):
+        now = datetime(2026, 1, 10, 0, 5, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        prices = [0.55, 0.45, 0.65, 0.80, 0.35, 1.10, 1.50]
+        self.set_prices(coordinator, now.replace(minute=0), prices, prices)
+        profile = {
+            f"{hour:02d}": {"avg_load_w": 400.0}
+            for hour in range(24)
+        }
+        profile["03"] = {"avg_load_w": 5000.0}
+
+        plan = coordinator._cheap_grid_charge_plan(
+            BUY, prices[0], soc=35.0, target_soc=75.0,
+            battery_capacity_kwh=30.0, reserve_ready_by_hour=3,
+            minimum_soc=16.0, expected_net_load_w=400.0,
+            hourly_profile=profile,
+        )
+
+        self.assertTrue(plan["schedule_available"])
+        self.assertIn("01:00", plan["windows"])
+        self.assertNotIn("04:00", plan["windows"])
+        self.assertLessEqual(plan["required_hours"], 2)
+
+    def test_manager_waits_for_cheaper_hour_when_battery_can_survive(self):
+        now = datetime(2026, 1, 10, 0, 5, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        prices = [1.10, 0.80, 0.60, 0.40, 0.75, 1.20]
+        self.set_prices(coordinator, now.replace(minute=0), prices, prices)
+
+        plan = coordinator._cheap_grid_charge_plan(
+            BUY, prices[0], soc=65.0, target_soc=80.0,
+            battery_capacity_kwh=30.0, reserve_ready_by_hour=6,
+            minimum_soc=16.0, expected_net_load_w=300.0,
+            hourly_profile={},
+        )
+
+        self.assertFalse(plan["charge_now"])
+        self.assertIn("03:00", plan["windows"])
+        self.assertNotIn("00:00", plan["windows"])
+
+    def test_missed_deadline_recovers_only_near_protected_floor(self):
+        now = datetime(2026, 1, 10, 4, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        prices = [1.40, 0.35, 0.40]
+        self.set_prices(coordinator, now, prices, prices)
+
+        safe_plan = coordinator._cheap_grid_charge_plan(
+            BUY, prices[0], soc=55.0, target_soc=75.0,
+            battery_capacity_kwh=30.0, reserve_ready_by_hour=3,
+            minimum_soc=16.0, expected_net_load_w=400.0,
+            hourly_profile={},
+        )
+        emergency_plan = coordinator._cheap_grid_charge_plan(
+            BUY, prices[0], soc=18.0, target_soc=75.0,
+            battery_capacity_kwh=30.0, reserve_ready_by_hour=3,
+            minimum_soc=16.0, expected_net_load_w=400.0,
+            hourly_profile={},
+        )
+
+        self.assertFalse(safe_plan["recover_missed_reserve_now"])
+        self.assertFalse(safe_plan["charge_now"])
+        self.assertTrue(emergency_plan["recover_missed_reserve_now"])
+        self.assertTrue(emergency_plan["charge_now"])
+
+    def test_started_hour_counts_only_remaining_minutes(self):
+        now = datetime(2026, 1, 10, 4, 55, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        prices = [0.20, 0.90]
+        self.set_prices(coordinator, now.replace(minute=0), prices, prices)
+
+        plan = coordinator._cheap_grid_charge_plan(
+            BUY, prices[0], soc=20.0, target_soc=60.0,
+            battery_capacity_kwh=30.0, reserve_ready_by_hour=6,
+            minimum_soc=16.0, expected_net_load_w=500.0,
+            hourly_profile={},
+        )
+
+        self.assertGreater(plan["missing_kwh"], 6.0)
+        self.assertIn("05:00", plan["windows"])
+
+    def test_48_hour_trajectory_never_reaches_emergency_soc_or_buys_peak_energy(self):
+        start = datetime(2026, 1, 10, 22, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(start)
+        buy = []
+        for step in range(48):
+            hour = (start + timedelta(hours=step)).hour
+            buy.append(
+                0.32 if hour in {0, 1, 2}
+                else 1.60 if hour in {6, 7, 8, 17, 18, 19}
+                else 0.75
+            )
+        self.set_prices(coordinator, start, buy, buy)
+        profile = {f"{hour:02d}": {"avg_load_w": 650.0} for hour in range(24)}
+        profile["03"] = {"avg_load_w": 5000.0}
+        pv_kwh = {
+            8: 0.5, 9: 1.5, 10: 2.5, 11: 3.0, 12: 3.0,
+            13: 2.5, 14: 1.5, 15: 0.5,
+        }
+        for hour, energy_kwh in pv_kwh.items():
+            profile[f"{hour:02d}"]["avg_pv_w"] = energy_kwh * 1000.0
+        capacity = 30.0
+        energy = capacity * 0.50
+        emergency_energy = capacity * 0.16
+        charged_prices: list[float] = []
+        peak_import_kwh = 0.0
+
+        for step in range(48):
+            now = start + timedelta(hours=step)
+            Clock.set(now)
+            coordinator.hass.states.set(BUY, buy[step], {"today_prices": rows(start, buy)})
+            soc = energy / capacity * 100.0
+            plan = coordinator._cheap_grid_charge_plan(
+                BUY, buy[step], soc=soc, target_soc=75.0,
+                battery_capacity_kwh=capacity, reserve_ready_by_hour=3,
+                minimum_soc=16.0, expected_net_load_w=650.0,
+                hourly_profile=profile,
+            )
+            if plan["charge_now"]:
+                added = min(15.0, capacity * 0.95 - energy)
+                energy += max(0.0, added)
+                charged_prices.append(buy[step])
+
+            load = 5.0 if now.hour == 3 else 0.65
+            net_use = max(0.0, load - pv_kwh.get(now.hour, 0.0))
+            available = max(0.0, energy - emergency_energy)
+            from_battery = min(available, net_use)
+            energy -= from_battery
+            grid_import = net_use - from_battery
+            if buy[step] >= 1.50:
+                peak_import_kwh += grid_import
+            energy = min(capacity, energy + max(0.0, pv_kwh.get(now.hour, 0.0) - load))
+
+            self.assertGreaterEqual(energy + 0.001, emergency_energy)
+
+        self.assertTrue(charged_prices)
+        self.assertTrue(all(price < 1.50 for price in charged_prices))
+        self.assertLess(peak_import_kwh, 0.01)
+
+    def test_profit_mode_waits_for_better_sale_price(self):
+        now = datetime(2026, 6, 10, 6, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        buy = [0.30] * 24
+        sell = [0.80, 1.27] + [0.50] * 22
+        self.set_prices(coordinator, now.replace(minute=0), buy, sell)
+
+        plan = coordinator._profit_mode_plan(
+            BUY, SELL, current_buy_price=0.30, current_sell_price=0.80,
+            soc=70.0, battery_capacity_kwh=30.0, reserve_soc=35.0,
+            pv_forecast_today_kwh=7.0, pv_produced_today_kwh=0.0,
+            expected_daily_consumption_kwh=30.0, consumed_today_kwh=4.0,
+            minimum_soc=16.0, pv_power_w=0.0, load_power_w=800.0,
+            enabled=True,
+        )
+
+        self.assertFalse(plan["sell_now"])
+        self.assertEqual("OCZEKIWANIE", plan["status"])
+        self.assertEqual(1.27, plan["best_sell_price"])
+
+    def test_profit_mode_sells_now_and_can_refill_from_good_pv(self):
+        now = datetime(2026, 6, 10, 7, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        buy = [0.35] * 24
+        sell = [0.98] + [0.70] * 23
+        self.set_prices(coordinator, now.replace(minute=0), buy, sell)
+
+        plan = coordinator._profit_mode_plan(
+            BUY, SELL, current_buy_price=0.35, current_sell_price=0.98,
+            soc=65.0, battery_capacity_kwh=30.0, reserve_soc=40.0,
+            pv_forecast_today_kwh=45.0, pv_produced_today_kwh=1.0,
+            expected_daily_consumption_kwh=30.0, consumed_today_kwh=3.0,
+            minimum_soc=16.0, pv_power_w=3500.0, load_power_w=700.0,
+            enabled=True,
+        )
+
+        self.assertTrue(plan["forecast_refill_allowed"])
+        self.assertTrue(plan["sell_now"])
+        self.assertEqual(16.0, plan["reserve_soc"])
+
+    def configure_deye(self, coordinator):
+        states = coordinator.hass.states
+        states.set("select.inverter_work_mode", "Export First", {"options": ["Export First", "Zero Export To CT"]})
+        states.set("switch.inverter_battery_grid_charging", "off")
+        states.set("switch.inverter_export_surplus", "on")
+        states.set("number.inverter_battery_max_charging_current", "80")
+        states.set("number.inverter_battery_max_discharging_current", "5")
+        states.set("time.inverter_program_1_time", "23:59")
+        states.set("select.inverter_program_1_charging", "Grid", {"options": ["Grid", "No Grid"]})
+        states.set("number.inverter_program_1_soc", "43")
+
+    async def test_wait_mode_restores_self_use_full_current_and_minimum_tou_soc(self):
+        now = datetime(2026, 1, 10, 20, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_deye(coordinator)
+        data = {
+            "mode": "WAIT_BETTER_SELL_PRICE", "soc": 35.0, "min_soc": 16.0,
+            "night_self_use_active": True, "self_use_reserve_soc": 40.0,
+            "discharge_target_soc": 40.0, "sell_price": 0.80,
+            "pv_power": 0.0, "load_power": 500.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("Zero Export To CT", coordinator.hass.states.get("select.inverter_work_mode").state)
+        self.assertEqual("120.0", coordinator.hass.states.get("number.inverter_battery_max_discharging_current").state)
+        self.assertEqual("No Grid", coordinator.hass.states.get("select.inverter_program_1_charging").state)
+        self.assertEqual("16.0", coordinator.hass.states.get("number.inverter_program_1_soc").state)
+        self.assertNotEqual("5.0", coordinator.hass.states.get("number.inverter_battery_max_discharging_current").state)
+        self.assertIn(result["deye_command_confirmation"], {"SENT", "PARTIAL"})
+
+    async def test_full_battery_stops_charge_and_exports_positive_price_pv(self):
+        now = datetime(2026, 6, 10, 12, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_deye(coordinator)
+        coordinator.hass.states.set("select.inverter_work_mode", "Zero Export To CT")
+        data = {
+            "mode": "PV_CHARGE", "soc": 100.0, "min_soc": 16.0,
+            "night_self_use_active": False, "self_use_reserve_soc": 35.0,
+            "discharge_target_soc": 35.0, "sell_price": 0.78,
+            "pv_power": 8000.0, "load_power": 800.0,
+            "economic_pv_export_opportunity": "ON", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("Export First", coordinator.hass.states.get("select.inverter_work_mode").state)
+        self.assertEqual("0.0", coordinator.hass.states.get("number.inverter_battery_max_charging_current").state)
+        self.assertEqual("off", coordinator.hass.states.get("switch.inverter_battery_grid_charging").state)
+        self.assertEqual("on", coordinator.hass.states.get("switch.inverter_export_surplus").state)
+
+
+if __name__ == "__main__":
+    unittest.main()
