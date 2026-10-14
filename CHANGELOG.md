@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.45
+
+- HomeOn nie obniża już maksymalnego prądu rozładowania baterii do 5 A w trybach ładowania, ochrony rezerwy ani sprzedaży samej nadwyżki PV.
+- Ochronę energii w magazynie realizuje cel SOC programu Time of Use, a skonfigurowana moc rozładowania pozostaje dostępna do zasilania domu.
+- Sprzedaż samej nadwyżki PV korzysta z `Zero Export To CT`; `Export First` jest używany tylko wtedy, gdy plan rzeczywiście zezwala na sprzedaż energii z baterii.
+
 ## 1.2.44
 
 - Po porannym terminie HomeOn nie wymusza od razu ładowania na następny dzień, dopóki nie ma kompletnego harmonogramu cen do kolejnego terminu rezerwy.

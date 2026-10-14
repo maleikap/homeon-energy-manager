@@ -1790,7 +1790,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_export_surplus, False)
             sw(inverter_grid_charging, True)
             num(inverter_max_charge_current, inverter_charge_current_a)
-            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         elif mode == "PREPARE_NEGATIVE_PRICE_WINDOW":
             neg_energy_to_free_kwh = self._as_float(data.get("negative_price_energy_to_free_kwh"), 0.0) or 0.0
@@ -1819,7 +1819,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_export_surplus, False)
             sw(inverter_grid_charging, True)
             num(inverter_max_charge_current, inverter_charge_current_a)
-            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         elif mode == "PV_LOW_PRICE_CHARGE":
             action = "Najgorsza godzina sprzedaży — Zero Export To CT; Deye ładuje magazyn z PV i sprzedaje pozostałą nadwyżkę"
@@ -1828,7 +1828,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, sell_solar_allowed)
             num(inverter_max_charge_current, inverter_charge_current_a)
-            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         elif mode == "PV_PRICE_EXPORT":
             if full_soc_charge_lock:
@@ -1839,11 +1839,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 num(inverter_max_discharge_current, 0.0)
                 sw(inverter_export_surplus, sell_solar_allowed)
             else:
-                action = "Poza najgorszymi godzinami — Export First sprzedaje produkcję PV, a blokada rozładowania zachowuje puste miejsce w magazynie"
-                data["inverter_work_mode_target"] = inverter_work_mode_sell_option
-                sel(inverter_work_mode_select, inverter_work_mode_sell_option)
+                action = "Poza najgorszymi godzinami — Zero Export To CT sprzedaje nadwyżkę PV, a bateria może zasilać dom"
+                data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+                sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
                 sw(inverter_grid_charging, False)
-                num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+                num(inverter_max_discharge_current, inverter_discharge_current_a)
                 sw(inverter_export_surplus, sell_solar_allowed)
 
         elif (
@@ -1859,9 +1859,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 discharge_current = inverter_discharge_current_a
             else:
                 action = "Sprzedaż bieżącej nadwyżki PV %.0f W bez wymuszania rozładowania baterii" % safe_export_limit_w
-                discharge_current = inverter_block_discharge_current_a
-            data["inverter_work_mode_target"] = inverter_work_mode_sell_option
-            sel(inverter_work_mode_select, inverter_work_mode_sell_option)
+                discharge_current = inverter_discharge_current_a
+            work_mode = (
+                inverter_work_mode_sell_option
+                if plan_safe_to_sell_kwh > 0.3
+                else inverter_work_mode_pv_charge_option
+            )
+            data["inverter_work_mode_target"] = work_mode
+            sel(inverter_work_mode_select, work_mode)
             sw(inverter_grid_charging, False)
             num(inverter_max_discharge_current, discharge_current)
             sw(inverter_export_surplus, True)
@@ -1914,12 +1919,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         elif mode == "MORNING_RESERVE_HOLD":
-            action = "Rezerwa do rana osiągnięta — ograniczam dalsze rozładowanie magazynu"
+            action = "Rezerwa do rana osiągnięta — Time of Use chroni wymagany SOC, a bateria nadal może zasilać dom"
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, sell_solar_allowed)
-            num(inverter_max_discharge_current, inverter_block_discharge_current_a)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         else:
             executor_mode = "NORMAL_SAFE"
