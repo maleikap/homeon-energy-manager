@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.43", manifest["version"])
+        self.assertEqual("1.2.44", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.43"', source)
+            self.assertIn('"sw_version": "1.2.44"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -142,6 +142,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("((current_hour + timedelta(hours=1)) - now)", helper)
         self.assertIn("def _slot_capacity_kwh", helper)
         self.assertIn("remaining_kwh -= slot_capacity_kwh", helper)
+        self.assertIn("direct_reserve_missing_kwh", helper)
+        self.assertIn("recover_missed_reserve_now", helper)
+        self.assertIn("schedule_covers_deadline", helper)
+        self.assertIn("grid_charge_target_soc", helper)
 
         self.assertIn('cheap_grid_charge_plan.get("charge_now", False)', source)
         self.assertIn('not cheap_grid_charge_plan.get("schedule_available", False)', source)
@@ -153,6 +157,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("forecast_pv_surplus_for_charge_kwh", source)
         self.assertIn("not grid_charge_blocked_by_pv", source)
         self.assertIn('str(last_mode) == "CHEAP_CHARGE"', source)
+        self.assertIn('not cheap_grid_charge_plan.get("charge_now", False)', source)
 
         pv_sale_mode = source.index(
             'profit_mode_plan.get("current_good_pv_sale", False)'
@@ -188,6 +193,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("add_tou_commands(grid_charge=tou_grid_charge", executor)
         self.assertIn("and not full_soc_charge_lock", executor)
         self.assertIn('data.get("charge_target_soc")', executor)
+        self.assertIn('data.get("cheap_charge_grid_target_soc")', executor)
         self.assertIn('data.get("discharge_target_soc")', executor)
         self.assertIn('data.get("self_use_reserve_soc")', executor)
         self.assertIn('tou_target_soc = minimum_soc', executor)

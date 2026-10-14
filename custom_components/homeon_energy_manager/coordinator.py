@@ -855,6 +855,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         )
         current_energy_kwh = battery_capacity_kwh * soc / 100.0
         target_energy_kwh = battery_capacity_kwh * target_soc / 100.0
+        direct_reserve_missing_kwh = max(0.0, target_energy_kwh - current_energy_kwh)
+        recover_missed_reserve_now = bool(
+            deadline_missed and direct_reserve_missing_kwh > 0.05
+        )
         missing_kwh = max(
             0.0,
             target_energy_kwh
@@ -955,9 +959,15 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             and predicted_depletion_deadline <= current_hour + timedelta(hours=1)
         )
         available_charge_kwh = sum(_slot_capacity_kwh(item) for item in hours)
+        schedule_covers_deadline = bool(hours) and max(
+            item["dt"] for item in hours
+        ) >= reserve_deadline - timedelta(hours=1)
         schedule_available = bool(hours) and (
-            available_charge_kwh + 0.05 >= missing_kwh
-            or deadline_missed
+            (
+                schedule_covers_deadline
+                and available_charge_kwh + 0.05 >= missing_kwh
+            )
+            or recover_missed_reserve_now
             or deadline_imminent
             or predictive_precharge
             or prediction_imminent
@@ -965,7 +975,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         # If the planned readiness time has already passed and the reserve is
         # still missing, recover immediately instead of waiting for another
         # cheap hour later in the day.
-        if deadline_missed and missing_kwh > 0.05 and hours:
+        if recover_missed_reserve_now and hours:
             current = next((item for item in hours if item["dt"] == current_hour), None)
             if current is not None and current not in selected:
                 selected = [current, *selected[: max(0, required_hours - 1)]]
@@ -980,6 +990,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             f"{self._fmt_dt_hour(item['dt'])} ({item['price']:.3f} PLN/kWh)"
             for item in selected
         ) or "brak"
+        grid_charge_target_soc = min(
+            95.0,
+            max(
+                soc,
+                soc + missing_kwh / max(battery_capacity_kwh, 0.1) * 100.0,
+            ),
+        )
 
         return {
             "schedule_available": schedule_available,
@@ -989,6 +1006,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "estimated_charge_kw": round(estimated_charge_kw, 2),
             "inverter_power_kw": round(inverter_power_kw, 2),
             "battery_c_rate": round(battery_c_rate, 2),
+            "grid_charge_target_soc": round(grid_charge_target_soc, 1),
+            "schedule_covers_deadline": schedule_covers_deadline,
+            "recover_missed_reserve_now": recover_missed_reserve_now,
             "reserve_ready_by": self._fmt_dt_hour(reserve_deadline),
             "predictive_floor_soc": round(predictive_floor_soc, 1),
             "predicted_depletion_by": self._fmt_dt_hour(predicted_depletion_deadline),
@@ -1924,7 +1944,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             and not full_soc_charge_lock
         )
         if tou_grid_charge:
-            tou_target_soc = float(self._as_float(data.get("charge_target_soc"), 95.0) or 95.0)
+            tou_target_soc = float(
+                self._as_float(
+                    data.get("cheap_charge_grid_target_soc"),
+                    data.get("charge_target_soc", 95.0),
+                )
+                or 95.0
+            )
             tou_reason = "ładowanie z sieci"
         elif executor_mode == "MORNING_RESERVE_HOLD":
             tou_target_soc = float(self._as_float(data.get("self_use_reserve_soc"), minimum_soc) or minimum_soc)
@@ -2991,7 +3017,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             )
             and not (
                 str(last_mode) == "CHEAP_CHARGE"
-                and grid_charge_blocked_by_pv
+                and not cheap_grid_charge_plan.get("charge_now", False)
             )
         ):
             last_priority = int(mode_priority.get(str(last_mode), 10))
@@ -3076,6 +3102,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "cheap_charge_estimated_power_kw": cheap_grid_charge_plan.get("estimated_charge_kw", 0.0),
             "cheap_charge_inverter_power_kw": cheap_grid_charge_plan.get("inverter_power_kw", 0.0),
             "cheap_charge_battery_c_rate": cheap_grid_charge_plan.get("battery_c_rate", 0.0),
+            "cheap_charge_grid_target_soc": cheap_grid_charge_plan.get("grid_charge_target_soc", charge_target_soc),
+            "cheap_charge_schedule_covers_deadline": "ON" if cheap_grid_charge_plan.get("schedule_covers_deadline", False) else "OFF",
             "cheap_charge_reason": str(cheap_grid_charge_plan.get("reason", "-"))[:240],
             "cheap_charge_predictive_floor_soc": cheap_grid_charge_plan.get("predictive_floor_soc", min_soc),
             "cheap_charge_predicted_depletion_by": cheap_grid_charge_plan.get("predicted_depletion_by", "-"),

@@ -168,7 +168,7 @@ class HomeOnNumber(CoordinatorEntity, NumberEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.43",
+            "sw_version": "1.2.44",
         }
 
     @property
