@@ -283,6 +283,26 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual("5.0", coordinator.hass.states.get("number.inverter_battery_max_discharging_current").state)
         self.assertIn(result["deye_command_confirmation"], {"SENT", "PARTIAL"})
 
+    async def test_weak_pv_protection_blocks_trade_but_not_house_self_use(self):
+        now = datetime(2026, 10, 14, 9, 16, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_deye(coordinator)
+        data = {
+            "mode": "WEATHER_HOLD_RESERVE", "soc": 60.0, "min_soc": 16.0,
+            "night_self_use_active": False, "self_use_reserve_soc": 60.0,
+            "discharge_target_soc": 75.0, "sell_price": 0.80,
+            "pv_power": 586.0, "load_power": 1382.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("WEATHER_HOLD_RESERVE", result["inverter_control_executor_mode"])
+        self.assertEqual("Zero Export To CT", coordinator.hass.states.get("select.inverter_work_mode").state)
+        self.assertEqual("120.0", coordinator.hass.states.get("number.inverter_battery_max_discharging_current").state)
+        self.assertEqual("No Grid", coordinator.hass.states.get("select.inverter_program_1_charging").state)
+        self.assertEqual("16.0", coordinator.hass.states.get("number.inverter_program_1_soc").state)
+
     async def test_full_battery_stops_charge_and_exports_positive_price_pv(self):
         now = datetime(2026, 6, 10, 12, 0, tzinfo=WARSAW)
         coordinator = self.make_coordinator(now)

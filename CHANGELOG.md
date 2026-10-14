@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.48
+
+- Ochrona rezerwy przy słabym PV blokuje handel energią z magazynu, ale nie blokuje zasilania domu z baterii.
+- Tryby `WEATHER_HOLD_RESERVE` i `PV_REALITY_HOLD` ustawiają Time of Use na minimalny SOC falownika, zachowując `Zero Export To CT` oraz pełny skonfigurowany prąd rozładowania.
+- Dodano test zachowania odtwarzający przypadek: PV 586 W, dom 1382 W, bateria 60% i niepotrzebny import z sieci.
+
 ## 1.2.47
 
 - Dodano testy zachowania uruchamiające prawdziwy planer i sterownik Deye na atrapach Home Assistanta, w tym pełną symulację 48 godzin.
