@@ -117,10 +117,10 @@ async def update_learning(coordinator, data: dict[str, Any]) -> dict[str, Any]:
 
     financial_day_key = str(learn.get("financial_daily_key", ""))
 
-    if not financial_day_key:
-        # Preserve the part of the current day already reported by Pstryk when
-        # this feature is first installed.  From this point HomeOn updates the
-        # totals live from CT power and the active hourly prices.
+    if not financial_day_key or financial_day_key != day_key:
+        # Preserve the part of the current day already reported by Pstryk both
+        # on first startup and after a restart/day change. From this point
+        # HomeOn updates the totals live from CT power and hourly prices.
         pstryk_cost = coordinator.hass.states.get(
             "sensor.pstryk_aio_dzienne_koszty_zuzycia_energii"
         )
@@ -135,11 +135,6 @@ async def update_learning(coordinator, data: dict[str, Any]) -> dict[str, Any]:
             pstryk_sale.state if pstryk_sale is not None else None,
             0.0,
         )
-        learn["daily_grid_import_kwh"] = 0.0
-        learn["daily_grid_export_kwh"] = 0.0
-    elif financial_day_key != day_key:
-        learn["daily_purchase_cost_pln"] = 0.0
-        learn["daily_sale_value_pln"] = 0.0
         learn["daily_grid_import_kwh"] = 0.0
         learn["daily_grid_export_kwh"] = 0.0
 

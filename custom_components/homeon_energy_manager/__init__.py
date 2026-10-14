@@ -19,7 +19,6 @@ DEFAULT_RUNTIME_OPTIONS = {
     "inverter_charge_current_a": 80,
     "inverter_discharge_current_a": 120,
     "inverter_safe_discharge_current_a": 20,
-    "inverter_block_discharge_current_a": 5,
     CONF_BATTERY_CAPACITY_KWH: DEFAULT_BATTERY_CAPACITY_KWH,
     "economic_good_sell_price": 0.55,
     "economic_cheap_charge_price": 0.30,

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.46
+
+- Tryb oczekiwania i priorytet domu zawsze przywracają właściwy tryb autokonsumpcji (`Zero Export To CT` albo `Zero Export To Load`) zamiast pozostawiać falownik w poprzednim trybie sprzedaży lub ładowania.
+- Poza trybem awaryjnym HomeOn nie ogranicza prądu rozładowania do wartości zastępczej; dom może korzystać z pełnej skonfigurowanej mocy magazynu.
+- Sterownik Deye wysyła wyłącznie ustawienia, które rzeczywiście wymagają zmiany, respektuje skonfigurowany odstęp poleceń i bezpiecznie rozkłada duży plan na kolejne cykle.
+- Błąd wykonania polecenia nie jest już zapisywany jako poprawnie zastosowany plan.
+- Strategia ceny ujemnej korzysta z ustawionych progów zamiast stałych wartości, a przygotowanie magazynu rozpoczyna tylko przy cenie wystarczająco bliskiej najlepszej cenie sprzedaży.
+- Dzienne statystyki finansowe po restarcie są inicjalizowane danymi Pstryk AIO zamiast rozpoczynać dzień od zera.
+- Usunięto trzy nieużywane progi prognozy PV z konfiguracji oraz nieużywane ustawienie prądu blokady rozładowania.
+
 ## 1.2.45
 
 - HomeOn nie obniża już maksymalnego prądu rozładowania baterii do 5 A w trybach ładowania, ochrony rezerwy ani sprzedaży samej nadwyżki PV.

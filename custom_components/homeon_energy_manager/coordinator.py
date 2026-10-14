@@ -32,9 +32,6 @@ from .const import (
     CONF_MIN_NIGHT_RESERVE_SOC,
     CONF_BATTERY_DISCHARGE_POSITIVE,
     CONF_GRID_IMPORT_POSITIVE,
-    CONF_PV_MEDIUM_FORECAST_KWH,
-    CONF_PV_GOOD_FORECAST_KWH,
-    CONF_PV_VERY_GOOD_FORECAST_KWH,
     CONF_INVERTER_GRID_CHARGING_SWITCH,
     CONF_INVERTER_EXPORT_SURPLUS_SWITCH,
     CONF_INVERTER_MAX_CHARGE_CURRENT_NUMBER,
@@ -54,9 +51,6 @@ from .const import (
     DEFAULT_NIGHT_CONSUMPTION_KWH,
     DEFAULT_NIGHT_SAFETY_MARGIN,
     DEFAULT_MIN_NIGHT_RESERVE_SOC,
-    DEFAULT_PV_MEDIUM_FORECAST_KWH,
-    DEFAULT_PV_GOOD_FORECAST_KWH,
-    DEFAULT_PV_VERY_GOOD_FORECAST_KWH,
     DEFAULT_INVERTER_WORK_MODE_SELECT,
     DEFAULT_INVERTER_WORK_MODE_SELL_OPTION,
     DEFAULT_INVERTER_WORK_MODE_PV_CHARGE_OPTION,
@@ -75,7 +69,6 @@ HOMEON_EXPORT_TARGET_W = 10000
 HOMEON_CHARGE_CURRENT_A = 80
 HOMEON_DISCHARGE_CURRENT_A = 120
 HOMEON_SAFE_DISCHARGE_CURRENT_A = 20
-HOMEON_BLOCK_DISCHARGE_CURRENT_A = 5
 
 
 class HomeOnEnergyCoordinator(DataUpdateCoordinator):
@@ -1229,6 +1222,18 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
     ) -> dict[str, Any]:
         now = dt_util.now()
         points = self._price_points_for_entity(price_entity, price, horizon_hours=12)
+        prepare_hours = max(
+            0.0,
+            self._runtime_float("economic_negative_prepare_hours", 6.0),
+        )
+        minimum_energy_to_free_kwh = max(
+            0.0,
+            self._runtime_float("economic_min_energy_to_free_kwh", 0.5),
+        )
+        minimum_sell_price_prepare = self._runtime_float(
+            "economic_min_sell_price_prepare",
+            0.05,
+        )
 
         negative_points = [
             p for p in points
@@ -1316,13 +1321,16 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             prepare_export_w = max(500.0, min(float(HOMEON_EXPORT_TARGET_W), prepare_export_w))
 
         best_sell_price = self._as_float(sell_stats.get("best_sell_price_24h"), sell_price) or sell_price
-        sell_is_reasonable_now = bool(sell_price > 0.05 and sell_price >= min(best_sell_price, sell_price) - 0.20)
+        sell_is_reasonable_now = bool(
+            sell_price > minimum_sell_price_prepare
+            and sell_price >= best_sell_price - 0.20
+        )
 
         prepare = bool(
             not now_active
             and battery_trade_enabled
-            and hours_to_start <= 6.0
-            and energy_to_free_kwh >= 0.5
+            and hours_to_start <= prepare_hours
+            and energy_to_free_kwh >= minimum_energy_to_free_kwh
             and soc > target_soc_before + 3.0
             and sell_is_reasonable_now
         )
@@ -1347,9 +1355,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             strategy = "Wykryto cenę ujemną, ale nie ma warunków do wcześniejszej sprzedaży z magazynu."
             if not battery_trade_enabled:
                 reason = "Cena ujemna jest w planie, ale tryb handlu baterią jest OFF — HomeOn nie opróżnia magazynu handlowo."
-            elif energy_to_free_kwh < 0.5:
+            elif energy_to_free_kwh < minimum_energy_to_free_kwh:
                 reason = "Cena ujemna jest w planie, ale w magazynie jest już wystarczająco wolnego miejsca."
-            elif sell_price <= 0.05:
+            elif sell_price <= minimum_sell_price_prepare:
                 reason = "Cena ujemna jest w planie, ale obecna cena sprzedaży jest za niska na opłacalne zwalnianie magazynu."
             else:
                 reason = "Cena ujemna jest w planie, ale okno jest za daleko albo SOC nie pozwala na sensowne zwolnienie magazynu."
@@ -1469,55 +1477,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["deye_command_confirmation"] = "IDLE"
         data["deye_command_confirmation_reason"] = "Nie wysłano komend Deye"
 
-        # HOMEON_HOME_BATTERY_PRIORITY_EXEC_GUARD
-        charging_override_modes = {"CHEAP_CHARGE", "NEGATIVE_IMPORT", "EMERGENCY_RESERVE"}
-        requested_mode = str(data.get("mode", "NORMAL")).upper()
-        if (
-            str(data.get("home_battery_protection", "OFF")).upper() == "ON"
-            and not bool(store.get("battery_trade", False))
-            and requested_mode not in charging_override_modes
-        ):
-            data["deye_driver_safety_status"] = "BLOCKED_HOME_PRIORITY"
-            data["deye_driver_block_reason"] = "Ochrona zasilania domu"
-            data["inverter_control_action"] = "Ochrona domu — bateria zasila gospodarstwo, nie zmieniam nastaw Deye"
-            data["inverter_control_executor_mode"] = "BLOCKED_HOME_PRIORITY"
-            data["inverter_control_last_result"] = (
-                "Pominięto sterowanie: bateria zasila gospodarstwo domowe. "
-                "HomeOn nie zmienia trybu Deye ani limitów baterii."
-            )
-            data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
-            data["inverter_deye_plan"] = "Zablokowane przez ochronę domu"
-            data["inverter_deye_current_states"] = "Bateria zasila gospodarstwo"
-            data["inverter_deye_changes"] = "Brak zmian — ochrona domu"
-            data["inverter_deye_changed_only"] = "Brak realnych zmian — ochrona domu"
-            data["inverter_deye_services"] = "Nie wykonano usług HA"
-            data["inverter_deye_command_count"] = 0
-            data["inverter_deye_changed_count"] = 0
-            data["inverter_deye_unchanged_count"] = 0
-            data["inverter_deye_test_mode"] = "BLOCKED — bateria zasila dom"
-            return data
-
-        if str(data.get("mode", "")).upper() == "HOME_BATTERY_PRIORITY":
-            data["deye_driver_safety_status"] = "BLOCKED_BATTERY_TRADE_OFF"
-            data["deye_driver_block_reason"] = "Handel baterią jest wyłączony"
-            data["inverter_control_action"] = "Ochrona domu — tryb handlu baterią wyłączony, nie ustawiam Export First"
-            data["inverter_control_executor_mode"] = "BLOCKED_BATTERY_TRADE_OFF"
-            data["inverter_control_last_result"] = (
-                "Pominięto sterowanie: handel baterią jest wyłączony. "
-                "HomeOn nie ustawia Export First ani sprzedaży z magazynu."
-            )
-            data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
-            data["inverter_deye_plan"] = "Zablokowane — handel baterią OFF"
-            data["inverter_deye_current_states"] = "Handel baterią wyłączony"
-            data["inverter_deye_changes"] = "Brak zmian — handel baterią OFF"
-            data["inverter_deye_changed_only"] = "Brak realnych zmian — handel baterią OFF"
-            data["inverter_deye_services"] = "Nie wykonano usług HA"
-            data["inverter_deye_command_count"] = 0
-            data["inverter_deye_changed_count"] = 0
-            data["inverter_deye_unchanged_count"] = 0
-            data["inverter_deye_test_mode"] = "BLOCKED — handel baterią OFF"
-            return data
-
         inverter_control = bool(store.get("inverter_control", False))
         mode = str(data.get("mode", "NORMAL"))
 
@@ -1550,7 +1509,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         inverter_charge_current_a = self._runtime_float("inverter_charge_current_a", HOMEON_CHARGE_CURRENT_A)
         inverter_discharge_current_a = self._runtime_float("inverter_discharge_current_a", HOMEON_DISCHARGE_CURRENT_A)
         inverter_safe_discharge_current_a = self._runtime_float("inverter_safe_discharge_current_a", HOMEON_SAFE_DISCHARGE_CURRENT_A)
-        inverter_block_discharge_current_a = self._runtime_float("inverter_block_discharge_current_a", HOMEON_BLOCK_DISCHARGE_CURRENT_A)
         current_soc = float(self._as_float(data.get("soc"), 0.0) or 0.0)
         minimum_soc = float(self._as_float(data.get("min_soc"), 0.0) or 0.0)
         night_self_use_active = bool(data.get("night_self_use_active", False))
@@ -1759,6 +1717,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_grid_charging, False)
             num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
 
+        elif mode == "HOME_BATTERY_PRIORITY":
+            action = "Ochrona domu — przywracam Zero Export To CT i pełną moc rozładowania dla autokonsumpcji"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
+            sw(inverter_grid_charging, False)
+            sw(inverter_export_surplus, sell_solar_allowed)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
+
         elif (
             full_soc_charge_lock
             and sell_solar_allowed
@@ -1781,7 +1747,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, sell_solar_allowed)
             sw(inverter_grid_charging, False)
-            num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         elif mode == "EMERGENCY_RESERVE":
             action = "Awaryjny SOC — ustawiam Zero Export To CT, włączam ładowanie z sieci i blokuję eksport"
@@ -1810,7 +1776,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, False)
             sw(inverter_grid_charging, False)
-            num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         elif mode in ("NEGATIVE_IMPORT", "CHEAP_CHARGE"):
             action = "Tania energia — ustawiam Zero Export To CT, ładuję z sieci i blokuję eksport"
@@ -1878,7 +1844,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, sell_solar_allowed)
             sw(inverter_grid_charging, False)
-            num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         elif mode == "PV_REALITY_HOLD":
             action = "Realna produkcja PV jest słaba — Zero Export To CT chroni magazyn, a dodatnia cena pozwala sprzedać nadwyżkę PV"
@@ -1886,7 +1852,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, sell_solar_allowed)
-            num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         elif mode == "WAIT_BETTER_SELL_PRICE":
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
@@ -1908,7 +1874,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_grid_charging, False)
             sw(inverter_export_surplus, sell_solar_allowed)
             num(inverter_max_charge_current, inverter_charge_current_a)
-            num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
 
         elif mode == "EXPENSIVE_SELF_USE":
             action = "Droga energia — Zero Export To CT; Deye zasila dom i sprzedaje tylko nadwyżkę PV"
@@ -1936,7 +1902,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 discharge_current = inverter_discharge_current_a
             else:
                 action = "Normalna praca — Zero Export To CT; Deye sam zarządza domem, magazynem i nadwyżką PV"
-                discharge_current = inverter_safe_discharge_current_a
+                discharge_current = inverter_discharge_current_a
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_grid_charging, False)
@@ -1994,6 +1960,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["inverter_control_executor_mode"] = executor_mode
         data["inverter_control_action"] = action
 
+        # A safety override can replace a value prepared by the strategy.
+        # Send only the final value for each entity.
+        deduplicated: dict[tuple[str, str], tuple[str, str, Any]] = {}
+        for command in desired:
+            deduplicated[(command[0], command[1])] = command
+        desired = list(deduplicated.values())
+
         preview = []
         change_preview = []
         changed_preview = []
@@ -2047,6 +2020,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                     return False
             return False
 
+        changed_commands: list[tuple[str, str, Any]] = []
         for domain, entity_id, value in desired:
             current = _current_state(entity_id)
             target = _target_state(domain, value)
@@ -2064,6 +2038,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 unchanged_preview.append(line)
             else:
                 changed_preview.append(line)
+                changed_commands.append((domain, entity_id, value))
 
             if domain == "switch":
                 service = "switch." + ("turn_on" if bool(value) else "turn_off") + " entity_id=" + entity_id
@@ -2074,7 +2049,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             else:
                 service = domain + " " + entity_id + " " + target
 
-            service_preview.append(service)
+            if not same:
+                service_preview.append(service)
 
         data["inverter_deye_command_count"] = len(desired)
         data["inverter_deye_changed_count"] = len(changed_preview)
@@ -2131,10 +2107,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["inverter_deye_services"] = _short(" | ".join(service_preview))
 
         if dry_run:
-            data["inverter_deye_test_mode"] = "DRY-RUN - tylko pokazuje, nic nie zapisuje do Deye"
-        else:
-            data["inverter_deye_test_mode"] = "REAL - komendy moga byc zapisane do Deye"
-        if dry_run:
             data["inverter_deye_test_mode"] = "DRY-RUN — tylko pokazuję, nic nie zapisuję do Deye"
         else:
             data["inverter_deye_test_mode"] = "REAL — komendy mogą być zapisane do Deye"
@@ -2143,32 +2115,51 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
             return data
 
+        if not changed_commands:
+            data["inverter_control_last_result"] = "Bez zmian — Deye ma już wszystkie wymagane nastawy"
+            data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
+            return data
+
         control_hash = "|".join(preview)
         now_ts = dt_util.now().timestamp()
         last_hash = getattr(self, "_homeon_last_control_hash", None)
         last_ts = getattr(self, "_homeon_last_control_ts", 0.0)
 
-        if control_hash == last_hash and now_ts - float(last_ts or 0.0) < 120:
-            data["inverter_control_last_result"] = "Bez zmian — ostatnie komendy były już wysłane mniej niż 120 s temu: " + control_hash
+        elapsed_since_last_send = now_ts - float(last_ts or 0.0)
+        last_executor_mode = str(getattr(self, "_homeon_last_executor_mode", ""))
+        if (
+            last_ts
+            and elapsed_since_last_send < deye_min_command_interval_seconds
+            and (control_hash == last_hash or last_executor_mode == executor_mode)
+        ):
+            data["deye_driver_safety_status"] = "WAITING_MIN_INTERVAL"
+            data["deye_driver_block_reason"] = (
+                f"Czekam na minimalny odstęp komend Deye: "
+                f"{deye_min_command_interval_seconds:.0f} s"
+            )
+            data["inverter_control_last_result"] = (
+                f"Bez wysyłania — od ostatniej komendy minęło "
+                f"{elapsed_since_last_send:.0f} z {deye_min_command_interval_seconds:.0f} s"
+            )
             data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
             return data
 
 
         # HOMEON_DEYE_SAFE_DRIVER_EXEC_START
-        if deye_driver_changed_count_runtime > int(deye_max_changes_per_run):
-            data["deye_driver_safety_status"] = "BLOCKED_TOO_MANY_CHANGES"
+        max_changes = int(deye_max_changes_per_run)
+        commands_to_send = changed_commands[:max_changes]
+        deferred_commands = changed_commands[max_changes:]
+        if deferred_commands:
+            data["deye_driver_safety_status"] = "PARTIAL_CHANGE_LIMIT"
             data["deye_driver_block_reason"] = (
-                f"Zablokowano realne komendy Deye: {deye_driver_changed_count_runtime} zmian "
-                f"przekracza limit {int(deye_max_changes_per_run)} zmian w jednym cyklu."
+                f"Wykonuję {len(commands_to_send)} z {len(changed_commands)} zmian; "
+                f"pozostałe {len(deferred_commands)} przechodzą do kolejnego cyklu."
             )[:240]
-            data["inverter_control_last_result"] = data["deye_driver_block_reason"]
-            data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
-            data["inverter_deye_test_mode"] = "BLOCKED — za dużo zmian w jednym cyklu"
-            return data
+            data["inverter_deye_test_mode"] = "REAL — część zmian odłożona do kolejnego cyklu"
         # HOMEON_DEYE_SAFE_DRIVER_EXEC_END
         actions: list[str] = []
 
-        for domain, entity_id, value in desired:
+        for domain, entity_id, value in commands_to_send:
             if domain == "switch":
                 await self._async_set_switch(entity_id, bool(value), actions)
             elif domain == "number":
@@ -2176,13 +2167,28 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             elif domain == "select":
                 await self._async_set_select(entity_id, str(value), actions)
 
-        self._homeon_last_control_hash = control_hash
-        self._homeon_last_control_ts = now_ts
-
         data["inverter_control_last_result"] = " | ".join(actions) if actions else "Brak wykonanych akcji"
         data["inverter_control_last_run"] = dt_util.now().strftime("%Y-%m-%d %H:%M:%S")
-        data["deye_command_confirmation"] = "SENT"
-        data["deye_command_confirmation_reason"] = "Komendy wysłane — potwierdzenie zostanie sprawdzone w kolejnym cyklu"
+        command_failed = any(
+            "BŁĄD" in action or "brak encji" in action
+            for action in actions
+        )
+        if command_failed:
+            data["deye_driver_safety_status"] = "COMMAND_ERROR"
+            data["deye_driver_block_reason"] = "Co najmniej jedna komenda Deye nie została wykonana"
+            data["deye_command_confirmation"] = "NOT_APPLIED"
+            data["deye_command_confirmation_reason"] = data["deye_driver_block_reason"]
+        elif deferred_commands:
+            self._homeon_last_control_ts = now_ts
+            self._homeon_last_executor_mode = executor_mode
+            data["deye_command_confirmation"] = "PARTIAL"
+            data["deye_command_confirmation_reason"] = data["deye_driver_block_reason"]
+        else:
+            self._homeon_last_control_hash = control_hash
+            self._homeon_last_control_ts = now_ts
+            self._homeon_last_executor_mode = executor_mode
+            data["deye_command_confirmation"] = "SENT"
+            data["deye_command_confirmation_reason"] = "Komendy wysłane — potwierdzenie zostanie sprawdzone w kolejnym cyklu"
         return data
 
     async def _async_update_data(self) -> dict:
@@ -2198,9 +2204,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         night_safety_margin = self._conf_float(CONF_NIGHT_SAFETY_MARGIN, DEFAULT_NIGHT_SAFETY_MARGIN)
         min_night_reserve_soc = self._conf_float(CONF_MIN_NIGHT_RESERVE_SOC, DEFAULT_MIN_NIGHT_RESERVE_SOC)
 
-        pv_medium = self._conf_float(CONF_PV_MEDIUM_FORECAST_KWH, DEFAULT_PV_MEDIUM_FORECAST_KWH)
-        pv_good = self._conf_float(CONF_PV_GOOD_FORECAST_KWH, DEFAULT_PV_GOOD_FORECAST_KWH)
-        pv_very_good = self._conf_float(CONF_PV_VERY_GOOD_FORECAST_KWH, DEFAULT_PV_VERY_GOOD_FORECAST_KWH)
 
         battery_discharge_positive = self._conf_bool(CONF_BATTERY_DISCHARGE_POSITIVE, True)
         grid_import_positive = self._conf_bool(CONF_GRID_IMPORT_POSITIVE, True)
@@ -2558,8 +2561,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         # The reserve is saved for the night, not frozen throughout it.  From
         # 20:00 until 09:00 normal Zero Export To CT operation may consume it
-        # to the configured minimum SOC.  Only that hard floor keeps the 5 A
-        # synchronization current.
+        # to the configured minimum SOC. Time of Use protects that hard floor
+        # without reducing the configured battery discharge current.
         local_hour = dt_util.now().hour
         night_self_use_active = bool(local_hour >= 20 or local_hour < 9)
 
