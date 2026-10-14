@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.44", manifest["version"])
+        self.assertEqual("1.2.45", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.44"', source)
+            self.assertIn('"sw_version": "1.2.45"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -226,7 +226,8 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         branch_start = source.index('elif mode == "MORNING_RESERVE_HOLD":')
         branch_end = source.index('\n        else:', branch_start)
         branch = source[branch_start:branch_end]
-        self.assertIn("inverter_block_discharge_current_a", branch)
+        self.assertIn("inverter_discharge_current_a", branch)
+        self.assertNotIn("inverter_block_discharge_current_a", branch)
         self.assertIn("sw(inverter_grid_charging, False)", branch)
 
         normal_start = source.index('else:\n            executor_mode = "NORMAL_SAFE"', branch_end)
@@ -388,6 +389,23 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("sw(inverter_export_surplus, False)", branch)
         self.assertIn("num(inverter_max_discharge_current, inverter_discharge_current_a)", branch)
         self.assertNotIn("num(inverter_max_discharge_current, 0.0)", branch)
+
+    def test_strategy_does_not_limit_battery_discharge_to_five_amps(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        executor_start = source.index('if mode == "SAFE_MODE":')
+        executor_end = source.index("\n        tou_grid_charge = (", executor_start)
+        executor = source[executor_start:executor_end]
+
+        self.assertNotIn(
+            "num(inverter_max_discharge_current, inverter_block_discharge_current_a)",
+            executor,
+        )
+
+        pv_export_start = executor.index('elif mode == "PV_PRICE_EXPORT":')
+        pv_export_end = executor.index('elif (\n            mode == "SELL_BATTERY_HIGH_PRICE"', pv_export_start)
+        pv_export = executor[pv_export_start:pv_export_end]
+        self.assertIn("inverter_work_mode_pv_charge_option", pv_export)
+        self.assertIn("num(inverter_max_discharge_current, inverter_discharge_current_a)", pv_export)
 
 
 if __name__ == "__main__":
