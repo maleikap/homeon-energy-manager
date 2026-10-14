@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.44
+
+- Po porannym terminie HomeOn nie wymusza od razu ładowania na następny dzień, dopóki nie ma kompletnego harmonogramu cen do kolejnego terminu rezerwy.
+- Pominięty termin uruchamia natychmiastowe odzyskanie rezerwy tylko wtedy, gdy bieżący SOC rzeczywiście jest poniżej wymaganego celu.
+- Wyjście z `CHEAP_CHARGE` następuje natychmiast po zakończeniu wybranego okna, bez podtrzymywania blokady rozładowania przez histerezę.
+- Time of Use otrzymuje cel SOC powiększony o energię przewidywanego zużycia, dzięki czemu aktywne okno naprawdę ładuje zamiast jedynie blokować baterię.
+- Podczas oczekiwania falownik wraca do `Zero Export To CT`, wyłącza zakup do magazynu i pozwala baterii zasilać dom.
+
 ## 1.2.43
 
 - Nocny plan ładowania uwzględnia energię, którą dom zużyje jeszcze przed godziną wymaganej rezerwy, zamiast porównywać cel wyłącznie z bieżącym SOC.
