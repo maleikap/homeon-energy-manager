@@ -789,26 +789,17 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         ]
         if hours_before_reserve:
             hours = hours_before_reserve
-        missing_kwh = max(
-            0.0,
-            battery_capacity_kwh * (target_soc - soc) / 100.0,
-        )
         inverter_power_kw = max(0.5, self._runtime_float("inverter_rated_power_kw", 20.0))
         battery_c_rate = min(2.0, max(0.05, self._runtime_float("battery_max_charge_c_rate", 0.5)))
         battery_charge_limit_kw = max(0.5, battery_capacity_kwh * battery_c_rate)
         estimated_charge_kw = min(inverter_power_kw, battery_charge_limit_kw)
-        required_hours = 0 if missing_kwh <= 0.05 else max(1, math.ceil(missing_kwh / estimated_charge_kw))
-        deadline_imminent = (
-            missing_kwh > 0.05
-            and reserve_deadline <= current_hour + timedelta(hours=max(1, required_hours))
-        )
-        selected = sorted(hours, key=lambda item: (item["price"], item["dt"]))[:required_hours]
 
         # Do not wait for the emergency SOC. Estimate how long the battery can
         # supply the home above a small buffer over the inverter minimum and
-        # ensure that at least one selected charging hour starts before that
-        # energy is exhausted. The learned hourly profile catches repeatable
-        # loads such as a heat pump starting before dawn.
+        # include that consumption in the energy which must be bought before
+        # the reserve deadline.  Without it the target was checked against the
+        # current SOC only, so a battery still above the morning target at
+        # midnight could start charging as late as 04:55.
         profile = hourly_profile if isinstance(hourly_profile, dict) else {}
         predictive_floor_soc = min(95.0, max(minimum_soc + 3.0, minimum_soc))
         usable_before_floor_kwh = max(
@@ -816,8 +807,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             battery_capacity_kwh * (soc - predictive_floor_soc) / 100.0,
         )
         prediction_safety_margin = 1.20
-        predicted_use_kwh = 0.0
-        predicted_depletion_deadline = reserve_deadline
+        predicted_steps: list[dict[str, Any]] = []
         cursor = current_hour
         while cursor < reserve_deadline:
             bucket = profile.get(f"{cursor.hour:02d}")
@@ -852,15 +842,72 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 if cursor == current_hour
                 else 1.0
             )
-            predicted_use_kwh += (
+            step_use_kwh = (
                 predicted_net_load_w / 1000.0
                 * hour_fraction
                 * prediction_safety_margin
             )
-            if predicted_use_kwh >= usable_before_floor_kwh:
-                predicted_depletion_deadline = cursor
-                break
+            predicted_steps.append({"dt": cursor, "use_kwh": step_use_kwh})
             cursor += timedelta(hours=1)
+
+        predicted_consumption_until_reserve_kwh = sum(
+            item["use_kwh"] for item in predicted_steps
+        )
+        current_energy_kwh = battery_capacity_kwh * soc / 100.0
+        target_energy_kwh = battery_capacity_kwh * target_soc / 100.0
+        missing_kwh = max(
+            0.0,
+            target_energy_kwh
+            + predicted_consumption_until_reserve_kwh
+            - current_energy_kwh,
+        )
+
+        predicted_use_kwh = 0.0
+        predicted_depletion_deadline = reserve_deadline
+        for step in predicted_steps:
+            predicted_use_kwh += step["use_kwh"]
+            if predicted_use_kwh >= usable_before_floor_kwh:
+                predicted_depletion_deadline = step["dt"]
+                break
+
+        required_charge_hours = (
+            0.0 if missing_kwh <= 0.05 else missing_kwh / estimated_charge_kw
+        )
+        required_hours = (
+            0 if required_charge_hours <= 0.0 else max(1, math.ceil(required_charge_hours))
+        )
+        deadline_imminent = bool(
+            missing_kwh > 0.05
+            and reserve_deadline <= now + timedelta(hours=max(0.0, required_charge_hours))
+        )
+
+        def _slot_hours(item: dict[str, Any]) -> float:
+            if item["dt"] != current_hour:
+                return 1.0
+            return min(
+                1.0,
+                max(
+                    0.0,
+                    ((current_hour + timedelta(hours=1)) - now).total_seconds()
+                    / 3600.0,
+                ),
+            )
+
+        def _slot_capacity_kwh(item: dict[str, Any]) -> float:
+            return estimated_charge_kw * _slot_hours(item)
+
+        # Rank by price, but count the real remaining duration of the current
+        # hour. At 04:55 this slot can provide only five minutes of charging.
+        selected: list[dict[str, Any]] = []
+        remaining_kwh = missing_kwh
+        for item in sorted(hours, key=lambda candidate: (candidate["price"], candidate["dt"])):
+            if remaining_kwh <= 0.05:
+                break
+            slot_capacity_kwh = _slot_capacity_kwh(item)
+            if slot_capacity_kwh <= 0.01:
+                continue
+            selected.append(item)
+            remaining_kwh -= slot_capacity_kwh
 
         predictive_precharge = False
         first_selected = min(
@@ -883,27 +930,34 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 )
                 if survival_slot not in selected:
                     selected.append(survival_slot)
-                    if len(selected) > required_hours:
-                        replaceable = [
+                    replaceable = sorted(
+                        (
                             item for item in selected
                             if item is not survival_slot
                             and item["dt"] > predicted_depletion_deadline
-                        ]
-                        if replaceable:
-                            selected.remove(
-                                max(
-                                    replaceable,
-                                    key=lambda item: (item["price"], item["dt"]),
-                                )
-                            )
+                        ),
+                        key=lambda item: (item["price"], item["dt"]),
+                        reverse=True,
+                    )
+                    for candidate in replaceable:
+                        capacity_without_candidate = sum(
+                            _slot_capacity_kwh(item)
+                            for item in selected
+                            if item is not candidate
+                        )
+                        if capacity_without_candidate + 0.05 >= missing_kwh:
+                            selected.remove(candidate)
+                            break
                 predictive_precharge = True
 
         prediction_imminent = bool(
             missing_kwh > 0.05
             and predicted_depletion_deadline <= current_hour + timedelta(hours=1)
         )
-        schedule_available = len(hours) >= 2 or bool(hours) and (
-            deadline_missed
+        available_charge_kwh = sum(_slot_capacity_kwh(item) for item in hours)
+        schedule_available = bool(hours) and (
+            available_charge_kwh + 0.05 >= missing_kwh
+            or deadline_missed
             or deadline_imminent
             or predictive_precharge
             or prediction_imminent
@@ -939,12 +993,18 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "predictive_floor_soc": round(predictive_floor_soc, 1),
             "predicted_depletion_by": self._fmt_dt_hour(predicted_depletion_deadline),
             "predicted_use_before_charge_kwh": round(predicted_use_kwh, 2),
+            "predicted_consumption_until_reserve_kwh": round(
+                predicted_consumption_until_reserve_kwh,
+                2,
+            ),
             "predictive_precharge": predictive_precharge,
             "windows": windows,
             "reason": (
                 f"Magazyn nie może spaść do poziomu awaryjnego; przewidywana granica "
                 f"{predictive_floor_soc:.0f}% około {self._fmt_dt_hour(predicted_depletion_deadline)}. "
                 f"Rezerwa ma być gotowa przed {self._fmt_dt_hour(reserve_deadline)}; "
+                f"przewidywane zużycie do tego czasu "
+                f"{predicted_consumption_until_reserve_kwh:.2f} kWh; "
                 f"wybrane godziny: {windows}; do celu brakuje {missing_kwh:.2f} kWh"
                 if schedule_available
                 else "Brak pełnego harmonogramu Pstryk — używam awaryjnego progu ceny"
