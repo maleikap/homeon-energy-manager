@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.43
+
+- Nocny plan ładowania uwzględnia energię, którą dom zużyje jeszcze przed godziną wymaganej rezerwy, zamiast porównywać cel wyłącznie z bieżącym SOC.
+- Najtańsze godziny są wybierane z wyprzedzeniem, zanim nocne zużycie obniży SOC i wymusi spóźniony zakup energii.
+- Rozpoczęta godzina ma pojemność odpowiadającą rzeczywistemu czasowi pozostałemu do jej końca; o 04:55 planer liczy 5 minut, a nie pełną godzinę ładowania.
+- Opis planu pokazuje przewidywane zużycie energii do terminu gotowości rezerwy.
+
 ## 1.2.42
 
 - HomeOn przewiduje godzinę osiągnięcia bezpiecznej granicy SOC na podstawie energii w magazynie, bieżącego poboru i wyuczonego profilu godzinowego.

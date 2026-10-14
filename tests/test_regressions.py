@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.42", manifest["version"])
+        self.assertEqual("1.2.43", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.42"', source)
+            self.assertIn('"sw_version": "1.2.43"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -117,7 +117,8 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         helper_start = source.index("def _cheap_grid_charge_plan(")
         helper_end = source.index("def _negative_price_plan(", helper_start)
         helper = source[helper_start:helper_end]
-        self.assertIn("math.ceil(missing_kwh / estimated_charge_kw)", helper)
+        self.assertIn("missing_kwh / estimated_charge_kw", helper)
+        self.assertIn("math.ceil(required_charge_hours)", helper)
         self.assertNotIn("min(3, max(1", helper)
         self.assertIn('self._runtime_float("inverter_rated_power_kw", 20.0)', helper)
         self.assertIn('self._runtime_float("battery_max_charge_c_rate", 0.5)', helper)
@@ -134,6 +135,13 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("survival_hours", helper)
         self.assertIn("prediction_safety_margin", helper)
         self.assertIn("hourly_profile", helper)
+        self.assertIn("predicted_consumption_until_reserve_kwh", helper)
+        self.assertIn("target_energy_kwh", helper)
+        self.assertIn("current_energy_kwh", helper)
+        self.assertIn("def _slot_hours", helper)
+        self.assertIn("((current_hour + timedelta(hours=1)) - now)", helper)
+        self.assertIn("def _slot_capacity_kwh", helper)
+        self.assertIn("remaining_kwh -= slot_capacity_kwh", helper)
 
         self.assertIn('cheap_grid_charge_plan.get("charge_now", False)', source)
         self.assertIn('not cheap_grid_charge_plan.get("schedule_available", False)', source)
