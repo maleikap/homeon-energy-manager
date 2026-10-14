@@ -83,16 +83,6 @@ NUMBERS = [
         20,
     ),
     (
-        "inverter_block_discharge_current_a",
-        "Prąd blokady rozładowania",
-        0,
-        50,
-        1,
-        "A",
-        "mdi:battery-remove",
-        5,
-    ),
-    (
         "pv_installed_kwp",
         "Moc instalacji PV kWp",
         0,
@@ -168,7 +158,7 @@ class HomeOnNumber(CoordinatorEntity, NumberEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.45",
+            "sw_version": "1.2.46",
         }
 
     @property

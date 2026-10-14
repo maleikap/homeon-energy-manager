@@ -25,9 +25,6 @@ CONF_MIN_NIGHT_RESERVE_SOC = "min_night_reserve_soc"
 CONF_BATTERY_DISCHARGE_POSITIVE = "battery_discharge_positive"
 CONF_GRID_IMPORT_POSITIVE = "grid_import_positive"
 
-CONF_PV_MEDIUM_FORECAST_KWH = "pv_medium_forecast_kwh"
-CONF_PV_GOOD_FORECAST_KWH = "pv_good_forecast_kwh"
-CONF_PV_VERY_GOOD_FORECAST_KWH = "pv_very_good_forecast_kwh"
 
 CONF_INVERTER_GRID_CHARGING_SWITCH = "inverter_grid_charging_switch"
 CONF_INVERTER_EXPORT_SURPLUS_SWITCH = "inverter_export_surplus_switch"
@@ -51,9 +48,6 @@ DEFAULT_NIGHT_CONSUMPTION_KWH = 10.0
 DEFAULT_NIGHT_SAFETY_MARGIN = 1.25
 DEFAULT_MIN_NIGHT_RESERVE_SOC = 30.0
 
-DEFAULT_PV_MEDIUM_FORECAST_KWH = 15.0
-DEFAULT_PV_GOOD_FORECAST_KWH = 28.0
-DEFAULT_PV_VERY_GOOD_FORECAST_KWH = 42.0
 
 DEFAULT_INVERTER_GRID_CHARGING_SWITCH = "switch.inverter_battery_grid_charging"
 DEFAULT_INVERTER_EXPORT_SURPLUS_SWITCH = "switch.inverter_export_surplus"

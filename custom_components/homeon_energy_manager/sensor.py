@@ -239,7 +239,7 @@ SENSORS = [
     ("negative_price_window_status", "Okno ceny ujemnej", None, "mdi:cash-clock"),
     ("negative_price_window_start", "Start ceny ujemnej", None, "mdi:clock-start"),
     ("negative_price_window_end", "Koniec ceny ujemnej", None, "mdi:clock-end"),
-    ("negative_price_min_buy_price", "Najniższa cena sprzedaży w oknie", "PLN/kWh", "mdi:cash-minus"),
+    ("negative_price_min_buy_price", "Najniższa cena zakupu w oknie", "PLN/kWh", "mdi:cash-minus"),
     ("negative_price_energy_to_free_kwh", "Energia do zwolnienia przed ceną ujemną", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-arrow-down"),
     ("negative_price_required_free_kwh", "Wymagane wolne miejsce na cenę ujemną", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-outline"),
     ("negative_price_target_soc_before", "Docelowy SOC przed ceną ujemną", PERCENT, "mdi:battery-sync"),
@@ -317,7 +317,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.45",
+            "sw_version": "1.2.46",
         }
 
     @property

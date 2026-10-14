@@ -13,7 +13,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
     def test_deye_diagnostics_are_initialized_before_early_guards(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
         function_start = source.index("async def _async_apply_inverter_control")
-        first_guard = source.index("# HOMEON_HOME_BATTERY_PRIORITY_EXEC_GUARD", function_start)
+        first_guard = source.index("if not enabled:", function_start)
         initialization = source.index('data["deye_driver_min_interval_seconds"]', function_start)
 
         self.assertLess(initialization, first_guard)
@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.45", manifest["version"])
+        self.assertEqual("1.2.46", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.45"', source)
+            self.assertIn('"sw_version": "1.2.46"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -79,6 +79,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn('learn["financial_daily_key"] = day_key', learning)
         self.assertIn("interval_import_kwh * buy_price", learning)
         self.assertIn("interval_export_kwh * sell_price", learning)
+        self.assertIn("if not financial_day_key or financial_day_key != day_key:", learning)
         self.assertIn('"learn_daily_purchase_cost_pln"', learning)
         self.assertIn('"learn_daily_sale_value_pln"', learning)
         self.assertIn('"learn_daily_financial_balance_pln"', learning)
@@ -168,14 +169,16 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         home_protection = source.index('elif home_battery_protection_active:', cheap_mode)
         self.assertLess(cheap_mode, home_protection)
 
-    def test_required_charging_bypasses_home_priority_guard(self) -> None:
+    def test_required_charging_and_home_priority_are_both_executable(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
         executor_start = source.index("async def _async_apply_inverter_control")
         executor_end = source.index("async def _async_update_data", executor_start)
         executor = source[executor_start:executor_end]
 
-        self.assertIn('charging_override_modes = {"CHEAP_CHARGE", "NEGATIVE_IMPORT", "EMERGENCY_RESERVE"}', executor)
-        self.assertIn("requested_mode not in charging_override_modes", executor)
+        self.assertIn('elif mode == "HOME_BATTERY_PRIORITY":', executor)
+        self.assertIn('elif mode in ("NEGATIVE_IMPORT", "CHEAP_CHARGE"):', executor)
+        self.assertIn('elif mode == "EMERGENCY_RESERVE":', executor)
+        self.assertNotIn("BLOCKED_HOME_PRIORITY", executor)
 
     def test_grid_charging_programs_active_deye_tou_slot(self) -> None:
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -406,6 +409,56 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         pv_export = executor[pv_export_start:pv_export_end]
         self.assertIn("inverter_work_mode_pv_charge_option", pv_export)
         self.assertIn("num(inverter_max_discharge_current, inverter_discharge_current_a)", pv_export)
+
+    def test_home_priority_restores_self_consumption_instead_of_skipping_control(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        branch_start = source.index('elif mode == "HOME_BATTERY_PRIORITY":')
+        branch_end = source.index("\n        elif (", branch_start)
+        branch = source[branch_start:branch_end]
+
+        self.assertIn("inverter_work_mode_pv_charge_option", branch)
+        self.assertIn("sw(inverter_grid_charging, False)", branch)
+        self.assertIn("num(inverter_max_discharge_current, inverter_discharge_current_a)", branch)
+        self.assertNotIn("return data", branch)
+        self.assertNotIn("BLOCKED_HOME_PRIORITY", source)
+        self.assertNotIn("BLOCKED_BATTERY_TRADE_OFF", source)
+
+    def test_only_safe_mode_uses_reduced_discharge_current(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        executor_start = source.index('if mode == "SAFE_MODE":')
+        executor_end = source.index("\n        tou_grid_charge = (", executor_start)
+        executor = source[executor_start:executor_end]
+
+        self.assertEqual(
+            1,
+            executor.count(
+                "num(inverter_max_discharge_current, inverter_safe_discharge_current_a)"
+            ),
+        )
+
+    def test_deye_driver_sends_only_changed_commands_and_uses_configured_interval(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+
+        self.assertIn("changed_commands.append((domain, entity_id, value))", source)
+        self.assertIn("for domain, entity_id, value in commands_to_send:", source)
+        self.assertIn("elapsed_since_last_send < deye_min_command_interval_seconds", source)
+        self.assertNotIn("now_ts - float(last_ts or 0.0) < 120", source)
+        self.assertIn('data["deye_driver_safety_status"] = "COMMAND_ERROR"', source)
+        self.assertIn("commands_to_send = changed_commands[:max_changes]", source)
+        self.assertIn("deferred_commands = changed_commands[max_changes:]", source)
+        self.assertIn('data["deye_command_confirmation"] = "PARTIAL"', source)
+        self.assertNotIn('data["deye_driver_safety_status"] = "BLOCKED_TOO_MANY_CHANGES"', source)
+
+    def test_negative_price_preparation_uses_configured_limits(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        plan_start = source.index("def _negative_price_plan(")
+        plan_end = source.index("def _pv_reality_data(", plan_start)
+        plan = source[plan_start:plan_end]
+
+        self.assertIn('self._runtime_float("economic_negative_prepare_hours", 6.0)', plan)
+        self.assertIn('self._runtime_float("economic_min_energy_to_free_kwh", 0.5)', plan)
+        self.assertIn('"economic_min_sell_price_prepare"', plan)
+        self.assertIn("sell_price >= best_sell_price - 0.20", plan)
 
 
 if __name__ == "__main__":
