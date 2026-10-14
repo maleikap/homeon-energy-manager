@@ -1932,12 +1932,16 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             tou_reason = "ochrona rezerwy do rana"
         elif executor_mode in {
             "DISCHARGE_TARGET_HOLD",
-            "WEATHER_HOLD_RESERVE",
-            "PV_REALITY_HOLD",
             "NEGATIVE_PRICE_EXPORT_BLOCK",
         }:
             tou_target_soc = float(self._as_float(data.get("discharge_target_soc"), minimum_soc) or minimum_soc)
             tou_reason = "świadome zatrzymanie rozładowania na rezerwie"
+        elif executor_mode in {"WEATHER_HOLD_RESERVE", "PV_REALITY_HOLD"}:
+            # Weak PV blocks deliberate battery export, not household
+            # self-consumption. Zero Export To CT prevents sale from the
+            # battery while the minimum TOU SOC lets it cover the home load.
+            tou_target_soc = minimum_soc
+            tou_reason = "słabe PV — blokada handlu, autokonsumpcja do minimalnego SOC"
         elif executor_mode in {"PV_LOW_PRICE_CHARGE", "PV_CHARGE"}:
             tou_target_soc = float(self._as_float(data.get("charge_target_soc"), 95.0) or 95.0)
             tou_reason = "ładowanie z PV bez zakupu z sieci"
