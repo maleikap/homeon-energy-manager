@@ -137,6 +137,29 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(emergency_plan["recover_missed_reserve_now"])
         self.assertTrue(emergency_plan["charge_now"])
 
+    def test_low_soc_uses_cheaper_hour_before_morning_price_rise(self):
+        """Do not trust an unrealistically low load estimate close to minimum SOC."""
+        now = datetime(2026, 10, 15, 5, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        prices = [
+            1.09, 1.35, 1.55, 1.40, 0.40, 0.35, 0.30, 0.45,
+            0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85,
+            0.90, 0.95, 1.00, 0.90, 0.80, 0.70, 0.60, 0.50,
+        ]
+        self.set_prices(coordinator, now, prices, prices)
+
+        plan = coordinator._cheap_grid_charge_plan(
+            BUY, prices[0], soc=25.0, target_soc=75.0,
+            battery_capacity_kwh=30.0, reserve_ready_by_hour=3,
+            minimum_soc=16.0, expected_net_load_w=200.0,
+            hourly_profile={},
+        )
+
+        self.assertTrue(plan["charge_now"])
+        self.assertTrue(plan["predictive_precharge"])
+        self.assertIn("05:00 (1.090 PLN/kWh)", plan["windows"])
+        self.assertNotEqual("05:00", plan["predicted_depletion_by"])
+
     def test_started_hour_counts_only_remaining_minutes(self):
         now = datetime(2026, 1, 10, 4, 55, tzinfo=WARSAW)
         coordinator = self.make_coordinator(now)
@@ -299,6 +322,84 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual("WEATHER_HOLD_RESERVE", result["inverter_control_executor_mode"])
         self.assertEqual("Zero Export To CT", coordinator.hass.states.get("select.inverter_work_mode").state)
+        self.assertEqual("120.0", coordinator.hass.states.get("number.inverter_battery_max_discharging_current").state)
+        self.assertEqual("No Grid", coordinator.hass.states.get("select.inverter_program_1_charging").state)
+        self.assertEqual("16.0", coordinator.hass.states.get("number.inverter_program_1_soc").state)
+
+    async def test_normal_mode_prioritizes_commands_that_enable_self_use(self):
+        """A command limit must not defer TOU SOC while the home imports power."""
+        now = datetime(2026, 10, 15, 7, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(
+            now,
+            runtime={"deye_max_changes_per_run": 4},
+        )
+        self.configure_deye(coordinator)
+        coordinator.hass.states.set("switch.inverter_battery_grid_charging", "on")
+        coordinator.hass.states.set("switch.inverter_export_surplus", "off")
+        coordinator.hass.states.set("number.inverter_battery_max_charging_current", "20")
+        data = {
+            "mode": "NORMAL", "soc": 48.0, "min_soc": 16.0,
+            "night_self_use_active": True, "self_use_reserve_soc": 48.0,
+            "discharge_target_soc": 75.0, "sell_price": 1.35,
+            "pv_power": 0.0, "load_power": 1167.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("PARTIAL_CHANGE_LIMIT", result["deye_driver_safety_status"])
+        self.assertEqual("Zero Export To CT", coordinator.hass.states.get("select.inverter_work_mode").state)
+        self.assertEqual("120.0", coordinator.hass.states.get("number.inverter_battery_max_discharging_current").state)
+        self.assertEqual("No Grid", coordinator.hass.states.get("select.inverter_program_1_charging").state)
+        self.assertEqual("16.0", coordinator.hass.states.get("number.inverter_program_1_soc").state)
+
+    async def test_command_limit_prioritizes_grid_charge_tou_controls(self):
+        """The same priority mechanism must still start a planned grid charge."""
+        now = datetime(2026, 10, 15, 5, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(
+            now,
+            runtime={"deye_max_changes_per_run": 4},
+        )
+        self.configure_deye(coordinator)
+        coordinator.hass.states.set("switch.inverter_battery_grid_charging", "off")
+        coordinator.hass.states.set("number.inverter_program_1_soc", "16")
+        data = {
+            "mode": "CHEAP_CHARGE", "soc": 25.0, "min_soc": 16.0,
+            "night_self_use_active": True, "self_use_reserve_soc": 35.0,
+            "discharge_target_soc": 35.0, "charge_target_soc": 75.0,
+            "cheap_charge_grid_target_soc": 75.0, "sell_price": 0.40,
+            "pv_power": 0.0, "load_power": 500.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("PARTIAL_CHANGE_LIMIT", result["deye_driver_safety_status"])
+        self.assertEqual("Zero Export To CT", coordinator.hass.states.get("select.inverter_work_mode").state)
+        self.assertEqual("on", coordinator.hass.states.get("switch.inverter_battery_grid_charging").state)
+        self.assertEqual("Grid", coordinator.hass.states.get("select.inverter_program_1_charging").state)
+        self.assertEqual("75.0", coordinator.hass.states.get("number.inverter_program_1_soc").state)
+
+    async def test_load_installation_restores_zero_export_to_load(self):
+        now = datetime(2026, 10, 15, 7, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_deye(coordinator)
+        coordinator.hass.states.set(
+            "select.inverter_work_mode",
+            "Export First",
+            {"options": ["Export First", "Zero Export To CT", "Zero Export To Load"]},
+        )
+        data = {
+            "mode": "NORMAL", "soc": 48.0, "min_soc": 16.0,
+            "installation_type": "LOAD", "night_self_use_active": True,
+            "self_use_reserve_soc": 48.0, "discharge_target_soc": 75.0,
+            "sell_price": 1.35, "pv_power": 0.0, "load_power": 1167.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("Zero Export To Load", coordinator.hass.states.get("select.inverter_work_mode").state)
         self.assertEqual("120.0", coordinator.hass.states.get("number.inverter_battery_max_discharging_current").state)
         self.assertEqual("No Grid", coordinator.hass.states.get("select.inverter_program_1_charging").state)
         self.assertEqual("16.0", coordinator.hass.states.get("number.inverter_program_1_soc").state)
