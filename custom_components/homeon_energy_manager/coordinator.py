@@ -825,8 +825,18 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 0.0,
                 max(profile_load_w, profile_ct_load_w) - profile_pv_w,
             )
+            # Close to the inverter floor, a temporarily quiet house must not
+            # convince the planner that the battery can safely wait many
+            # hours for a cheaper slot. A heat pump or another large receiver
+            # can start before then. Use a conservative minimum until the
+            # battery has at least 12 percentage points of headroom.
+            minimum_prediction_load_w = (
+                500.0
+                if soc <= predictive_floor_soc + 12.0
+                else 200.0
+            )
             predicted_net_load_w = max(
-                200.0,
+                minimum_prediction_load_w,
                 expected_net_load_w,
                 learned_net_load_w,
             )
@@ -1952,6 +1962,50 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             tou_reason = "rozładowanie do minimalnego SOC falownika"
         add_tou_commands(grid_charge=tou_grid_charge, target_soc=tou_target_soc, reason=tou_reason)
 
+        # Deye accepts only a limited number of changes in one control cycle.
+        # Put the commands which actually enable charging or household
+        # self-use first. Previously the active TOU SOC was normally seventh,
+        # so after a slot change the inverter could keep the old high SOC and
+        # import expensive energy even though the battery was available.
+        def _command_priority(command: tuple[str, str, Any]) -> int:
+            domain, entity_id, _value = command
+            is_tou_charge = (
+                domain == "select"
+                and "inverter_program_" in entity_id
+                and entity_id.endswith("_charging")
+            )
+            is_tou_soc = (
+                domain == "number"
+                and "inverter_program_" in entity_id
+                and entity_id.endswith("_soc")
+            )
+
+            if entity_id == inverter_work_mode_select:
+                return 0
+            if tou_grid_charge:
+                if entity_id == inverter_grid_charging:
+                    return 1
+                if is_tou_charge:
+                    return 2
+                if is_tou_soc:
+                    return 3
+                if entity_id == inverter_max_charge_current:
+                    return 4
+                if entity_id == inverter_max_discharge_current:
+                    return 5
+            else:
+                if entity_id == inverter_max_discharge_current:
+                    return 1
+                if is_tou_charge:
+                    return 2
+                if is_tou_soc:
+                    return 3
+                if entity_id == inverter_grid_charging:
+                    return 4
+                if entity_id == inverter_max_charge_current:
+                    return 5
+            return 10
+
         if full_soc_charge_lock:
             desired = [
                 command
@@ -1973,7 +2027,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         deduplicated: dict[tuple[str, str], tuple[str, str, Any]] = {}
         for command in desired:
             deduplicated[(command[0], command[1])] = command
-        desired = list(deduplicated.values())
+        desired = sorted(deduplicated.values(), key=_command_priority)
 
         preview = []
         change_preview = []

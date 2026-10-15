@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.49
+
+- Przy SOC bliskim minimalnemu planer nie odkłada już zakupu na późniejszą, droższą godzinę tylko dlatego, że chwilowe zużycie domu jest małe. Uwzględnia bezpieczne minimum poboru i wybiera wcześniejsze tanie okno przed spodziewanym wzrostem ceny.
+- Sterownik Deye nadaje pierwszeństwo komendom, które rzeczywiście uruchamiają ładowanie albo udostępniają baterię na potrzeby domu. Aktywny SOC Time of Use nie jest już odkładany poza limit zmian jednego cyklu.
+- W normalnej pracy manager natychmiast przywraca `Zero Export To CT` albo `Zero Export To Load`, pełny skonfigurowany prąd rozładowania, `No Grid` i minimalny SOC falownika.
+- Dodano testy odtwarzające zakup po 1,35 PLN/kWh mimo dostępnej godziny po 1,09 PLN/kWh oraz import z sieci przy baterii na poziomie 48%.
+
 ## 1.2.48
 
 - Ochrona rezerwy przy słabym PV blokuje handel energią z magazynu, ale nie blokuje zasilania domu z baterii.
