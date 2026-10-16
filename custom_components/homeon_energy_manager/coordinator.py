@@ -1639,21 +1639,29 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             return None
 
         def _active_tou_slot() -> int | None:
-            """Return the Deye TOU slot whose configured end time is next."""
+            """Return the Deye TOU slot whose configured start time is active."""
             now_local = dt_util.as_local(dt_util.now())
             now_minutes = now_local.hour * 60 + now_local.minute
             configured: list[tuple[int, int]] = []
             for slot in range(1, 7):
                 state = self.hass.states.get(f"time.inverter_program_{slot}_time")
-                end_minutes = _time_minutes(state.state if state is not None else None)
-                if end_minutes is not None:
-                    configured.append((slot, end_minutes))
+                start_minutes = _time_minutes(state.state if state is not None else None)
+                if start_minutes is not None:
+                    configured.append((slot, start_minutes))
             if not configured:
                 return None
-            future = [(slot, end) for slot, end in configured if end > now_minutes]
-            if future:
-                return min(future, key=lambda item: item[1])[0]
-            return min(configured, key=lambda item: item[1])[0]
+            # Deye stores the beginning of every period. The active row is
+            # therefore the latest start at or before the current time. If
+            # the first configured start is later than now, the last row from
+            # the previous day remains active across midnight.
+            started = [
+                (slot, start_minutes)
+                for slot, start_minutes in configured
+                if start_minutes <= now_minutes
+            ]
+            if started:
+                return max(started, key=lambda item: (item[1], item[0]))[0]
+            return max(configured, key=lambda item: (item[1], item[0]))[0]
 
         def _tou_charge_options(entity_id: str) -> tuple[str | None, str | None]:
             state = self.hass.states.get(entity_id)
