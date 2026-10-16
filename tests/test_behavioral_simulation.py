@@ -274,6 +274,28 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(plan["sell_now"])
         self.assertEqual(16.0, plan["reserve_soc"])
 
+    def test_good_pv_does_not_sell_battery_before_best_price(self):
+        now = datetime(2026, 6, 10, 7, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        buy = [0.35] * 24
+        sell = [0.98, 1.27] + [0.70] * 22
+        self.set_prices(coordinator, now.replace(minute=0), buy, sell)
+
+        plan = coordinator._profit_mode_plan(
+            BUY, SELL, current_buy_price=0.35, current_sell_price=0.98,
+            soc=96.0, battery_capacity_kwh=30.0, reserve_soc=40.0,
+            pv_forecast_today_kwh=70.0, pv_produced_today_kwh=1.0,
+            expected_daily_consumption_kwh=30.0, consumed_today_kwh=3.0,
+            minimum_soc=16.0, pv_power_w=3500.0, load_power_w=700.0,
+            enabled=True,
+        )
+
+        self.assertTrue(plan["forecast_refill_allowed"])
+        self.assertFalse(plan["current_good_pv_sale"])
+        self.assertFalse(plan["sell_now"])
+        self.assertEqual("OCZEKIWANIE", plan["status"])
+        self.assertEqual(1.27, plan["best_sell_price"])
+
     def configure_deye(self, coordinator):
         states = coordinator.hass.states
         states.set("select.inverter_work_mode", "Export First", {"options": ["Export First", "Zero Export To CT"]})

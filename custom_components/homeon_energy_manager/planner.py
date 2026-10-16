@@ -324,7 +324,10 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         else 0.0
     )
     best_sell_dt = best_sell.get("dt", base)
-    recommended_sell_start_dt = best_sell_dt - timedelta(hours=required_sale_hours)
+    # Do not backdate the recommendation merely to fit all available energy.
+    # The user prefers selling less energy at the maximum price over starting
+    # a deliberate battery discharge in a cheaper hour.
+    recommended_sell_start_dt = best_sell_dt
 
     future_pv_surplus_kwh = sum(_f(item.get("pv_surplus_kwh"), 0.0) for item in hours)
     planned_market_energy_kwh = min(
@@ -394,23 +397,6 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
                 "ale cena sprzedaży jest zerowa lub ujemna — blokuję eksport"
             )
 
-    if (
-        current_mode == "WAIT_BETTER_SELL_PRICE"
-        and not profit_mode_enabled
-        and feasible_sale_kwh > 0.3
-        and required_sale_hours > 0.25
-        and now >= recommended_sell_start_dt
-        and sell_price_now > cycle_cost
-        and sell_price_now >= best_sell_price * 0.95
-    ):
-        data["mode"] = "SELL_BATTERY_HIGH_PRICE"
-        current_mode = "SELL_BATTERY_HIGH_PRICE"
-        data["reason"] = (
-            f"Rozpoczynam sprzedaż wcześniej, aby zdążyć oddać {feasible_sale_kwh:.2f} kWh "
-            f"w dobrym oknie; bieżąca cena {sell_price_now:.3f} PLN/kWh stanowi co najmniej 95% "
-            f"najlepszej ceny {best_sell_price:.3f} PLN/kWh, wymagany czas około {required_sale_hours:.1f} h"
-        )
-
     charge_window = f"{cheapest.get('hour', '-')} ({cheapest_buy:.3f} PLN/kWh)"
     sell_window = f"{best_sell.get('hour', '-')} ({best_sell_price:.3f} PLN/kWh)"
 
@@ -467,7 +453,7 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
         next_action = "Sprzedaż bezpiecznej nadwyżki"
         next_time = "teraz"
         reason = (
-            f"Aktualna cena osiągnęła ustawiony próg sprzedaży: {sell_price_now:.3f} PLN/kWh. "
+            f"Aktualna cena jest w najlepszym oknie sprzedaży: {sell_price_now:.3f} PLN/kWh. "
             f"Sprzedaż obejmuje bieżącą nadwyżkę PV oraz bezpieczną nadwyżkę baterii {safe_to_sell_kwh:.2f} kWh."
         )
         recommended_soc = safe_min_soc

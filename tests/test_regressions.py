@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.50", manifest["version"])
+        self.assertEqual("1.2.51", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.50"', source)
+            self.assertIn('"sw_version": "1.2.51"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -68,7 +68,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn('item["dt"] > now + timedelta(minutes=20)', coordinator)
         self.assertIn("prepare_charge = False", coordinator)
         self.assertIn('"profit_mode_expected_net_profit"', sensors)
-        self.assertIn("and not profit_mode_enabled", planner)
+        self.assertNotIn("sell_price_now >= best_sell_price * 0.95", planner)
         self.assertIn('data.get("profit_mode_current_good_pv_sale", "OFF")', planner)
         self.assertIn('data.get("profit_mode_sale_energy_kwh")', planner)
 
@@ -338,7 +338,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         condition_end = source.index("\n        )", condition_start)
         condition = source[condition_start:condition_end]
 
-        self.assertIn("best_sell_price >= sell_price + better_price_margin", condition)
+        self.assertIn("best_sell_price > sell_price + 0.01", condition)
         self.assertIn("available_to_sell_kwh > 0.3", condition)
         self.assertNotIn("sell_price_trigger", condition)
 
@@ -458,7 +458,14 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn('self._runtime_float("economic_negative_prepare_hours", 6.0)', plan)
         self.assertIn('self._runtime_float("economic_min_energy_to_free_kwh", 0.5)', plan)
         self.assertIn('"economic_min_sell_price_prepare"', plan)
-        self.assertIn("sell_price >= best_sell_price - 0.20", plan)
+        self.assertIn("sell_price >= best_sell_price - 0.01", plan)
+
+    def test_battery_export_requires_the_best_sale_window(self) -> None:
+        source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+
+        self.assertIn("sell_price_trigger = best_window_sell_opportunity", source)
+        self.assertNotIn("sell_price >= economic_good_sell_price\n            or best_window_sell_opportunity", source)
+        self.assertIn("current_sell_price >= best_sell_price - 0.01", source)
 
 
 if __name__ == "__main__":

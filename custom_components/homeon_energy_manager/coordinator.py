@@ -1135,6 +1135,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         current_good_pv_sale = bool(
             forecast_refill_allowed
             and current_sell_price >= self._runtime_float("economic_good_sell_price", 0.55)
+            and current_sell_price >= best_sell_price - 0.01
         )
         sale_price_used = current_sell_price if current_good_pv_sale else best_sell_price
         expected_revenue = sale_energy_kwh * sale_price_used
@@ -1340,7 +1341,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         best_sell_price = self._as_float(sell_stats.get("best_sell_price_24h"), sell_price) or sell_price
         sell_is_reasonable_now = bool(
             sell_price > minimum_sell_price_prepare
-            and sell_price >= best_sell_price - 0.20
+            and sell_price >= best_sell_price - 0.01
         )
 
         prepare = bool(
@@ -2826,10 +2827,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sell_stats.get("sell_now_best_before_morning", False)
             and sell_price > max(economic_negative_sell_price, economic_battery_cycle_cost)
         )
-        sell_price_trigger = bool(
-            sell_price >= economic_good_sell_price
-            or best_window_sell_opportunity
-        )
+        # A fixed "good price" is not enough to deliberately discharge the
+        # battery.  Battery export is allowed only in the best known sale
+        # window.  Export of live PV surplus is evaluated separately below.
+        sell_price_trigger = best_window_sell_opportunity
         best_sell_price = self._as_float(
             sell_stats.get("best_sell_price_before_morning"),
             sell_price,
@@ -2838,11 +2839,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sell_stats.get("best_sell_minutes_before_morning"),
             0.0,
         ) or 0.0
-        better_price_margin = max(0.05, sell_price * 0.08)
         wait_for_better_sell = bool(
             not sell_stats.get("sell_now_best_before_morning", False)
             and 0.0 < best_sell_minutes <= 24.0 * 60.0
-            and best_sell_price >= sell_price + better_price_margin
+            and best_sell_price > sell_price + 0.01
             and available_to_sell_kwh > 0.3
             and battery_trade_enabled
         )
@@ -2995,8 +2995,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 reason = str(profit_mode_plan.get("reason", "Sprzedaję energię z zyskiem"))
             else:
                 reason = (
-                    f"Sprzedaję teraz — cena {sell_price:.2f} PLN/kWh "
-                    f"osiągnęła ustawiony próg {economic_good_sell_price:.2f} PLN/kWh"
+                    f"Sprzedaję teraz — cena {sell_price:.2f} PLN/kWh jest najlepsza "
+                    "w chronionym oknie do następnego poranka"
                 )
         elif (
             pv_low_price_plan.get("windows_completed", False)
