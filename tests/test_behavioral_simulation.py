@@ -285,6 +285,82 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
         states.set("select.inverter_program_1_charging", "Grid", {"options": ["Grid", "No Grid"]})
         states.set("number.inverter_program_1_soc", "43")
 
+    def configure_six_deye_tou_slots(self, coordinator):
+        self.configure_deye(coordinator)
+        starts = ("00:00", "02:00", "05:00", "08:00", "12:00", "18:00")
+        for slot, start in enumerate(starts, start=1):
+            coordinator.hass.states.set(f"time.inverter_program_{slot}_time", start)
+            coordinator.hass.states.set(
+                f"select.inverter_program_{slot}_charging",
+                "Grid",
+                {"options": ["Grid", "No Grid"]},
+            )
+            coordinator.hass.states.set(f"number.inverter_program_{slot}_soc", "43")
+
+    async def test_tou_updates_current_period_not_next_future_period(self):
+        """Deye program times are period starts, not the preceding period ends."""
+        now = datetime(2026, 10, 16, 3, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_six_deye_tou_slots(coordinator)
+        data = {
+            "mode": "NORMAL", "soc": 48.0, "min_soc": 16.0,
+            "night_self_use_active": True, "self_use_reserve_soc": 48.0,
+            "discharge_target_soc": 75.0, "sell_price": 1.35,
+            "pv_power": 0.0, "load_power": 1167.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual(2, result["inverter_tou_active_slot"])
+        self.assertEqual("No Grid", coordinator.hass.states.get("select.inverter_program_2_charging").state)
+        self.assertEqual("16.0", coordinator.hass.states.get("number.inverter_program_2_soc").state)
+        self.assertEqual("Grid", coordinator.hass.states.get("select.inverter_program_3_charging").state)
+        self.assertEqual("43", coordinator.hass.states.get("number.inverter_program_3_soc").state)
+
+    async def test_tou_last_period_remains_active_until_midnight(self):
+        now = datetime(2026, 10, 16, 23, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_six_deye_tou_slots(coordinator)
+        data = {
+            "mode": "NORMAL", "soc": 48.0, "min_soc": 16.0,
+            "night_self_use_active": True, "self_use_reserve_soc": 48.0,
+            "discharge_target_soc": 75.0, "sell_price": 1.35,
+            "pv_power": 0.0, "load_power": 1167.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual(6, result["inverter_tou_active_slot"])
+        self.assertEqual("No Grid", coordinator.hass.states.get("select.inverter_program_6_charging").state)
+        self.assertEqual("16.0", coordinator.hass.states.get("number.inverter_program_6_soc").state)
+        self.assertEqual("Grid", coordinator.hass.states.get("select.inverter_program_1_charging").state)
+        self.assertEqual("43", coordinator.hass.states.get("number.inverter_program_1_soc").state)
+
+    async def test_cheap_charge_is_written_to_the_current_tou_period(self):
+        now = datetime(2026, 10, 16, 3, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_six_deye_tou_slots(coordinator)
+        coordinator.hass.states.set("select.inverter_program_2_charging", "No Grid", {"options": ["Grid", "No Grid"]})
+        coordinator.hass.states.set("number.inverter_program_2_soc", "16")
+        data = {
+            "mode": "CHEAP_CHARGE", "soc": 25.0, "min_soc": 16.0,
+            "night_self_use_active": True, "self_use_reserve_soc": 35.0,
+            "discharge_target_soc": 35.0, "charge_target_soc": 75.0,
+            "cheap_charge_grid_target_soc": 75.0, "sell_price": 0.40,
+            "pv_power": 0.0, "load_power": 500.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual(2, result["inverter_tou_active_slot"])
+        self.assertEqual("Grid", coordinator.hass.states.get("select.inverter_program_2_charging").state)
+        self.assertEqual("75.0", coordinator.hass.states.get("number.inverter_program_2_soc").state)
+        self.assertEqual("Grid", coordinator.hass.states.get("select.inverter_program_3_charging").state)
+        self.assertEqual("43", coordinator.hass.states.get("number.inverter_program_3_soc").state)
+
     async def test_wait_mode_restores_self_use_full_current_and_minimum_tou_soc(self):
         now = datetime(2026, 1, 10, 20, 30, tzinfo=WARSAW)
         coordinator = self.make_coordinator(now)

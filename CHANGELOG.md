@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.50
+
+- Poprawiono wybór aktywnego programu Deye Time of Use. Godzina programu jest początkiem przedziału, więc manager zmienia teraz aktualnie działający wiersz zamiast następnego wiersza z przyszłości.
+- Ładowanie z sieci rozpoczyna się w wybranej taniej godzinie i nie jest już przypadkowo przesuwane na późniejszy, droższy przedział.
+- Poprawiono obsługę ostatniego programu do północy oraz przejścia przez północ.
+- Dodano testy sześciu programów Time of Use dla normalnej pracy, taniego ładowania i ostatniego przedziału dobowego.
+
 ## 1.2.49
 
 - Przy SOC bliskim minimalnemu planer nie odkłada już zakupu na późniejszą, droższą godzinę tylko dlatego, że chwilowe zużycie domu jest małe. Uwzględnia bezpieczne minimum poboru i wybiera wcześniejsze tanie okno przed spodziewanym wzrostem ceny.
