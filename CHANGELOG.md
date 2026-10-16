@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.51
+
+- Celowe rozładowanie magazynu do sieci rozpoczyna się dopiero w najlepszym znanym oknie ceny sprzedaży, z tolerancją 0,01 PLN/kWh.
+- Usunięto wcześniejszy start sprzedaży przy 95% najlepszej ceny oraz sprzedaż baterii po samym przekroczeniu stałego progu „dobrej ceny”.
+- Dobra prognoza i nadwyżka PV nie pozwalają już opróżniać baterii przed najlepszą ceną. Bieżąca nadwyżka PV nadal może być eksportowana bez rozładowywania magazynu.
+- Przygotowanie miejsca przed ceną ujemną również czeka na najlepszą znaną cenę sprzedaży.
+- Dodano test przypadku pełnego magazynu, dobrej prognozy PV i ceny 0,98 PLN/kWh przed późniejszą ceną 1,27 PLN/kWh.
+
 ## 1.2.50
 
 - Poprawiono wybór aktywnego programu Deye Time of Use. Godzina programu jest początkiem przedziału, więc manager zmienia teraz aktualnie działający wiersz zamiast następnego wiersza z przyszłości.
