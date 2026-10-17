@@ -627,6 +627,50 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("off", coordinator.hass.states.get("switch.inverter_battery_grid_charging").state)
         self.assertEqual("on", coordinator.hass.states.get("switch.inverter_export_surplus").state)
 
+    async def test_pv_price_export_stops_battery_charge_and_enables_solar_sale(self):
+        """A deferred PV charge must really send the current surplus to grid."""
+        now = datetime(2026, 10, 17, 6, 36, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_deye(coordinator)
+        coordinator.hass.states.set("switch.inverter_battery_grid_charging", "on")
+        coordinator.hass.states.set("switch.inverter_export_surplus", "off")
+        data = {
+            "mode": "PV_PRICE_EXPORT", "soc": 52.0, "min_soc": 16.0,
+            "night_self_use_active": False, "self_use_reserve_soc": 35.0,
+            "discharge_target_soc": 35.0, "charge_target_soc": 58.0,
+            "sell_price": 0.95, "pv_power": 4016.0, "load_power": 1431.0,
+            "economic_pv_export_opportunity": "ON", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("PV_PRICE_EXPORT", result["inverter_control_executor_mode"])
+        self.assertEqual("Zero Export To CT", coordinator.hass.states.get("select.inverter_work_mode").state)
+        self.assertEqual("off", coordinator.hass.states.get("switch.inverter_battery_grid_charging").state)
+        self.assertEqual("on", coordinator.hass.states.get("switch.inverter_export_surplus").state)
+        self.assertEqual("0.0", coordinator.hass.states.get("number.inverter_battery_max_charging_current").state)
+        self.assertEqual("120.0", coordinator.hass.states.get("number.inverter_battery_max_discharging_current").state)
+
+    async def test_low_price_pv_window_restores_charge_current_after_export(self):
+        """The later selected low-price hour must resume battery charging."""
+        now = datetime(2026, 10, 17, 12, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_deye(coordinator)
+        coordinator.hass.states.set("select.inverter_work_mode", "Zero Export To CT")
+        coordinator.hass.states.set("number.inverter_battery_max_charging_current", "0")
+        data = {
+            "mode": "PV_LOW_PRICE_CHARGE", "soc": 52.0, "min_soc": 16.0,
+            "night_self_use_active": False, "self_use_reserve_soc": 35.0,
+            "discharge_target_soc": 35.0, "charge_target_soc": 58.0,
+            "sell_price": 0.62, "pv_power": 4016.0, "load_power": 1431.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("80.0", coordinator.hass.states.get("number.inverter_battery_max_charging_current").state)
+        self.assertEqual("off", coordinator.hass.states.get("switch.inverter_battery_grid_charging").state)
+
 
 if __name__ == "__main__":
     unittest.main()
