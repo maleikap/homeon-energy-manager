@@ -155,6 +155,56 @@ async def update_learning(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     learn["daily_purchase_cost_pln"] = _f(learn.get("daily_purchase_cost_pln"), 0.0) + interval_import_kwh * buy_price
     learn["daily_sale_value_pln"] = _f(learn.get("daily_sale_value_pln"), 0.0) + interval_export_kwh * sell_price
 
+    # Preserve the amount and weighted cost of energy physically charged from
+    # the grid. This prevents selling it later below its acquisition cost just
+    # because the PV forecast makes the next refill look free.
+    stored_grid_charge_kwh = max(0.0, _f(learn.get("stored_grid_charge_kwh"), 0.0))
+    stored_grid_charge_cost = max(
+        0.0,
+        _f(learn.get("stored_grid_charge_cost_pln_per_kwh"), 0.0),
+    )
+    discharged_battery_kwh = battery_discharge_w * dt_hours / 1000.0
+    stored_grid_charge_kwh = max(0.0, stored_grid_charge_kwh - discharged_battery_kwh)
+
+    home_import_without_charge_w = max(0.0, load_w - pv_w)
+    grid_power_available_for_battery_w = max(
+        0.0,
+        grid_import_w - home_import_without_charge_w,
+    )
+    grid_battery_charge_w = min(battery_charge_w, grid_power_available_for_battery_w)
+    grid_battery_charge_kwh = grid_battery_charge_w * dt_hours / 1000.0
+
+    if grid_battery_charge_kwh > 0.0001:
+        charge_efficiency = min(
+            1.0,
+            max(
+                0.50,
+                coordinator._runtime_float("battery_charge_efficiency_percent", 94.0) / 100.0,
+            ),
+        )
+        previous_cost = stored_grid_charge_kwh * stored_grid_charge_cost
+        added_cost = grid_battery_charge_kwh * buy_price / max(charge_efficiency, 0.01)
+        stored_grid_charge_kwh += grid_battery_charge_kwh
+        stored_grid_charge_cost = (
+            (previous_cost + added_cost) / stored_grid_charge_kwh
+            if stored_grid_charge_kwh > 0.0001
+            else 0.0
+        )
+
+    battery_capacity_kwh = max(0.0, _f(data.get("battery_capacity_kwh"), 0.0))
+    soc = min(100.0, max(0.0, _f(data.get("soc"), 0.0)))
+    if battery_capacity_kwh > 0.0:
+        stored_grid_charge_kwh = min(
+            stored_grid_charge_kwh,
+            battery_capacity_kwh * soc / 100.0,
+        )
+    if stored_grid_charge_kwh <= 0.0001:
+        stored_grid_charge_kwh = 0.0
+        stored_grid_charge_cost = 0.0
+
+    learn["stored_grid_charge_kwh"] = stored_grid_charge_kwh
+    learn["stored_grid_charge_cost_pln_per_kwh"] = stored_grid_charge_cost
+
     pv_forecast_factor = min(1.35, max(0.35, _f(learn.get("pv_forecast_factor"), 1.0)))
 
     _ewma(learn, "avg_load_w", load_w)
@@ -299,6 +349,11 @@ async def update_learning(coordinator, data: dict[str, Any]) -> dict[str, Any]:
             _f(learn.get("daily_sale_value_pln"), 0.0)
             - _f(learn.get("daily_purchase_cost_pln"), 0.0),
             2,
+        ),
+        "learn_stored_grid_charge_kwh": _round(learn.get("stored_grid_charge_kwh"), 2),
+        "learn_stored_grid_charge_cost": _round(
+            learn.get("stored_grid_charge_cost_pln_per_kwh"),
+            3,
         ),
         "learn_previous_day_pv_kwh": _round(learn.get("previous_day_pv_kwh"), 2),
         "learn_previous_day_forecast_kwh": _round(learn.get("previous_day_forecast_kwh"), 2),

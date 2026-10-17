@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.52
+
+- Po północy plan nocnego ładowania korzysta z prognozy PV na bieżący dzień, a nie z prognozy na kolejny dzień. Przy dobrej prognozie kupuje tylko brakującą energię potrzebną do bezpiecznego dotrwania do produkcji PV.
+- Manager zapamiętuje ilość energii rzeczywiście naładowanej z sieci oraz jej średni koszt wraz ze stratą ładowania.
+- Energia kupiona z sieci nie jest sprzedawana poniżej rzeczywistego kosztu zakupu, strat rozładowania i kosztu cyklu baterii.
+- Dodano diagnostykę ilości i kosztu energii kupionej do magazynu oraz minimalnej opłacalnej ceny jej sprzedaży.
+- Dodano test przebiegu: zakup po 0,97 PLN/kWh, próba sprzedaży po 0,94 PLN/kWh i dobra prognoza PV.
+
 ## 1.2.51
 
 - Celowe rozładowanie magazynu do sieci rozpoczyna się dopiero w najlepszym znanym oknie ceny sprzedaży, z tolerancją 0,01 PLN/kWh.

@@ -204,6 +204,7 @@ SENSORS = [
     ("profit_mode_reserve_soc", "Chroniona rezerwa trybu zarabiania", PERCENT, "mdi:battery-lock"),
     ("profit_mode_expected_revenue", "Planowany przychód sprzedaży", "PLN", "mdi:cash-multiple"),
     ("profit_mode_expected_purchase_cost", "Planowany koszt odkupienia", "PLN", "mdi:cash-minus"),
+    ("profit_mode_expected_energy_cost", "Planowany koszt energii", "PLN", "mdi:cash-minus"),
     ("profit_mode_expected_cycle_cost", "Planowany koszt baterii", "PLN", "mdi:battery-sync"),
     ("profit_mode_expected_net_profit", "Planowany zysk netto", "PLN", "mdi:finance"),
     (
@@ -233,6 +234,9 @@ SENSORS = [
     ("profit_mode_round_trip_efficiency", "Sprawność cyklu magazynu", PERCENT, "mdi:battery-sync"),
     ("profit_mode_forecast_refill_allowed", "Tryb zarabiania — późniejsze uzupełnienie z PV", None, "mdi:solar-power"),
     ("profit_mode_current_good_pv_sale", "Tryb zarabiania — sprzedaż teraz przed ładowaniem PV", None, "mdi:battery-arrow-down"),
+    ("stored_grid_charge_kwh", "Energia w magazynie kupiona z sieci", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-plus"),
+    ("stored_grid_charge_cost", "Koszt energii kupionej do magazynu", "PLN/kWh", "mdi:cash-minus"),
+    ("stored_energy_sale_floor", "Minimalna opłacalna cena sprzedaży magazynu", "PLN/kWh", "mdi:cash-check"),
     ("home_battery_protection", "Ochrona domu bateria zasila dom", None, "mdi:home-battery"),
     ("home_battery_load_w", "Moc baterii dla domu", UnitOfPower.WATT, "mdi:home-lightning-bolt"),
     ("home_battery_protection_reason", "Powód ochrony domu", None, "mdi:text-box-check"),
@@ -317,7 +321,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.51",
+            "sw_version": "1.2.52",
         }
 
     @property

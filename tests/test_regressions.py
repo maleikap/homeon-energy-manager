@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.51", manifest["version"])
+        self.assertEqual("1.2.52", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.51"', source)
+            self.assertIn('"sw_version": "1.2.52"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -55,7 +55,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("def _profit_mode_plan(", coordinator)
         self.assertIn("replacement_input_kwh", coordinator)
         self.assertIn("charge_efficiency * discharge_efficiency", coordinator)
-        self.assertIn("expected_revenue - expected_purchase_cost - expected_cycle_cost", coordinator)
+        self.assertIn("expected_revenue - expected_energy_cost - expected_cycle_cost", coordinator)
         self.assertIn("pv_surplus_for_refill_kwh", coordinator)
         self.assertIn("forecast_refill_allowed", coordinator)
         self.assertIn("current_good_pv_sale", coordinator)
@@ -209,7 +209,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         source = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
         self.assertIn('learn.get("pv_forecast_factor")', source)
         self.assertIn("pv_tomorrow_for_control = max(0.0, pv_tomorrow * pv_forecast_factor)", source)
-        self.assertIn("target_expected_24h_consumption_kwh - pv_tomorrow_for_control", source)
+        self.assertIn("target_expected_24h_consumption_kwh - pv_reserve_forecast_kwh", source)
         self.assertIn('"pv_forecast_tomorrow_control"', source)
 
     def test_night_reserve_is_consumed_down_to_minimum_soc(self) -> None:
@@ -466,6 +466,18 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("sell_price_trigger = best_window_sell_opportunity", source)
         self.assertNotIn("sell_price >= economic_good_sell_price\n            or best_window_sell_opportunity", source)
         self.assertIn("current_sell_price >= best_sell_price - 0.01", source)
+
+    def test_night_charge_uses_today_pv_and_remembers_grid_energy_cost(self) -> None:
+        coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        learning = (COMPONENT / "learning.py").read_text(encoding="utf-8")
+
+        self.assertIn("def _reserve_pv_forecast(", coordinator)
+        self.assertIn("use_today = local_hour < 12", coordinator)
+        self.assertIn("else min(95.0, max(min_soc + 3.0, morning_target_soc))", coordinator)
+        self.assertIn('learn.get("stored_grid_charge_kwh")', coordinator)
+        self.assertIn("stored_energy_sale_floor", coordinator)
+        self.assertIn('learn["stored_grid_charge_kwh"]', learning)
+        self.assertIn('learn["stored_grid_charge_cost_pln_per_kwh"]', learning)
 
 
 if __name__ == "__main__":
