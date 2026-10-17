@@ -310,6 +310,49 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
         self.assertAlmostEqual(6.3, forecast)
         self.assertEqual("jutro", label)
 
+    def test_pv_surplus_is_sold_now_and_missing_target_is_charged_in_cheapest_later_hour(self):
+        now = datetime(2026, 10, 17, 8, 20, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        prices = [
+            0.80, 0.78, 0.75, 0.73, 0.76, 0.82, 0.95, 1.10,
+            1.20, 1.05, 0.70, 0.25, 0.30, 0.45, 0.60, 0.75,
+            0.90, 1.05, 1.15, 0.05,
+        ]
+        self.set_prices(coordinator, now.replace(hour=0, minute=0), prices, prices)
+
+        plan = coordinator._pv_low_price_window_plan(
+            SELL, current_sell_price=1.20, pv_forecast_today_kwh=30.0,
+            battery_capacity_kwh=15.0, soc=51.0, pv_power_w=3188.0,
+            load_power_w=1300.0, battery_trade_enabled=True,
+            charge_target_soc=58.0, pv_produced_today_kwh=1.4,
+        )
+
+        self.assertTrue(plan["active"])
+        self.assertTrue(plan["export_now"])
+        self.assertFalse(plan["charge_now"])
+        self.assertIn("11:00", plan["windows"])
+        self.assertNotIn("19:00", plan["windows"])
+        self.assertAlmostEqual(1.05, plan["missing_to_target_kwh"], places=2)
+        self.assertAlmostEqual(1.12, plan["required_pv_input_kwh"], places=2)
+        self.assertEqual(58.0, plan["target_soc"])
+
+    def test_pv_target_is_not_deferred_when_forecast_cannot_cover_missing_energy(self):
+        now = datetime(2026, 10, 17, 8, 20, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        prices = [0.80] * 8 + [1.20, 1.05, 0.70, 0.25, 0.30, 0.45, 0.60, 0.75]
+        self.set_prices(coordinator, now.replace(hour=0, minute=0), prices, prices)
+
+        plan = coordinator._pv_low_price_window_plan(
+            SELL, current_sell_price=1.20, pv_forecast_today_kwh=10.0,
+            battery_capacity_kwh=15.0, soc=51.0, pv_power_w=3188.0,
+            load_power_w=1300.0, battery_trade_enabled=True,
+            charge_target_soc=58.0, pv_produced_today_kwh=1.4,
+        )
+
+        self.assertFalse(plan["active"])
+        self.assertFalse(plan["export_now"])
+        self.assertEqual("NIEAKTYWNE", plan["status"])
+
     def test_grid_bought_energy_is_not_sold_below_its_real_cost(self):
         now = datetime(2026, 10, 17, 7, 0, tzinfo=WARSAW)
         coordinator = self.make_coordinator(now)
