@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.53
+
+- Przy dobrej prognozie PV manager nie ładuje magazynu od razu tylko dlatego, że SOC jest niższy od celu. Najpierw sprzedaje bieżącą nadwyżkę w droższej godzinie, a ładowanie PV przenosi do najtańszego przyszłego okna sprzedaży.
+- Ilość energii odkładanej do późniejszego ładowania jest liczona z rzeczywistej różnicy między bieżącym SOC a celem, z uwzględnieniem sprawności ładowania. Manager nie planuje już automatycznie ładowania do 95%.
+- Plan korzysta wyłącznie z przyszłych godzin cenowych. Zakończone poranne tanie okna nie powodują już błędnego natychmiastowego ładowania baterii.
+- Odroczenie jest dozwolone tylko wtedy, gdy pozostała prognozowana nadwyżka PV pokrywa brakującą energię z buforem oraz obecna cena sprzedaży jest co najmniej 0,03 PLN/kWh wyższa od wybranego późniejszego okna.
+- Przy słabej prognozie, małej różnicy cen albo braku pełnego harmonogramu manager ładuje magazyn normalnie i zachowuje ochronę rezerwy.
+
 ## 1.2.52
 
 - Po północy plan nocnego ładowania korzysta z prognozy PV na bieżący dzień, a nie z prognozy na kolejny dzień. Przy dobrej prognozie kupuje tylko brakującą energię potrzebną do bezpiecznego dotrwania do produkcji PV.

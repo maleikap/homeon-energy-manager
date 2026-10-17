@@ -82,6 +82,12 @@ SENSORS = [
     ("pv_price_strategy_hours", "Liczba godzin ładowania PV", None, "mdi:clock-outline"),
     ("pv_price_strategy_target_soc", "Cel SOC strategii PV", PERCENT, "mdi:battery-charging"),
     ("pv_price_strategy_forecast_kwh", "Prognoza strategii PV", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-sunny"),
+    ("pv_price_strategy_remaining_forecast_kwh", "Pozostała prognoza strategii PV", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-sunny-clock"),
+    ("pv_price_strategy_forecast_surplus_kwh", "Prognozowana nadwyżka do ładowania PV", UnitOfEnergy.KILO_WATT_HOUR, "mdi:solar-power-variant"),
+    ("pv_price_strategy_missing_to_target_kwh", "Brakująca energia do celu PV", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-plus"),
+    ("pv_price_strategy_required_input_kwh", "Wymagane ładowanie PV do celu", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-charging-medium"),
+    ("pv_price_strategy_cheapest_price", "Cena wybranego okna ładowania PV", "PLN/kWh", "mdi:cash-clock"),
+    ("pv_price_strategy_price_delta", "Różnica ceny przesunięcia ładowania PV", "PLN/kWh", "mdi:chart-timeline-variant"),
     ("pv_price_strategy_surplus_w", "Nadwyżka PV strategii cenowej", UnitOfPower.WATT, "mdi:transmission-tower-export"),
 
     # Cele baterii
@@ -321,7 +327,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.52",
+            "sw_version": "1.2.53",
         }
 
     @property

@@ -477,8 +477,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         pv_power_w: float,
         load_power_w: float,
         battery_trade_enabled: bool,
+        charge_target_soc: float = 95.0,
+        pv_produced_today_kwh: float = 0.0,
     ) -> dict[str, Any]:
         now = dt_util.now()
+        local_now = dt_util.as_local(now)
         points: list[dict[str, Any]] = []
 
         for price_entity_id in self._entity_id_list(sell_price_entity):
@@ -499,7 +502,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
             local_dt = dt_util.as_local(dt)
 
-            if local_dt.date() != now.date():
+            if local_dt.date() != local_now.date():
                 continue
 
             if local_dt.hour < 6 or local_dt.hour >= 20:
@@ -516,29 +519,100 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                     "price": float(price),
                 }
 
-        high_pv_forecast = bool(
-            battery_capacity_kwh > 0
-            and pv_forecast_today_kwh >= max(20.0, battery_capacity_kwh * 1.5)
-        )
-
-        free_to_target_kwh = max(
+        target_soc = min(95.0, max(0.0, charge_target_soc))
+        missing_stored_kwh = max(
             0.0,
-            battery_capacity_kwh * (95.0 - min(95.0, soc)) / 100.0,
+            battery_capacity_kwh * (target_soc - soc) / 100.0,
         )
-        average_daylight_pv_kw = max(1.0, pv_forecast_today_kwh / 10.0)
-        required_hours = int(math.ceil(free_to_target_kwh / average_daylight_pv_kw))
-        selected_hours_count = max(2, min(3, required_hours))
+        charge_efficiency = min(
+            1.0,
+            max(0.50, self._runtime_float("battery_charge_efficiency_percent", 94.0) / 100.0),
+        )
+        required_pv_input_kwh = missing_stored_kwh / max(charge_efficiency, 0.01)
 
-        candidates = sorted(
-            hourly.values(),
+        remaining_pv_forecast_kwh = max(
+            0.0,
+            pv_forecast_today_kwh - max(0.0, pv_produced_today_kwh),
+        )
+        current_hour_start = local_now.replace(minute=0, second=0, microsecond=0)
+        future_hours = [
+            dict(item)
+            for item in hourly.values()
+            if item["dt"] >= current_hour_start
+        ]
+
+        # Rozdziel pozostałą prognozę PV na przyszłe godziny według wysokości
+        # słońca. Dzięki temu tania godzina po zachodzie nie jest wybierana jako
+        # okno ładowania z PV.
+        latitude = self._as_float(getattr(self.hass.config, "latitude", 52.0), 52.0) or 52.0
+        latitude_rad = math.radians(latitude)
+        total_solar_weight = 0.0
+
+        for item in future_hours:
+            hour_dt = item["dt"]
+            day = int(hour_dt.timetuple().tm_yday)
+            hour_midpoint = float(hour_dt.hour) + 0.5
+            declination_rad = math.radians(
+                23.45 * math.sin(math.radians(360.0 * (284.0 + day) / 365.0))
+            )
+            hour_angle_rad = math.radians(15.0 * (hour_midpoint - 12.0))
+            sin_elevation = (
+                math.sin(latitude_rad) * math.sin(declination_rad)
+                + math.cos(latitude_rad) * math.cos(declination_rad) * math.cos(hour_angle_rad)
+            )
+            duration = (
+                max(0.05, (60.0 - float(local_now.minute)) / 60.0)
+                if hour_dt == current_hour_start
+                else 1.0
+            )
+            solar_weight = max(0.0, sin_elevation) ** 1.25 * duration
+            item["duration"] = duration
+            item["solar_weight"] = solar_weight
+            total_solar_weight += solar_weight
+
+        forecast_surplus_for_charge_kwh = 0.0
+        for item in future_hours:
+            predicted_pv_kwh = (
+                remaining_pv_forecast_kwh
+                * float(item["solar_weight"])
+                / max(total_solar_weight, 0.0001)
+            )
+            predicted_load_kwh = (
+                max(250.0, load_power_w) * float(item["duration"]) / 1000.0
+            )
+            predicted_surplus_kwh = max(0.0, predicted_pv_kwh - predicted_load_kwh)
+            item["predicted_surplus_kwh"] = predicted_surplus_kwh
+            forecast_surplus_for_charge_kwh += predicted_surplus_kwh
+
+        required_with_buffer_kwh = required_pv_input_kwh * 1.15 + 0.25
+        forecast_covers_target = bool(
+            required_pv_input_kwh <= 0.05
+            or forecast_surplus_for_charge_kwh >= required_with_buffer_kwh
+        )
+        charge_candidates = sorted(
+            (
+                item for item in future_hours
+                if float(item.get("predicted_surplus_kwh", 0.0)) >= 0.10
+            ),
             key=lambda item: (float(item["price"]), item["dt"]),
         )
-        selected = sorted(
-            candidates[:selected_hours_count],
-            key=lambda item: item["dt"],
+        selected_by_price: list[dict[str, Any]] = []
+        planned_charge_kwh = 0.0
+
+        if required_pv_input_kwh > 0.05:
+            for item in charge_candidates:
+                selected_by_price.append(item)
+                planned_charge_kwh += float(item.get("predicted_surplus_kwh", 0.0))
+                if planned_charge_kwh >= required_with_buffer_kwh:
+                    break
+
+        selected = sorted(selected_by_price, key=lambda item: item["dt"])
+        required_hours = len(selected)
+        schedule_covers_target = bool(
+            required_pv_input_kwh <= 0.05
+            or planned_charge_kwh >= required_with_buffer_kwh
         )
 
-        current_hour_start = now.replace(minute=0, second=0, microsecond=0)
         current_key = current_hour_start.strftime("%Y-%m-%d %H")
         selected_keys = {
             item["dt"].strftime("%Y-%m-%d %H")
@@ -548,22 +622,32 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             item for item in selected
             if item["dt"] >= current_hour_start
         ]
-        selected_windows_completed = bool(
-            len(selected) >= 2 and not remaining_selected
+        selected_windows_completed = bool(required_hours > 0 and not remaining_selected)
+
+        cheapest_selected_price = min(
+            (float(item["price"]) for item in selected),
+            default=current_sell_price,
+        )
+        price_delta = current_sell_price - cheapest_selected_price
+        minimum_shift_delta = max(
+            0.0,
+            self._runtime_float("economic_pv_shift_min_price_delta", 0.03),
         )
 
         active = bool(
             battery_trade_enabled
-            and high_pv_forecast
-            and len(selected) >= 2
+            and forecast_covers_target
+            and required_hours > 0
+            and schedule_covers_target
             and remaining_selected
         )
-        charge_now = bool(active and current_key in selected_keys and soc < 95.0)
+        charge_now = bool(active and current_key in selected_keys and soc < target_soc)
         pv_surplus_w = max(0.0, pv_power_w - load_power_w)
         export_now = bool(
             active
             and not charge_now
             and pv_surplus_w > 500.0
+            and price_delta >= minimum_shift_delta
         )
 
         all_windows = ", ".join(
@@ -578,15 +662,20 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         if not battery_trade_enabled:
             status = "WYŁĄCZONE"
             reason = "Tryb handlu baterią jest wyłączony."
-        elif not high_pv_forecast:
+        elif required_pv_input_kwh <= 0.05:
+            status = "CEL OSIĄGNIĘTY"
+            reason = (
+                f"Magazyn osiągnął cel {target_soc:.0f}%. Nadwyżka PV nie musi już uzupełniać celu."
+            )
+        elif not forecast_covers_target:
             status = "NIEAKTYWNE"
             reason = (
-                f"Prognoza PV {pv_forecast_today_kwh:.1f} kWh nie wymaga odkładania ładowania "
-                f"magazynu {battery_capacity_kwh:.1f} kWh na najgorsze godziny."
+                f"Prognozowana pozostała nadwyżka PV {forecast_surplus_for_charge_kwh:.1f} kWh "
+                f"nie gwarantuje późniejszego uzupełnienia brakujących {required_pv_input_kwh:.1f} kWh."
             )
-        elif len(selected) < 2:
+        elif not schedule_covers_target:
             status = "BRAK CEN"
-            reason = "Brak co najmniej dwóch przyszłych godzin ceny sprzedaży w dzisiejszym harmonogramie."
+            reason = "Brak wystarczających przyszłych godzin z prognozowaną nadwyżką PV i ceną sprzedaży."
         elif selected_windows_completed:
             status = "ZAKOŃCZONE"
             reason = (
@@ -596,18 +685,22 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif charge_now:
             status = "ŁADOWANIE W TANIM OKNIE"
             reason = (
-                f"To jedna z {len(selected)} najgorszych godzin sprzedaży. "
-                "Nadwyżka PV jest kierowana do magazynu."
+                f"To wybrana tania godzina sprzedaży. Nadwyżka PV uzupełnia tylko "
+                f"brakujące {required_pv_input_kwh:.1f} kWh do celu {target_soc:.0f}%."
             )
         elif export_now:
             status = "EKSPORT PRZED TANIM OKNEM"
             reason = (
-                f"Magazyn pozostaje wolny na najgorsze godziny: {windows}. "
-                f"Bieżąca nadwyżka PV {pv_surplus_w:.0f} W jest sprzedawana."
+                f"Teraz sprzedaż {current_sell_price:.3f} PLN/kWh jest o {price_delta:.3f} PLN/kWh "
+                f"lepsza niż wybrane późniejsze okno. Sprzedaję nadwyżkę PV {pv_surplus_w:.0f} W, "
+                f"a brakujące {required_pv_input_kwh:.1f} kWh doładuję z PV w godzinach: {windows}."
             )
         else:
             status = "OCZEKIWANIE"
-            reason = f"Najgorsze godziny sprzedaży dzisiaj: {windows}."
+            reason = (
+                f"Wybrane godziny ładowania PV: {windows}. Różnica ceny {price_delta:.3f} PLN/kWh "
+                f"jest mniejsza niż wymagane {minimum_shift_delta:.3f} PLN/kWh."
+            )
 
         return {
             "active": active,
@@ -618,9 +711,16 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "windows": windows[:240],
             "hours_count": len(selected),
             "windows_completed": selected_windows_completed,
-            "target_soc": 95.0,
+            "target_soc": round(target_soc, 1),
             "pv_surplus_w": round(pv_surplus_w, 0),
             "forecast_kwh": round(pv_forecast_today_kwh, 2),
+            "remaining_forecast_kwh": round(remaining_pv_forecast_kwh, 2),
+            "forecast_surplus_kwh": round(forecast_surplus_for_charge_kwh, 2),
+            "missing_to_target_kwh": round(missing_stored_kwh, 2),
+            "required_pv_input_kwh": round(required_pv_input_kwh, 2),
+            "planned_charge_kwh": round(planned_charge_kwh, 2),
+            "cheapest_selected_price": round(cheapest_selected_price, 3),
+            "price_delta": round(price_delta, 3),
         }
 
     async def _async_set_switch(self, entity_id: str, turn_on: bool, actions: list[str]) -> None:
@@ -2767,12 +2867,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         pv_low_price_plan = self._pv_low_price_window_plan(
             sell_price_entities,
             sell_price,
-            pv_today,
+            pv_today_for_control,
             battery_capacity_kwh,
             soc,
             pv_power,
             load_power,
             battery_trade_enabled,
+            charge_target_soc,
+            self._as_float(learn.get("daily_pv_kwh"), 0.0) or 0.0,
         )
 
         stored_grid_charge_kwh = max(
@@ -3379,6 +3481,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "pv_price_strategy_windows_completed": bool(pv_low_price_plan.get("windows_completed", False)),
             "pv_price_strategy_target_soc": pv_low_price_plan.get("target_soc", 95.0),
             "pv_price_strategy_forecast_kwh": pv_low_price_plan.get("forecast_kwh", 0.0),
+            "pv_price_strategy_remaining_forecast_kwh": pv_low_price_plan.get("remaining_forecast_kwh", 0.0),
+            "pv_price_strategy_forecast_surplus_kwh": pv_low_price_plan.get("forecast_surplus_kwh", 0.0),
+            "pv_price_strategy_missing_to_target_kwh": pv_low_price_plan.get("missing_to_target_kwh", 0.0),
+            "pv_price_strategy_required_input_kwh": pv_low_price_plan.get("required_pv_input_kwh", 0.0),
+            "pv_price_strategy_cheapest_price": pv_low_price_plan.get("cheapest_selected_price", 0.0),
+            "pv_price_strategy_price_delta": pv_low_price_plan.get("price_delta", 0.0),
             "pv_price_strategy_surplus_w": pv_low_price_plan.get("pv_surplus_w", 0.0),
         }
 
