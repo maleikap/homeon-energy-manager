@@ -1980,13 +1980,15 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
                 sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
                 sw(inverter_grid_charging, False)
+                num(inverter_max_charge_current, 0.0)
                 num(inverter_max_discharge_current, 0.0)
                 sw(inverter_export_surplus, sell_solar_allowed)
             else:
-                action = "Poza najgorszymi godzinami — Zero Export To CT sprzedaje nadwyżkę PV, a bateria może zasilać dom"
+                action = "Poza najgorszymi godzinami — zatrzymuję ładowanie baterii i Zero Export To CT sprzedaje nadwyżkę PV"
                 data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
                 sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
                 sw(inverter_grid_charging, False)
+                num(inverter_max_charge_current, 0.0)
                 num(inverter_max_discharge_current, inverter_discharge_current_a)
                 sw(inverter_export_surplus, sell_solar_allowed)
 
@@ -2146,6 +2148,23 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
             if entity_id == inverter_work_mode_select:
                 return 0
+            if executor_mode == "PV_PRICE_EXPORT":
+                # Exporting the current PV surplus needs four settings to be
+                # applied together.  In particular, Sell Solar must not be
+                # deferred behind TOU housekeeping and the battery charging
+                # current must be zero until the selected cheap PV hour.
+                if entity_id == inverter_grid_charging:
+                    return 1
+                if entity_id == inverter_export_surplus:
+                    return 2
+                if entity_id == inverter_max_charge_current:
+                    return 3
+                if entity_id == inverter_max_discharge_current:
+                    return 4
+                if is_tou_charge:
+                    return 5
+                if is_tou_soc:
+                    return 6
             if tou_grid_charge:
                 if entity_id == inverter_grid_charging:
                     return 1

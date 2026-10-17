@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.53", manifest["version"])
+        self.assertEqual("1.2.54", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.53"', source)
+            self.assertIn('"sw_version": "1.2.54"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -408,6 +408,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         pv_export_end = executor.index('elif (\n            mode == "SELL_BATTERY_HIGH_PRICE"', pv_export_start)
         pv_export = executor[pv_export_start:pv_export_end]
         self.assertIn("inverter_work_mode_pv_charge_option", pv_export)
+        self.assertIn("num(inverter_max_charge_current, 0.0)", pv_export)
         self.assertIn("num(inverter_max_discharge_current, inverter_discharge_current_a)", pv_export)
 
     def test_home_priority_restores_self_consumption_instead_of_skipping_control(self) -> None:

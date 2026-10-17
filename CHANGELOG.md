@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.54
+
+- Tryb `PV_PRICE_EXPORT` rzeczywiście zatrzymuje ładowanie magazynu i kieruje bieżącą nadwyżkę PV do sieci. Wcześniej planer wybierał sprzedaż, ale pozostawiony prąd ładowania pozwalał Deye nadal ładować baterię.
+- Polecenia `No Grid`, `Sell Solar`, wyzerowanie prądu ładowania i właściwy tryb pracy mają pierwszeństwo przed pomocniczymi zmianami Time of Use, więc eksport nie jest odkładany przez limit komend falownika.
+- W wybranym późniejszym oknie `PV_LOW_PRICE_CHARGE` manager przywraca skonfigurowany prąd ładowania i uzupełnia tylko zaplanowany brak energii.
+- Dodano test zachowania odtwarzający przypadek: PV 4016 W, dom 1431 W, SOC 52%, cena sprzedaży 0,95 PLN/kWh i późniejsze ładowanie po 0,62 PLN/kWh.
+
 ## 1.2.53
 
 - Przy dobrej prognozie PV manager nie ładuje magazynu od razu tylko dlatego, że SOC jest niższy od celu. Najpierw sprzedaje bieżącą nadwyżkę w droższej godzinie, a ładowanie PV przenosi do najtańszego przyszłego okna sprzedaży.
