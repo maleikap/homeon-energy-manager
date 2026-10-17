@@ -23,6 +23,7 @@ from custom_components.homeon_energy_manager.const import DOMAIN  # noqa: E402
 from custom_components.homeon_energy_manager.coordinator import (  # noqa: E402
     HomeOnEnergyCoordinator,
 )
+from custom_components.homeon_energy_manager.learning import update_learning  # noqa: E402
 
 
 BUY = "sensor.test_buy"
@@ -295,6 +296,67 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(plan["sell_now"])
         self.assertEqual("OCZEKIWANIE", plan["status"])
         self.assertEqual(1.27, plan["best_sell_price"])
+
+    def test_night_reserve_uses_today_forecast_after_midnight(self):
+        coordinator = self.make_coordinator(datetime(2026, 10, 17, 3, 0, tzinfo=WARSAW))
+
+        forecast, label = coordinator._reserve_pv_forecast(42.0, 7.0, 0.9, 3)
+
+        self.assertAlmostEqual(37.8, forecast)
+        self.assertEqual("dzisiaj", label)
+
+        forecast, label = coordinator._reserve_pv_forecast(42.0, 7.0, 0.9, 20)
+
+        self.assertAlmostEqual(6.3, forecast)
+        self.assertEqual("jutro", label)
+
+    def test_grid_bought_energy_is_not_sold_below_its_real_cost(self):
+        now = datetime(2026, 10, 17, 7, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        buy = [0.97] + [0.60] * 23
+        sell = [0.94] + [0.80] * 23
+        self.set_prices(coordinator, now, buy, sell)
+
+        plan = coordinator._profit_mode_plan(
+            BUY, SELL, current_buy_price=0.97, current_sell_price=0.94,
+            soc=95.0, battery_capacity_kwh=30.0, reserve_soc=35.0,
+            pv_forecast_today_kwh=45.0, pv_produced_today_kwh=0.0,
+            expected_daily_consumption_kwh=30.0, consumed_today_kwh=2.0,
+            minimum_soc=16.0, pv_power_w=1500.0, load_power_w=500.0,
+            enabled=True, stored_grid_charge_kwh=18.0,
+            stored_grid_charge_cost_pln_per_kwh=0.97 / 0.94,
+        )
+
+        self.assertFalse(plan["profitable"])
+        self.assertFalse(plan["sell_now"])
+        self.assertGreater(plan["stored_energy_sale_floor"], 1.20)
+        self.assertIn("Nie sprzedaję energii kupionej z sieci", plan["reason"])
+
+    async def test_learning_remembers_grid_charge_cost_until_energy_is_used(self):
+        now = datetime(2026, 10, 17, 3, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        data = {
+            "mode": "CHEAP_CHARGE", "soc": 50.0, "battery_capacity_kwh": 30.0,
+            "load_power": 1000.0, "pv_power": 0.0,
+            "grid_import_w": 11000.0, "grid_export_w": 0.0,
+            "battery_charge_w": 10000.0, "battery_discharge_w": 0.0,
+            "deye_self_power": 0.0, "buy_price": 0.97, "sell_price": 0.80,
+            "pv_forecast_today": 42.0, "pv_forecast_tomorrow": 7.0,
+        }
+
+        result = await update_learning(coordinator, data)
+
+        self.assertGreater(result["learn_stored_grid_charge_kwh"], 0.0)
+        self.assertAlmostEqual(0.97 / 0.94, result["learn_stored_grid_charge_cost"], places=3)
+
+        Clock.set(now + timedelta(minutes=15))
+        data.update({
+            "mode": "NORMAL", "soc": 45.0, "grid_import_w": 0.0,
+            "battery_charge_w": 0.0, "battery_discharge_w": 5000.0,
+        })
+        result = await update_learning(coordinator, data)
+
+        self.assertEqual(0.0, result["learn_stored_grid_charge_kwh"])
 
     def configure_deye(self, coordinator):
         states = coordinator.hass.states
