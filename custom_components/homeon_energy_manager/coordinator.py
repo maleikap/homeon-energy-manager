@@ -871,7 +871,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         current_hour = now.replace(minute=0, second=0, microsecond=0)
         points = self._price_points_for_entity(price_entity, current_price, horizon_hours=24)
 
-        ready_hour = min(9, max(0, int(reserve_ready_by_hour)))
+        # A good PV forecast may move the economical charging deadline into
+        # the daytime.  The depletion prediction below still inserts an
+        # earlier bridge charge when the battery cannot safely wait that long.
+        ready_hour = min(18, max(0, int(reserve_ready_by_hour)))
         reserve_deadline = current_hour.replace(hour=ready_hour)
         deadline_missed = now >= reserve_deadline and now.hour < 9
         if now >= reserve_deadline:
@@ -1115,11 +1118,59 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             f"{self._fmt_dt_hour(item['dt'])} ({item['price']:.3f} PLN/kWh)"
             for item in selected
         ) or "brak"
+        current_slot = next(
+            (item for item in selected if item["dt"] == current_hour),
+            None,
+        )
+        current_slot_charge_kwh = min(
+            missing_kwh,
+            _slot_capacity_kwh(current_slot) if current_slot is not None else 0.0,
+        )
+        bridge_charge_only = False
+        next_selected = min(
+            (item for item in selected if item["dt"] > current_hour),
+            key=lambda item: item["dt"],
+            default=None,
+        )
+        if (
+            charge_now
+            and predictive_precharge
+            and current_slot is not None
+            and next_selected is not None
+            and float(next_selected["price"]) + 0.001 < float(current_slot["price"])
+        ):
+            # The current, more expensive slot was added only to keep the
+            # battery above its floor until a later cheaper slot.  Charging to
+            # the full final target here defeats the price plan and previously
+            # pushed the battery straight to 95%.
+            consumption_until_next_slot_kwh = sum(
+                item["use_kwh"]
+                for item in predicted_steps
+                if item["dt"] < next_selected["dt"]
+            )
+            floor_energy_kwh = (
+                battery_capacity_kwh * predictive_floor_soc / 100.0
+            )
+            bridge_missing_kwh = max(
+                0.0,
+                floor_energy_kwh
+                + consumption_until_next_slot_kwh
+                - current_energy_kwh,
+            )
+            current_slot_charge_kwh = min(
+                current_slot_charge_kwh,
+                bridge_missing_kwh,
+            )
+            bridge_charge_only = True
+
         grid_charge_target_soc = min(
             95.0,
             max(
                 soc,
-                soc + missing_kwh / max(battery_capacity_kwh, 0.1) * 100.0,
+                soc
+                + current_slot_charge_kwh
+                / max(battery_capacity_kwh, 0.1)
+                * 100.0,
             ),
         )
 
@@ -1132,6 +1183,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "inverter_power_kw": round(inverter_power_kw, 2),
             "battery_c_rate": round(battery_c_rate, 2),
             "grid_charge_target_soc": round(grid_charge_target_soc, 1),
+            "current_slot_charge_kwh": round(current_slot_charge_kwh, 2),
+            "bridge_charge_only": bridge_charge_only,
             "schedule_covers_deadline": schedule_covers_deadline,
             "recover_missed_reserve_now": recover_missed_reserve_now,
             "reserve_ready_by": self._fmt_dt_hour(reserve_deadline),
@@ -2924,10 +2977,28 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             stored_grid_charge_cost,
         )
 
-        cheap_charge_target_soc = (
-            95.0
-            if profit_mode_plan.get("prepare_charge", False)
-            else min(95.0, max(min_soc + 3.0, morning_target_soc))
+        # `_cheap_grid_charge_plan` adds forecast consumption up to the
+        # charging deadline.  Passing the complete morning reserve here used
+        # to count night consumption twice and could force a 95% target even
+        # with a strong PV forecast.  The base target now contains only the
+        # energy that must remain after the bridge period.
+        expected_night_consumption_soc = (
+            target_expected_night_consumption_kwh
+            / max(battery_capacity_kwh, 0.1)
+            * 100.0
+        )
+        cheap_charge_target_soc = min(
+            95.0,
+            max(
+                min_soc + 3.0,
+                morning_target_soc - expected_night_consumption_soc,
+            ),
+        )
+        # With a good calibrated forecast it is safe to compare the night
+        # price with daytime hours.  A learned large load before sunrise is
+        # still protected by the predictive bridge-charge logic.
+        economic_charge_ready_by_hour = (
+            16 if pv_coverage_ratio >= 0.80 else reserve_ready_by_hour
         )
 
         cheap_grid_charge_plan = self._cheap_grid_charge_plan(
@@ -2936,7 +3007,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             soc,
             cheap_charge_target_soc,
             battery_capacity_kwh,
-            reserve_ready_by_hour,
+            economic_charge_ready_by_hour,
             min_soc,
             max(avg_night_load_w, load_power - pv_power, 200.0),
             hourly_profile,
@@ -3400,6 +3471,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "cheap_charge_inverter_power_kw": cheap_grid_charge_plan.get("inverter_power_kw", 0.0),
             "cheap_charge_battery_c_rate": cheap_grid_charge_plan.get("battery_c_rate", 0.0),
             "cheap_charge_grid_target_soc": cheap_grid_charge_plan.get("grid_charge_target_soc", charge_target_soc),
+            "cheap_charge_base_target_soc": round(cheap_charge_target_soc, 1),
+            "cheap_charge_ready_by_hour": economic_charge_ready_by_hour,
+            "cheap_charge_current_slot_kwh": cheap_grid_charge_plan.get("current_slot_charge_kwh", 0.0),
+            "cheap_charge_bridge_only": "ON" if cheap_grid_charge_plan.get("bridge_charge_only", False) else "OFF",
             "cheap_charge_schedule_covers_deadline": "ON" if cheap_grid_charge_plan.get("schedule_covers_deadline", False) else "OFF",
             "cheap_charge_reason": str(cheap_grid_charge_plan.get("reason", "-"))[:240],
             "cheap_charge_predictive_floor_soc": cheap_grid_charge_plan.get("predictive_floor_soc", min_soc),

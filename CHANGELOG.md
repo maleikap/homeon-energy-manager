@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.55
+
+- Nocne zużycie nie jest już liczone podwójnie przy wyznaczaniu celu ładowania z sieci. Przy dobrej prognozie PV manager nie ustawia z tego powodu celu 95%.
+- Przy dobrej, skalibrowanej prognozie PV plan zakupu porównuje ceny nocne z godzinami dziennymi do 16:00 i może zaczekać na tańszą energię.
+- Jeżeli magazyn nie dotrwa bezpiecznie do późniejszej tańszej godziny, droższe wcześniejsze okno doładowuje tylko energię pomostową potrzebną do zachowania minimalnego SOC, zamiast realizować cały końcowy cel.
+- Dodano testy oczekiwania na tańszą godzinę dzienną oraz ograniczonego nocnego ładowania pomostowego.
+
 ## 1.2.54
 
 - Tryb `PV_PRICE_EXPORT` rzeczywiście zatrzymuje ładowanie magazynu i kieruje bieżącą nadwyżkę PV do sieci. Wcześniej planer wybierał sprzedaż, ale pozostawiony prąd ładowania pozwalał Deye nadal ładować baterię.
