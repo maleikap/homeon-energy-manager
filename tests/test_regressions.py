@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.54", manifest["version"])
+        self.assertEqual("1.2.55", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.54"', source)
+            self.assertIn('"sw_version": "1.2.55"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -147,6 +147,9 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("recover_missed_reserve_now", helper)
         self.assertIn("schedule_covers_deadline", helper)
         self.assertIn("grid_charge_target_soc", helper)
+        self.assertIn("bridge_charge_only", helper)
+        self.assertIn("consumption_until_next_slot_kwh", helper)
+        self.assertIn("current_slot_charge_kwh", helper)
 
         self.assertIn('cheap_grid_charge_plan.get("charge_now", False)', source)
         self.assertIn('not cheap_grid_charge_plan.get("schedule_available", False)', source)
@@ -474,7 +477,8 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
         self.assertIn("def _reserve_pv_forecast(", coordinator)
         self.assertIn("use_today = local_hour < 12", coordinator)
-        self.assertIn("else min(95.0, max(min_soc + 3.0, morning_target_soc))", coordinator)
+        self.assertIn("morning_target_soc - expected_night_consumption_soc", coordinator)
+        self.assertIn("16 if pv_coverage_ratio >= 0.80 else reserve_ready_by_hour", coordinator)
         self.assertIn('learn.get("stored_grid_charge_kwh")', coordinator)
         self.assertIn("stored_energy_sale_floor", coordinator)
         self.assertIn('learn["stored_grid_charge_kwh"]', learning)

@@ -177,6 +177,49 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(plan["missing_kwh"], 6.0)
         self.assertIn("05:00", plan["windows"])
 
+    def test_good_pv_can_wait_for_cheaper_daytime_grid_price(self):
+        now = datetime(2026, 10, 21, 0, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        prices = [
+            0.97, 0.95, 0.93, 0.92, 0.94, 1.00, 1.10, 1.20,
+            1.05, 0.85, 0.65, 0.55, 0.60, 0.70, 0.80, 0.90,
+        ]
+        self.set_prices(coordinator, now, prices, prices)
+
+        plan = coordinator._cheap_grid_charge_plan(
+            BUY, prices[0], soc=40.0, target_soc=19.0,
+            battery_capacity_kwh=15.0, reserve_ready_by_hour=16,
+            minimum_soc=16.0, expected_net_load_w=200.0,
+            hourly_profile={},
+        )
+
+        self.assertFalse(plan["charge_now"])
+        self.assertIn("11:00", plan["windows"])
+        self.assertNotIn("00:00", plan["windows"])
+        self.assertLess(plan["grid_charge_target_soc"], 95.0)
+
+    def test_expensive_bridge_slot_charges_only_until_later_cheaper_hour(self):
+        now = datetime(2026, 10, 21, 0, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        prices = [
+            0.97, 1.00, 1.02, 1.04, 1.06, 1.08, 1.10, 1.12,
+            1.05, 0.85, 0.60, 0.55, 0.65, 0.75, 0.85, 0.95,
+        ]
+        self.set_prices(coordinator, now, prices, prices)
+
+        plan = coordinator._cheap_grid_charge_plan(
+            BUY, prices[0], soc=20.0, target_soc=19.0,
+            battery_capacity_kwh=15.0, reserve_ready_by_hour=16,
+            minimum_soc=16.0, expected_net_load_w=500.0,
+            hourly_profile={},
+        )
+
+        self.assertTrue(plan["charge_now"])
+        self.assertTrue(plan["bridge_charge_only"])
+        self.assertIn("11:00", plan["windows"])
+        self.assertGreater(plan["grid_charge_target_soc"], 20.0)
+        self.assertLess(plan["grid_charge_target_soc"], 95.0)
+
     def test_48_hour_trajectory_never_reaches_emergency_soc_or_buys_peak_energy(self):
         start = datetime(2026, 1, 10, 22, 0, tzinfo=WARSAW)
         coordinator = self.make_coordinator(start)
