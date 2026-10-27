@@ -20,6 +20,14 @@ sys.path.insert(0, str(ROOT))
 install_homeassistant_stubs()
 
 from custom_components.homeon_energy_manager.const import DOMAIN  # noqa: E402
+from custom_components.homeon_energy_manager.const import (  # noqa: E402
+    CONF_GRID_CONNECTION_SENSOR,
+    CONF_SELL_PRICE_SENSOR,
+    DEFAULT_PSTRYK_SELL_PRICE_SENSOR,
+    DEFAULT_PSTRYK_SELL_PRICE_TOMORROW_SENSOR,
+    MODERN_PSTRYK_SELL_PRICE_SENSOR,
+    MODERN_PSTRYK_SELL_PRICE_SCHEDULE_SENSOR,
+)
 from custom_components.homeon_energy_manager.coordinator import (  # noqa: E402
     HomeOnEnergyCoordinator,
 )
@@ -340,6 +348,96 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("OCZEKIWANIE", plan["status"])
         self.assertEqual(1.27, plan["best_sell_price"])
 
+    def test_evening_sale_waits_for_better_price_tomorrow_morning(self):
+        now = datetime(2026, 10, 25, 20, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        coordinator.hass.states.set(
+            MODERN_PSTRYK_SELL_PRICE_SENSOR,
+            0.72,
+            {
+                "All prices": rows(
+                    now.replace(hour=20, minute=0),
+                    [0.72, 0.68, 0.64, 0.61],
+                )
+            },
+        )
+        tomorrow = (now + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        tomorrow_prices = [0.60] * 7 + [1.01] + [0.70] * 16
+        coordinator.hass.states.set(
+            MODERN_PSTRYK_SELL_PRICE_SCHEDULE_SENSOR,
+            0.72,
+            {"prices_tomorrow": rows(tomorrow, tomorrow_prices)},
+        )
+        coordinator.hass.states.set(
+            BUY,
+            0.50,
+            {"prices": rows(now.replace(minute=0), [0.50] * 24)},
+        )
+
+        entities = coordinator._price_entity_ids(
+            CONF_SELL_PRICE_SENSOR,
+            DEFAULT_PSTRYK_SELL_PRICE_SENSOR,
+            DEFAULT_PSTRYK_SELL_PRICE_TOMORROW_SENSOR,
+        )
+        stats = coordinator._price_stats_from_entity(entities, 0.72)
+        plan = coordinator._profit_mode_plan(
+            BUY, entities, current_buy_price=0.50, current_sell_price=0.72,
+            soc=80.0, battery_capacity_kwh=30.0, reserve_soc=45.0,
+            pv_forecast_today_kwh=0.0, pv_produced_today_kwh=0.0,
+            expected_daily_consumption_kwh=30.0, consumed_today_kwh=20.0,
+            minimum_soc=16.0, pv_power_w=0.0, load_power_w=700.0,
+            enabled=True,
+        )
+
+        self.assertEqual(
+            [
+                MODERN_PSTRYK_SELL_PRICE_SENSOR,
+                MODERN_PSTRYK_SELL_PRICE_SCHEDULE_SENSOR,
+            ],
+            entities,
+        )
+        self.assertFalse(stats["sell_now_best_before_morning"])
+        self.assertEqual(1.01, stats["best_sell_price_before_morning"])
+        self.assertEqual("07:00", stats["best_sell_time_before_morning"])
+        self.assertFalse(plan["sell_now"])
+        self.assertEqual("OCZEKIWANIE", plan["status"])
+        self.assertEqual(1.01, plan["best_sell_price"])
+
+    def test_numbered_pstryk_instance_uses_matching_tomorrow_sensor(self):
+        now = datetime(2026, 10, 25, 20, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        current = f"{DEFAULT_PSTRYK_SELL_PRICE_SENSOR}_2"
+        tomorrow = f"{DEFAULT_PSTRYK_SELL_PRICE_TOMORROW_SENSOR}_2"
+        coordinator.entry.options[CONF_SELL_PRICE_SENSOR] = current
+        coordinator.hass.states.set(
+            current,
+            0.72,
+            {"today_prices": rows(now.replace(hour=20, minute=0), [0.72] * 4)},
+        )
+        tomorrow_start = (now + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        coordinator.hass.states.set(
+            tomorrow,
+            0.80,
+            {"tomorrow_prices": rows(tomorrow_start, [0.60] * 7 + [1.01] + [0.70] * 16)},
+        )
+
+        entities = coordinator._price_entity_ids(
+            CONF_SELL_PRICE_SENSOR,
+            DEFAULT_PSTRYK_SELL_PRICE_SENSOR,
+            DEFAULT_PSTRYK_SELL_PRICE_TOMORROW_SENSOR,
+        )
+
+        stats = coordinator._price_stats_from_entity(entities, 0.72)
+
+        self.assertEqual([current, tomorrow], entities)
+        self.assertFalse(stats["sell_now_best_before_morning"])
+        self.assertEqual(1.01, stats["best_sell_price_before_morning"])
+        self.assertEqual("07:00", stats["best_sell_time_before_morning"])
+
     def test_night_reserve_uses_today_forecast_after_midnight(self):
         coordinator = self.make_coordinator(datetime(2026, 10, 17, 3, 0, tzinfo=WARSAW))
 
@@ -649,6 +747,115 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("120.0", coordinator.hass.states.get("number.inverter_battery_max_discharging_current").state)
         self.assertEqual("No Grid", coordinator.hass.states.get("select.inverter_program_1_charging").state)
         self.assertEqual("16.0", coordinator.hass.states.get("number.inverter_program_1_soc").state)
+
+    def test_grid_presence_sensor_detects_off_grid_from_zero_voltage(self):
+        coordinator = self.make_coordinator(datetime(2026, 10, 27, 12, 0, tzinfo=WARSAW))
+        coordinator.entry.options[CONF_GRID_CONNECTION_SENSOR] = "sensor.inverter_grid_voltage_l1"
+        coordinator.hass.states.set(
+            "sensor.inverter_grid_voltage_l1",
+            "0",
+            {"unit_of_measurement": "V"},
+        )
+
+        connected, status, source = coordinator._grid_connection_state()
+
+        self.assertFalse(connected)
+        self.assertEqual("OFF-GRID", status)
+        self.assertIn("=0", source)
+
+    def test_zero_grid_power_alone_does_not_guess_an_outage(self):
+        coordinator = self.make_coordinator(datetime(2026, 10, 27, 12, 0, tzinfo=WARSAW))
+        coordinator.hass.states.set("sensor.inverter_grid_power", "0")
+
+        connected, status, _source = coordinator._grid_connection_state()
+
+        self.assertIsNone(connected)
+        self.assertEqual("NIEZNANY", status)
+
+    def test_standard_deye_grid_voltage_is_discovered_from_grid_power_entity(self):
+        coordinator = self.make_coordinator(datetime(2026, 10, 27, 12, 0, tzinfo=WARSAW))
+        coordinator.entry.data["grid_power_sensor"] = "sensor.inverter_grid_power"
+        coordinator.hass.states.set(
+            "sensor.inverter_grid_voltage_l1",
+            "230.4",
+            {"unit_of_measurement": "V"},
+        )
+
+        connected, status, source = coordinator._grid_connection_state()
+
+        self.assertTrue(connected)
+        self.assertEqual("ON-GRID", status)
+        self.assertIn("auto:", source)
+
+    async def test_off_grid_uses_pv_for_home_and_battery_without_grid_trade(self):
+        now = datetime(2026, 10, 27, 12, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_deye(coordinator)
+        data = {
+            "mode": "OFF_GRID", "soc": 55.0, "min_soc": 16.0,
+            "installation_type": "CT", "night_self_use_active": False,
+            "self_use_reserve_soc": 35.0, "discharge_target_soc": 35.0,
+            "sell_price": 1.20, "pv_power": 8000.0, "load_power": 1800.0,
+            "economic_pv_export_opportunity": "ON", "plan_safe_to_sell_kwh": 12.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("OFF_GRID", result["inverter_control_executor_mode"])
+        self.assertEqual("Zero Export To CT", coordinator.hass.states.get("select.inverter_work_mode").state)
+        self.assertEqual("off", coordinator.hass.states.get("switch.inverter_battery_grid_charging").state)
+        self.assertEqual("off", coordinator.hass.states.get("switch.inverter_export_surplus").state)
+        self.assertEqual(80.0, float(coordinator.hass.states.get("number.inverter_battery_max_charging_current").state))
+        self.assertEqual("120.0", coordinator.hass.states.get("number.inverter_battery_max_discharging_current").state)
+        self.assertEqual("No Grid", coordinator.hass.states.get("select.inverter_program_1_charging").state)
+        self.assertEqual("16.0", coordinator.hass.states.get("number.inverter_program_1_soc").state)
+        self.assertIn("nadwyżka ładuje magazyn", result["inverter_control_action"])
+
+    async def test_off_grid_load_installation_keeps_zero_export_to_load(self):
+        now = datetime(2026, 10, 27, 12, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_deye(coordinator)
+        coordinator.hass.states.set(
+            "select.inverter_work_mode",
+            "Export First",
+            {"options": ["Export First", "Zero Export To CT", "Zero Export To Load"]},
+        )
+        data = {
+            "mode": "OFF_GRID", "soc": 55.0, "min_soc": 16.0,
+            "installation_type": "LOAD", "night_self_use_active": False,
+            "self_use_reserve_soc": 35.0, "discharge_target_soc": 35.0,
+            "sell_price": 1.20, "pv_power": 8000.0, "load_power": 1800.0,
+            "economic_pv_export_opportunity": "ON", "plan_safe_to_sell_kwh": 12.0,
+        }
+
+        await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("Zero Export To Load", coordinator.hass.states.get("select.inverter_work_mode").state)
+
+    async def test_off_grid_command_limit_prioritizes_island_operation(self):
+        now = datetime(2026, 10, 27, 12, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now, runtime={"deye_max_changes_per_run": 6})
+        self.configure_deye(coordinator)
+        coordinator.hass.states.set("switch.inverter_battery_grid_charging", "on")
+        coordinator.hass.states.set("number.inverter_battery_max_charging_current", "0")
+        data = {
+            "mode": "OFF_GRID", "soc": 55.0, "min_soc": 16.0,
+            "installation_type": "CT", "night_self_use_active": False,
+            "self_use_reserve_soc": 35.0, "discharge_target_soc": 35.0,
+            "sell_price": 1.20, "pv_power": 8000.0, "load_power": 1800.0,
+            "economic_pv_export_opportunity": "ON", "plan_safe_to_sell_kwh": 12.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("PARTIAL_CHANGE_LIMIT", result["deye_driver_safety_status"])
+        self.assertEqual("Zero Export To CT", coordinator.hass.states.get("select.inverter_work_mode").state)
+        self.assertEqual("off", coordinator.hass.states.get("switch.inverter_battery_grid_charging").state)
+        self.assertEqual("off", coordinator.hass.states.get("switch.inverter_export_surplus").state)
+        self.assertEqual(80.0, float(coordinator.hass.states.get("number.inverter_battery_max_charging_current").state))
+        self.assertEqual(120.0, float(coordinator.hass.states.get("number.inverter_battery_max_discharging_current").state))
+        self.assertEqual("No Grid", coordinator.hass.states.get("select.inverter_program_1_charging").state)
+        self.assertEqual("43", coordinator.hass.states.get("number.inverter_program_1_soc").state)
 
     async def test_full_battery_stops_charge_and_exports_positive_price_pv(self):
         now = datetime(2026, 6, 10, 12, 0, tzinfo=WARSAW)
