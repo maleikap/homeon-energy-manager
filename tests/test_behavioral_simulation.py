@@ -542,6 +542,50 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(0.0, result["learn_stored_grid_charge_kwh"])
 
+    async def test_daily_finance_uses_matching_pstryk_instance_as_source_of_truth(self):
+        now = datetime(2026, 10, 27, 8, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        states = coordinator.hass.states
+
+        # A different installation exists without a suffix and must be ignored.
+        states.set("sensor.pstryk_aio_dzienne_koszty_zuzycia_energii", "99.00")
+        states.set("sensor.pstryk_aio_dzienna_wartosc_produkcji_energii", "88.00")
+        states.set("sensor.pstryk_aio_dzienne_zuzycie_energii_kwh", "77.00")
+        states.set("sensor.pstryk_aio_dzienna_produkcja_energii_kwh", "66.00")
+
+        states.set("sensor.pstryk_aio_dzienne_koszty_zuzycia_energii_2", "4.51")
+        states.set("sensor.pstryk_aio_dzienna_wartosc_produkcji_energii_2", "2.35")
+        states.set("sensor.pstryk_aio_dzienne_zuzycie_energii_kwh_2", "3.25")
+        states.set("sensor.pstryk_aio_dzienna_produkcja_energii_kwh_2", "1.75")
+
+        data = {
+            "mode": "NORMAL", "soc": 50.0, "battery_capacity_kwh": 30.0,
+            "load_power": 1000.0, "pv_power": 0.0,
+            "grid_import_w": 1000.0, "grid_export_w": 0.0,
+            "battery_charge_w": 0.0, "battery_discharge_w": 0.0,
+            "deye_self_power": 0.0, "buy_price": 1.35, "sell_price": 0.80,
+            "pv_forecast_today": 7.0, "pv_forecast_tomorrow": 10.0,
+            "buy_price_source_entity": "sensor.pstryk_aio_obecna_cena_zakupu_pradu_2",
+            "sell_price_source_entity": "sensor.pstryk_aio_obecna_cena_sprzedazy_pradu_2",
+        }
+
+        result = await update_learning(coordinator, data)
+
+        self.assertEqual(4.51, result["learn_daily_purchase_cost_pln"])
+        self.assertEqual(2.35, result["learn_daily_sale_value_pln"])
+        self.assertEqual(3.25, result["learn_daily_grid_import_kwh"])
+        self.assertEqual(1.75, result["learn_daily_grid_export_kwh"])
+
+        # A later Pstryk update replaces the totals instead of adding CT values
+        # on top and counting the same energy twice.
+        states.set("sensor.pstryk_aio_dzienne_koszty_zuzycia_energii_2", "4.80")
+        states.set("sensor.pstryk_aio_dzienne_zuzycie_energii_kwh_2", "3.40")
+        Clock.set(now + timedelta(minutes=15))
+        result = await update_learning(coordinator, data)
+
+        self.assertEqual(4.80, result["learn_daily_purchase_cost_pln"])
+        self.assertEqual(3.40, result["learn_daily_grid_import_kwh"])
+
     def configure_deye(self, coordinator):
         states = coordinator.hass.states
         states.set("select.inverter_work_mode", "Export First", {"options": ["Export First", "Zero Export To CT"]})

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.58
+
+- Dzienne pobranie, oddanie, koszt zakupu i wartość sprzedaży są synchronizowane bezpośrednio z Pstryk AIO; obliczenia z mocy CT działają wyłącznie awaryjnie, gdy Pstryk nie udostępnia danego licznika.
+- Przy wielu konfiguracjach Pstryk używana jest ta sama końcówka encji (`_2`, `_3` itd.), którą wybrano dla cen. Dane różnych instalacji nie są już mieszane.
+- Dodano sensory źródła ceny zakupu i sprzedaży, dzięki którym karta automatycznie wybiera właściwy komplet liczników Pstryk.
+
 ## 1.2.57
 
 - Dodano opcjonalną encję obecności sieci lub napięcia fazy do pewnego wykrywania pracy OFF-GRID. Manager nie uznaje samego odczytu `0 W` za awarię sieci.

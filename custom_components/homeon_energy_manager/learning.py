@@ -10,6 +10,11 @@ from .const import DOMAIN
 STORE_VERSION = 1
 SAVE_INTERVAL_SECONDS = 300
 
+PSTRYK_DAILY_PURCHASE_COST = "sensor.pstryk_aio_dzienne_koszty_zuzycia_energii"
+PSTRYK_DAILY_SALE_VALUE = "sensor.pstryk_aio_dzienna_wartosc_produkcji_energii"
+PSTRYK_DAILY_IMPORT_ENERGY = "sensor.pstryk_aio_dzienne_zuzycie_energii_kwh"
+PSTRYK_DAILY_EXPORT_ENERGY = "sensor.pstryk_aio_dzienna_produkcja_energii_kwh"
+
 
 def _f(value: Any, default: float = 0.0) -> float:
     try:
@@ -25,6 +30,34 @@ def _round(value: Any, digits: int = 2) -> float:
         return round(float(value), digits)
     except Exception:
         return 0.0
+
+
+def _pstryk_instance_suffix(data: dict[str, Any]) -> str | None:
+    """Return the HA suffix used by the Pstryk instance selected for prices."""
+    for key in ("buy_price_source_entity", "sell_price_source_entity"):
+        entity_id = str(data.get(key, "") or "").strip()
+        if not entity_id.startswith("sensor.pstryk_"):
+            continue
+        tail = entity_id.rsplit("_", 1)[-1]
+        if tail.isdigit():
+            return f"_{tail}"
+    return None
+
+
+def _pstryk_state(coordinator, base_entity_id: str, suffix: str | None):
+    """Read a daily Pstryk entity from the same config entry as price data."""
+    if suffix is None:
+        return None
+    return coordinator.hass.states.get(f"{base_entity_id}{suffix}")
+
+
+def _usable_state_number(state) -> float | None:
+    if state is None or state.state in (None, "", "unknown", "unavailable"):
+        return None
+    try:
+        return float(str(state.state).replace(",", "."))
+    except Exception:
+        return None
 
 
 def _ewma_dict(target: dict[str, Any], key: str, value: float, alpha: float = 0.05) -> None:
@@ -117,26 +150,29 @@ async def update_learning(coordinator, data: dict[str, Any]) -> dict[str, Any]:
 
     financial_day_key = str(learn.get("financial_daily_key", ""))
 
+    pstryk_suffix = _pstryk_instance_suffix(data)
+    pstryk_cost_value = _usable_state_number(
+        _pstryk_state(coordinator, PSTRYK_DAILY_PURCHASE_COST, pstryk_suffix)
+    )
+    pstryk_sale_value = _usable_state_number(
+        _pstryk_state(coordinator, PSTRYK_DAILY_SALE_VALUE, pstryk_suffix)
+    )
+    pstryk_import_kwh = _usable_state_number(
+        _pstryk_state(coordinator, PSTRYK_DAILY_IMPORT_ENERGY, pstryk_suffix)
+    )
+    pstryk_export_kwh = _usable_state_number(
+        _pstryk_state(coordinator, PSTRYK_DAILY_EXPORT_ENERGY, pstryk_suffix)
+    )
+
     if not financial_day_key or financial_day_key != day_key:
         # Preserve the part of the current day already reported by Pstryk both
-        # on first startup and after a restart/day change. From this point
-        # HomeOn updates the totals live from CT power and hourly prices.
-        pstryk_cost = coordinator.hass.states.get(
-            "sensor.pstryk_aio_dzienne_koszty_zuzycia_energii"
-        )
-        pstryk_sale = coordinator.hass.states.get(
-            "sensor.pstryk_aio_dzienna_wartosc_produkcji_energii"
-        )
-        learn["daily_purchase_cost_pln"] = _f(
-            pstryk_cost.state if pstryk_cost is not None else None,
-            0.0,
-        )
-        learn["daily_sale_value_pln"] = _f(
-            pstryk_sale.state if pstryk_sale is not None else None,
-            0.0,
-        )
-        learn["daily_grid_import_kwh"] = 0.0
-        learn["daily_grid_export_kwh"] = 0.0
+        # on first startup and after a restart/day change. The suffix is taken
+        # from the selected price sensor so separate Pstryk entries are never
+        # mixed between installations.
+        learn["daily_purchase_cost_pln"] = max(0.0, pstryk_cost_value or 0.0)
+        learn["daily_sale_value_pln"] = max(0.0, pstryk_sale_value or 0.0)
+        learn["daily_grid_import_kwh"] = max(0.0, pstryk_import_kwh or 0.0)
+        learn["daily_grid_export_kwh"] = max(0.0, pstryk_export_kwh or 0.0)
 
     learn["financial_daily_key"] = day_key
 
@@ -154,6 +190,17 @@ async def update_learning(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     learn["daily_grid_export_kwh"] = _f(learn.get("daily_grid_export_kwh"), 0.0) + interval_export_kwh
     learn["daily_purchase_cost_pln"] = _f(learn.get("daily_purchase_cost_pln"), 0.0) + interval_import_kwh * buy_price
     learn["daily_sale_value_pln"] = _f(learn.get("daily_sale_value_pln"), 0.0) + interval_export_kwh * sell_price
+
+    # Pstryk is the settlement source and therefore wins whenever its daily
+    # counters are available. CT integration remains a live fallback only.
+    if pstryk_import_kwh is not None:
+        learn["daily_grid_import_kwh"] = max(0.0, pstryk_import_kwh)
+    if pstryk_export_kwh is not None:
+        learn["daily_grid_export_kwh"] = max(0.0, pstryk_export_kwh)
+    if pstryk_cost_value is not None:
+        learn["daily_purchase_cost_pln"] = max(0.0, pstryk_cost_value)
+    if pstryk_sale_value is not None:
+        learn["daily_sale_value_pln"] = max(0.0, pstryk_sale_value)
 
     # Preserve the amount and weighted cost of energy physically charged from
     # the grid. This prevents selling it later below its acquisition cost just
