@@ -169,6 +169,8 @@ SENSORS = [
     ("learn_daily_purchase_cost_pln", "EMS koszt zakupu dzisiaj", "PLN", "mdi:cash-minus"),
     ("learn_daily_sale_value_pln", "EMS wartość sprzedaży dzisiaj", "PLN", "mdi:cash-plus"),
     ("learn_daily_financial_balance_pln", "EMS bilans finansowy dzisiaj", "PLN", "mdi:scale-balance"),
+    ("buy_price_source_entity", "Źródło ceny zakupu", None, "mdi:database-arrow-down"),
+    ("sell_price_source_entity", "Źródło ceny sprzedaży", None, "mdi:database-arrow-up"),
     ("pv_forecast_today_calibrated", "Skalibrowana prognoza PV dziś", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-sunny"),
     ("pv_forecast_tomorrow_calibrated", "Skalibrowana prognoza PV jutro", UnitOfEnergy.KILO_WATT_HOUR, "mdi:weather-sunny-alert"),
     ("optimizer_status", "Optymalizator 24h", None, "mdi:chart-timeline-variant"),
@@ -336,7 +338,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.56",
+            "sw_version": "1.2.58",
         }
 
     @property
