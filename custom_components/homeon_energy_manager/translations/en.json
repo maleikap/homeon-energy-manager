@@ -12,6 +12,7 @@
           "pv_power_sensor": "PV power",
           "load_power_sensor": "Load power",
           "grid_power_sensor": "Grid power",
+          "grid_connection_sensor": "Grid presence / grid voltage (optional)",
           "buy_price_sensor": "Buy price",
           "sell_price_sensor": "Sell price",
           "pv_forecast_today_sensor": "PV forecast today",
@@ -34,6 +35,7 @@
         },
         "data_description": {
           "installation_type": "CT: loads may be on the GRID side and are measured by current transformers; the inverter uses Zero Export To CT. LOAD: all loads are behind LOAD without CT clamps; the inverter uses Zero Export To Load.",
+          "grid_connection_sensor": "Select a Deye grid-connected status or phase-voltage entity. It is required for reliable OFF-GRID detection; 0 W alone cannot distinguish an outage from correct zero balancing.",
           "battery_capacity_kwh": "Actual usable capacity of the complete battery system.",
           "night_consumption_kwh": "Review this value after changing battery capacity. Night consumption with its margin should not exceed battery capacity.",
           "night_safety_margin": "Night reserve multiplier. An excessive value can raise the minimum SOC target to 95%."
@@ -56,6 +58,7 @@
           "pv_power_sensor": "PV power",
           "load_power_sensor": "Load power",
           "grid_power_sensor": "Grid power",
+          "grid_connection_sensor": "Grid presence / grid voltage (optional)",
           "buy_price_sensor": "Buy price",
           "sell_price_sensor": "Sell price",
           "pv_forecast_today_sensor": "PV forecast today",
@@ -78,6 +81,7 @@
         },
         "data_description": {
           "installation_type": "CT: loads may be on the GRID side and are measured by current transformers; the inverter uses Zero Export To CT. LOAD: all loads are behind LOAD without CT clamps; the inverter uses Zero Export To Load.",
+          "grid_connection_sensor": "Select a Deye grid-connected status or phase-voltage entity. It is required for reliable OFF-GRID detection; 0 W alone cannot distinguish an outage from correct zero balancing.",
           "battery_capacity_kwh": "Actual usable capacity of the complete battery system.",
           "night_consumption_kwh": "Review this value after changing battery capacity. Night consumption with its margin should not exceed battery capacity.",
           "night_safety_margin": "Night reserve multiplier. An excessive value can raise the minimum SOC target to 95%."

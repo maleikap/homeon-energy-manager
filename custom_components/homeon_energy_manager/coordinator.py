@@ -19,6 +19,7 @@ from .const import (
     CONF_PV_POWER_SENSOR,
     CONF_LOAD_POWER_SENSOR,
     CONF_GRID_POWER_SENSOR,
+    CONF_GRID_CONNECTION_SENSOR,
     CONF_BUY_PRICE_SENSOR,
     CONF_SELL_PRICE_SENSOR,
     CONF_PV_FORECAST_TODAY_SENSOR,
@@ -45,6 +46,8 @@ from .const import (
     DEFAULT_PSTRYK_SELL_PRICE_TOMORROW_SENSOR,
     MODERN_PSTRYK_BUY_PRICE_SENSOR,
     MODERN_PSTRYK_SELL_PRICE_SENSOR,
+    MODERN_PSTRYK_BUY_PRICE_SCHEDULE_SENSOR,
+    MODERN_PSTRYK_SELL_PRICE_SCHEDULE_SENSOR,
     DEFAULT_BATTERY_CAPACITY_KWH,
     DEFAULT_MIN_SOC,
     DEFAULT_EMERGENCY_SOC,
@@ -108,6 +111,83 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
     def _conf_value(self, key: str, default: Any = None) -> Any:
         return self.entry.options.get(key, self.entry.data.get(key, default))
+
+    def _grid_connection_state(self) -> tuple[bool | None, str, str]:
+        """Read an optional grid-presence entity without guessing from grid power.
+
+        A zero grid-power value is valid both during exact zero export and during
+        an outage, so it must never be the sole off-grid signal.  The configured
+        entity may be a connectivity binary sensor, a text status sensor or a
+        phase-voltage sensor.
+        """
+        entity_id = str(self._conf_value(CONF_GRID_CONNECTION_SENSOR, "") or "").strip()
+        automatically_selected = False
+        if not entity_id:
+            grid_power_entity = str(self._conf_value(CONF_GRID_POWER_SENSOR, "") or "").strip()
+            automatic_candidates: list[str] = []
+            for source, replacement in (
+                ("grid_power", "grid_connected"),
+                ("grid_power", "grid_voltage_l1"),
+                ("grid_power", "grid_voltage"),
+                ("grid_ct_power", "grid_voltage_l1"),
+            ):
+                if source in grid_power_entity:
+                    candidate = grid_power_entity.replace(source, replacement, 1)
+                    if candidate not in automatic_candidates:
+                        automatic_candidates.append(candidate)
+            for candidate in automatic_candidates:
+                if self.hass.states.get(candidate) is not None:
+                    entity_id = candidate
+                    automatically_selected = True
+                    break
+        if not entity_id:
+            return None, "NIEZNANY", "Nie skonfigurowano encji obecności sieci"
+
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            return None, "NIEZNANY", f"Brak encji {entity_id}"
+
+        raw = str(state.state or "").strip()
+        normalized = " ".join(
+            raw.lower()
+            .replace("_", " ")
+            .replace("-", " ")
+            .split()
+        )
+        if normalized in {"", "unknown", "unavailable", "none", "null"}:
+            return None, "NIEZNANY", f"{entity_id}: stan {raw or 'pusty'}"
+
+        offline_values = {
+            "off", "false", "no", "nie", "0", "offline", "disconnected",
+            "not connected", "grid lost", "grid fail", "blackout", "island",
+            "islanding", "off grid", "brak sieci", "awaria sieci",
+        }
+        online_values = {
+            "on", "true", "yes", "tak", "1", "online", "connected",
+            "grid connected", "on grid", "normal", "sieć obecna", "siec obecna",
+        }
+        offline_fragments = ("off grid", "grid lost", "grid fail", "brak sieci", "awaria sieci")
+        online_fragments = ("on grid", "grid connected", "sieć obecna", "siec obecna")
+        if normalized in offline_values or any(fragment in normalized for fragment in offline_fragments):
+            prefix = "auto: " if automatically_selected else ""
+            return False, "OFF-GRID", f"{prefix}{entity_id}={raw}"
+        if normalized in online_values or any(fragment in normalized for fragment in online_fragments):
+            prefix = "auto: " if automatically_selected else ""
+            return True, "ON-GRID", f"{prefix}{entity_id}={raw}"
+
+        unit = str(state.attributes.get("unit_of_measurement", "") or "").strip().lower()
+        voltage_entity = "voltage" in entity_id.lower() or unit in {"v", "volt", "volts"}
+        if voltage_entity:
+            value = self._as_float(raw, None)
+            if value is not None:
+                if value <= 50.0:
+                    prefix = "auto: " if automatically_selected else ""
+                    return False, "OFF-GRID", f"{prefix}{entity_id}={value:g} V"
+                if value >= 80.0:
+                    prefix = "auto: " if automatically_selected else ""
+                    return True, "ON-GRID", f"{prefix}{entity_id}={value:g} V"
+
+        return None, "NIEZNANY", f"Nie rozpoznano stanu {entity_id}={raw}"
 
     @staticmethod
     def _reserve_pv_forecast(
@@ -173,8 +253,33 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             current = pstryk_current
 
         entities = [current]
-        if current == pstryk_current and self.hass.states.get(pstryk_tomorrow) is not None:
-            entities.append(pstryk_tomorrow)
+
+        def append_schedule(base_current: str, base_schedule: str) -> None:
+            """Append the schedule belonging to the selected Pstryk instance."""
+            if current != base_current and not current.startswith(f"{base_current}_"):
+                return
+            suffix = current[len(base_current):]
+            schedule_entity = f"{base_schedule}{suffix}"
+            if (
+                schedule_entity not in entities
+                and self.hass.states.get(schedule_entity) is not None
+            ):
+                entities.append(schedule_entity)
+
+        # The legacy Pstryk AIO integration keeps tomorrow in a separate
+        # entity.  Preserve the numeric suffix when Home Assistant has more
+        # than one Pstryk entry (for example ``..._pradu_2``).
+        append_schedule(pstryk_current, pstryk_tomorrow)
+
+        # The current-price entities of the unified-metrics integration expose
+        # only today's rows in ``All prices``.  The optional JSON sensor is the
+        # authoritative 48-hour schedule and contains tomorrow's morning too.
+        modern_schedule = (
+            MODERN_PSTRYK_BUY_PRICE_SCHEDULE_SENSOR
+            if key == CONF_BUY_PRICE_SENSOR
+            else MODERN_PSTRYK_SELL_PRICE_SCHEDULE_SENSOR
+        )
+        append_schedule(modern_current, modern_schedule)
         return entities
 
     @staticmethod
@@ -1939,7 +2044,25 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             else:
                 data["inverter_tou_control_status"] = "BŁĄD — NIE ROZPOZNANO OPCJI TIME OF USE"
 
-        if mode == "SAFE_MODE":
+        if mode == "OFF_GRID":
+            executor_mode = "OFF_GRID"
+            if full_soc_charge_lock:
+                action = (
+                    "OFF-GRID — PV zasila dom; magazyn jest pełny, więc falownik może "
+                    "ograniczyć nadwyżkę, której nie można oddać do sieci"
+                )
+            else:
+                action = (
+                    "OFF-GRID — PV zasila dom, a cała dostępna nadwyżka ładuje magazyn"
+                )
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
+            sw(inverter_export_surplus, False)
+            sw(inverter_grid_charging, False)
+            num(inverter_max_charge_current, inverter_charge_current_a)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
+
+        elif mode == "SAFE_MODE":
             executor_mode = "SAFE_MODE"
             action = "SAFE_MODE — błąd danych, ustawiam Zero Export To CT i blokuję handel"
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
@@ -2171,6 +2294,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             # battery while the minimum TOU SOC lets it cover the home load.
             tou_target_soc = minimum_soc
             tou_reason = "słabe PV — blokada handlu, autokonsumpcja do minimalnego SOC"
+        elif executor_mode == "OFF_GRID":
+            tou_target_soc = minimum_soc
+            tou_reason = "OFF-GRID — PV i magazyn zasilają dom bez ładowania z sieci"
         elif executor_mode in {"PV_LOW_PRICE_CHARGE", "PV_CHARGE"}:
             tou_target_soc = float(self._as_float(data.get("charge_target_soc"), 95.0) or 95.0)
             tou_reason = "ładowanie z PV bez zakupu z sieci"
@@ -2201,6 +2327,22 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
             if entity_id == inverter_work_mode_select:
                 return 0
+            if executor_mode == "OFF_GRID":
+                # On a real outage, disabling grid-dependent functions and
+                # restoring PV/battery current limits is more urgent than the
+                # auxiliary TOU SOC write.
+                if entity_id == inverter_grid_charging:
+                    return 1
+                if entity_id == inverter_export_surplus:
+                    return 2
+                if entity_id == inverter_max_charge_current:
+                    return 3
+                if entity_id == inverter_max_discharge_current:
+                    return 4
+                if is_tou_charge:
+                    return 5
+                if is_tou_soc:
+                    return 6
             if executor_mode == "PV_PRICE_EXPORT":
                 # Exporting the current PV surplus needs four settings to be
                 # applied together.  In particular, Sell Solar must not be
@@ -2511,6 +2653,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         pv_power = self._state_float_by_key(CONF_PV_POWER_SENSOR)
         load_power = self._state_float_by_key(CONF_LOAD_POWER_SENSOR)
         grid_power = self._state_float_by_key(CONF_GRID_POWER_SENSOR)
+        grid_connected, grid_connection_status, grid_connection_source = (
+            self._grid_connection_state()
+        )
+        off_grid_active = grid_connected is False
 
         buy_price_entities = self._price_entity_ids(
             CONF_BUY_PRICE_SENSOR,
@@ -2554,6 +2700,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             grid_import_w = max(-grid_power, 0.0)
             grid_export_w = max(grid_power, 0.0)
             grid_status = "Import" if grid_power < -20 else "Eksport" if grid_power > 20 else "Zero"
+
+        if off_grid_active:
+            grid_import_w = 0.0
+            grid_export_w = 0.0
+            grid_status = "OFF-GRID"
 
         installation_type = str(
             self._conf_value(CONF_INSTALLATION_TYPE, DEFAULT_INSTALLATION_TYPE)
@@ -2637,7 +2788,8 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             data_quality_warnings.append(
                 f"Moc LOAD {inverter_load_power_raw:g} W została skorygowana do 0 W"
             )
-        _check_required_number("Moc sieci", CONF_GRID_POWER_SENSOR, -200000.0, 200000.0)
+        if not off_grid_active:
+            _check_required_number("Moc sieci", CONF_GRID_POWER_SENSOR, -200000.0, 200000.0)
         _check_required_number("Cena zakupu", CONF_BUY_PRICE_SENSOR, -5.0, 5.0, buy_price_entities[0])
         _check_required_number("Cena sprzedaży", CONF_SELL_PRICE_SENSOR, -5.0, 5.0, sell_price_entities[0])
 
@@ -2666,6 +2818,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         if buy_price == 0 and sell_price == 0:
             data_quality_warnings.append("Cena zakupu i sprzedaży wynosi 0 — sprawdź sensor taryfy")
+
+        if self._conf_value(CONF_GRID_CONNECTION_SENSOR) and grid_connected is None:
+            data_quality_warnings.append(grid_connection_source)
 
         data_quality_score = max(
             0.0,
@@ -3208,6 +3363,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         if not enabled:
             mode = "DISABLED"
             reason = "HomeOn EMS jest wyłączony"
+        elif off_grid_active:
+            mode = "OFF_GRID"
+            reason = (
+                "Brak zasilania z sieci — PV zasila dom, a nadwyżka ładuje magazyn; "
+                "handel i ładowanie z sieci są wyłączone"
+            )
         elif safe_mode_active:
             mode = "SAFE_MODE"
             reason = safe_mode_reason
@@ -3335,6 +3496,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         mode_priority = {
             "DISABLED": 100,
+            "OFF_GRID": 99,
             "SAFE_MODE": 95,
             "EMERGENCY_RESERVE": 90,
             "NEGATIVE_IMPORT": 85,
@@ -3355,6 +3517,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         urgent_modes = {
             "DISABLED",
+            "OFF_GRID",
             "SAFE_MODE",
             "EMERGENCY_RESERVE",
             "NEGATIVE_IMPORT",
@@ -3444,6 +3607,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "ct_balanced_load_power": round(ct_balanced_load_power, 0),
             "grid_power": round(grid_power, 0),
             "grid_status": grid_status,
+            "grid_connection_status": grid_connection_status,
+            "grid_connection_source": grid_connection_source,
+            "off_grid": "ON" if off_grid_active else "OFF",
 
             "buy_price": round(buy_price, 3),
             "sell_price": round(sell_price, 3),

@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.55", manifest["version"])
+        self.assertEqual("1.2.57", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.55"', source)
+            self.assertIn('"sw_version": "1.2.56"', source)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
@@ -283,6 +283,8 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("sensor.pstryk_aio_cena_sprzedazy_pradu_jutro", constants)
         self.assertIn("sensor.pstryk_current_buy_price", constants)
         self.assertIn("sensor.pstryk_current_sell_price", constants)
+        self.assertIn("sensor.pstryk_json_buy", constants)
+        self.assertIn("sensor.pstryk_json_sell", constants)
         self.assertIn("DEFAULT_PSTRYK_BUY_PRICE_SENSOR", config_flow)
         self.assertIn("DEFAULT_PSTRYK_SELL_PRICE_SENSOR", config_flow)
         self.assertIn("buy_price_entities = self._price_entity_ids(", coordinator)
@@ -302,7 +304,8 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("configured_text = pstryk_current", helper)
         self.assertIn("if explicit_text == pstryk_tomorrow:", helper)
         self.assertIn("explicit_text = pstryk_current", helper)
-        self.assertIn("entities.append(pstryk_tomorrow)", helper)
+        self.assertIn("append_schedule(pstryk_current, pstryk_tomorrow)", helper)
+        self.assertIn("append_schedule(modern_current, modern_schedule)", helper)
 
     def test_planner_uses_today_and_tomorrow_price_schedules(self) -> None:
         source = (COMPONENT / "planner.py").read_text(encoding="utf-8")

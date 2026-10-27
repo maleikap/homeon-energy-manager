@@ -5,6 +5,7 @@ CONF_BATTERY_POWER_SENSOR = "battery_power_sensor"
 CONF_PV_POWER_SENSOR = "pv_power_sensor"
 CONF_LOAD_POWER_SENSOR = "load_power_sensor"
 CONF_GRID_POWER_SENSOR = "grid_power_sensor"
+CONF_GRID_CONNECTION_SENSOR = "grid_connection_sensor"
 CONF_BUY_PRICE_SENSOR = "buy_price_sensor"
 CONF_SELL_PRICE_SENSOR = "sell_price_sensor"
 CONF_PV_FORECAST_TODAY_SENSOR = "pv_forecast_today_sensor"
@@ -40,6 +41,8 @@ DEFAULT_PSTRYK_SELL_PRICE_SENSOR = "sensor.pstryk_aio_obecna_cena_sprzedazy_prad
 DEFAULT_PSTRYK_SELL_PRICE_TOMORROW_SENSOR = "sensor.pstryk_aio_cena_sprzedazy_pradu_jutro"
 MODERN_PSTRYK_BUY_PRICE_SENSOR = "sensor.pstryk_current_buy_price"
 MODERN_PSTRYK_SELL_PRICE_SENSOR = "sensor.pstryk_current_sell_price"
+MODERN_PSTRYK_BUY_PRICE_SCHEDULE_SENSOR = "sensor.pstryk_json_buy"
+MODERN_PSTRYK_SELL_PRICE_SCHEDULE_SENSOR = "sensor.pstryk_json_sell"
 
 DEFAULT_BATTERY_CAPACITY_KWH = 30.0
 DEFAULT_MIN_SOC = 15.0

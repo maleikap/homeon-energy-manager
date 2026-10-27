@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.2.57
+
+- Dodano opcjonalną encję obecności sieci lub napięcia fazy do pewnego wykrywania pracy OFF-GRID. Manager nie uznaje samego odczytu `0 W` za awarię sieci.
+- W trybie OFF-GRID wyłączane są handel energią, eksport i ładowanie z sieci, a Deye otrzymuje pełny prąd ładowania i rozładowania: PV zasila dom, a nadwyżka ładuje magazyn.
+- Zachowano właściwy tryb instalacji: `Zero Export To CT` dla CT oraz `Zero Export To Load` dla LOAD.
+- Przy pełnym magazynie nadal działa ochrona ładowania; ograniczenie nadwyżki PV jest wtedy prawidłowe, ponieważ bez sieci nie ma dokąd jej wyeksportować.
+- Dodano sensory `Stan połączenia z siecią`, `Źródło stanu sieci` i `OFF-GRID` dla karty oraz automatyzacji.
+- Dodano testy zaniku sieci, napięcia `0 V`, obu typów instalacji oraz zabezpieczenie przed fałszywym OFF-GRID przy samym bilansie `0 W`.
+
+## 1.2.56
+
+- Wieczorna decyzja sprzedaży porównuje bieżącą cenę również z cenami następnego poranka z pełnego, 48-godzinnego harmonogramu Pstryk.
+- Aktualna integracja `balgerion/ha_Pstryk` jest uzupełniana danymi z `sensor.pstryk_json_buy` i `sensor.pstryk_json_sell`, ponieważ zwykłe sensory ceny bieżącej publikują w atrybucie `All prices` wyłącznie bieżący dzień.
+- Obsłużono wiele wpisów Pstryk w jednym Home Assistant. Encje z końcówką `_2`, `_3` itd. są łączone z odpowiadającym im harmonogramem jutra, bez mieszania danych różnych instalacji.
+- Dodano test przypadku 0,72 PLN/kWh wieczorem i 1,01 PLN/kWh o 07:00. Manager zachowuje energię i przechodzi w oczekiwanie na lepszą cenę.
+
 ## 1.2.55
 
 - Nocne zużycie nie jest już liczone podwójnie przy wyznaczaniu celu ładowania z sieci. Przy dobrej prognozie PV manager nie ustawia z tego powodu celu 95%.

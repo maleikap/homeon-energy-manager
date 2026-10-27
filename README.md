@@ -63,9 +63,11 @@ Manager nie korzysta z dziennego kosztu ani dziennej wartości sprzedaży jako a
 Starsza integracja `Pstryk-all-in-one` korzysta z wyłączonego API i może zwracać błędy `403`, `404` lub `auth_test_failed`. HomeOn automatycznie obsługuje również aktualną integrację `balgerion/ha_Pstryk`, która korzysta z endpointu `unified-metrics` i udostępnia encje:
 
 - `sensor.pstryk_current_buy_price`,
-- `sensor.pstryk_current_sell_price`.
+- `sensor.pstryk_current_sell_price`,
+- `sensor.pstryk_json_buy`,
+- `sensor.pstryk_json_sell`.
 
-Jeżeli stare encje Pstryk AIO są niedostępne, a nowe sensory istnieją, Manager przełączy się na nie automatycznie bez ponownej konfiguracji strategii.
+W opcjach integracji Pstryk należy włączyć **sensory JSON z cenami**. Zwykłe sensory `current_*` udostępniają w atrybucie `All prices` tylko bieżący dzień, natomiast sensory JSON zawierają także ceny jutra. HomeOn dołącza je automatycznie do harmonogramu, dzięki czemu wieczorem może zaczekać ze sprzedażą na droższą godzinę następnego poranka. Obsługiwane są również encje z końcówkami `_2`, `_3` itd. Jeżeli stare encje Pstryk AIO są niedostępne, a nowe sensory istnieją, Manager przełączy się na nie automatycznie bez ponownej konfiguracji strategii.
 
 ### Prognoza produkcji PV
 
@@ -86,6 +88,7 @@ HomeOn Energy Manager potrzebuje co najmniej:
 - mocy PV,
 - mocy domu,
 - mocy sieci,
+- opcjonalnie: stanu połączenia z siecią albo napięcia fazy do wykrywania OFF-GRID,
 - przełącznika ładowania z sieci,
 - przełącznika eksportu nadwyżki,
 - nastawy maksymalnego prądu ładowania,
@@ -96,6 +99,24 @@ Do pełnego sterowania Deye potrzebna jest również encja trybu pracy falownika
 W zwykłej pracy i podczas wybranych najgorszych godzin manager ustawia `Zero Export To CT`, aby falownik zasilał dom i ładował magazyn. Przed tymi godzinami tryb `PV_PRICE_EXPORT` używa `Export First` z zablokowanym rozładowaniem baterii: bieżąca produkcja PV trafia do domu i sieci, a magazyn zachowuje wolne miejsce na późniejsze ładowanie. Tak samo działa oczekiwanie z baterią na lepszą cenę sprzedaży. Przy dodatniej cenie manager włącza `Sell Solar`, a przy cenie zerowej lub ujemnej go wyłącza. Manager nigdy nie zmienia nastawy `Solar Sell Power`, także podczas sprzedaży baterii i przygotowania miejsca przed ceną ujemną. Właściwy limit eksportu należy ustawić bezpośrednio w Deye.
 
 Nazwy encji zależą od użytej integracji falownika i konfiguracji Home Assistant.
+
+### Praca OFF-GRID
+
+W konfiguracji integracji warto wskazać encję **Obecność sieci / napięcie sieci**. Może to być `binary_sensor` informujący o połączeniu z siecią, tekstowy sensor stanu Deye albo sensor napięcia fazy. Odczyt napięcia do 50 V oznacza OFF-GRID, a od 80 V obecność sieci.
+
+Dla standardowej pary `sensor.inverter_grid_power` i `sensor.inverter_grid_voltage_l1` HomeOn wykrywa sensor napięcia automatycznie. Przy niestandardowych nazwach lub kilku falownikach należy wskazać właściwą encję ręcznie w konfiguracji integracji.
+
+HomeOn celowo nie rozpoznaje zaniku sieci wyłącznie po mocy sieci równej `0 W`, ponieważ taki sam odczyt występuje podczas poprawnego bilansowania Zero Export.
+
+Po wykryciu OFF-GRID manager:
+
+- wyłącza ładowanie z sieci i eksport,
+- wyłącza decyzje handlowe niezależnie od ceny,
+- ustawia normalny tryb własnego zużycia odpowiedni dla instalacji CT lub LOAD,
+- pozostawia pełny prąd ładowania i rozładowania, aby PV najpierw zasilało dom, a nadwyżka ładowała magazyn,
+- ustawia aktywny program Time of Use na `No Grid` i minimalny SOC falownika.
+
+Przy pełnym magazynie prąd ładowania jest nadal blokowany. W OFF-GRID jest to konieczne: po zasileniu domu nadwyżki nie można ani zapisać w baterii, ani oddać do sieci.
 
 ## Instalacja przez HACS
 

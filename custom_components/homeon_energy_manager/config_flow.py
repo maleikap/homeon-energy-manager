@@ -12,6 +12,7 @@ from .const import (
     CONF_PV_POWER_SENSOR,
     CONF_LOAD_POWER_SENSOR,
     CONF_GRID_POWER_SENSOR,
+    CONF_GRID_CONNECTION_SENSOR,
     CONF_BUY_PRICE_SENSOR,
     CONF_SELL_PRICE_SENSOR,
     CONF_PV_FORECAST_TODAY_SENSOR,
@@ -55,6 +56,10 @@ from .const import (
 
 SENSOR_SELECTOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="sensor")
+)
+
+GRID_CONNECTION_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain=["binary_sensor", "sensor"])
 )
 
 SWITCH_SELECTOR = selector.EntitySelector(
@@ -102,6 +107,7 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             required_entity(CONF_PV_POWER_SENSOR): SENSOR_SELECTOR,
             required_entity(CONF_LOAD_POWER_SENSOR): SENSOR_SELECTOR,
             required_entity(CONF_GRID_POWER_SENSOR): SENSOR_SELECTOR,
+            optional_entity(CONF_GRID_CONNECTION_SENSOR): GRID_CONNECTION_SELECTOR,
             required_entity(CONF_BUY_PRICE_SENSOR, DEFAULT_PSTRYK_BUY_PRICE_SENSOR): SENSOR_SELECTOR,
             required_entity(CONF_SELL_PRICE_SENSOR, DEFAULT_PSTRYK_SELL_PRICE_SENSOR): SENSOR_SELECTOR,
             optional_entity(CONF_PV_FORECAST_TODAY_SENSOR): SENSOR_SELECTOR,

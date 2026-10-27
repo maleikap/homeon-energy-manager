@@ -22,6 +22,8 @@ MAIN_SENSOR_KEYS = {
     "load_power",
     "grid_power",
     "grid_status",
+    "grid_connection_status",
+    "off_grid",
     "grid_import_w",
     "grid_export_w",
     "buy_price",
@@ -59,6 +61,9 @@ SENSORS = [
     ("ct_balanced_load_power", "Moc domu z bilansu CT", UnitOfPower.WATT, "mdi:current-ac"),
     ("grid_power", "Moc sieci", UnitOfPower.WATT, "mdi:transmission-tower"),
     ("grid_status", "Status sieci", None, "mdi:transmission-tower-import"),
+    ("grid_connection_status", "Stan połączenia z siecią", None, "mdi:transmission-tower"),
+    ("grid_connection_source", "Źródło stanu sieci", None, "mdi:source-branch"),
+    ("off_grid", "OFF-GRID", None, "mdi:transmission-tower-off"),
     ("grid_import_w", "Import z sieci", UnitOfPower.WATT, "mdi:transmission-tower-import"),
     ("grid_export_w", "Eksport do sieci", UnitOfPower.WATT, "mdi:transmission-tower-export"),
     ("deye_self_power", "Pobór własny falownika", UnitOfPower.WATT, "mdi:power-plug"),
@@ -331,7 +336,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.55",
+            "sw_version": "1.2.56",
         }
 
     @property
