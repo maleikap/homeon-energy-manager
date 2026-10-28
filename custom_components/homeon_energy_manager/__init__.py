@@ -4,7 +4,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH, DOMAIN
+from .const import (
+    CONF_BATTERY_CAPACITY_KWH,
+    CONF_PV_INSTALLED_KWP,
+    DEFAULT_BATTERY_CAPACITY_KWH,
+    DEFAULT_PV_INSTALLED_KWP,
+    DOMAIN,
+)
 from .coordinator import HomeOnEnergyCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.SWITCH, Platform.NUMBER]
@@ -19,6 +25,7 @@ DEFAULT_RUNTIME_OPTIONS = {
     "inverter_charge_current_a": 80,
     "inverter_discharge_current_a": 120,
     "inverter_safe_discharge_current_a": 20,
+    CONF_PV_INSTALLED_KWP: DEFAULT_PV_INSTALLED_KWP,
     CONF_BATTERY_CAPACITY_KWH: DEFAULT_BATTERY_CAPACITY_KWH,
     "economic_good_sell_price": 0.55,
     "economic_cheap_charge_price": 0.30,

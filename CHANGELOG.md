@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.59
+
+- Przywrócono pole `Moc instalacji PV kWp` w formularzu tworzenia i edycji konfiguracji Managera.
+- Zapisana moc instalacji PV jest ponownie ładowana do ustawień roboczych po restarcie Home Assistant, dzięki czemu ocena realnej produkcji PV nie przechodzi bez powodu w stan `WYŁĄCZONE`.
+- Zachowano również encję `number` do szybkiej zmiany mocy instalacji bez otwierania konfiguracji integracji.
+
 ## 1.2.58
 
 - Dzienne pobranie, oddanie, koszt zakupu i wartość sprzedaży są synchronizowane bezpośrednio z Pstryk AIO; obliczenia z mocy CT działają wyłącznie awaryjnie, gdy Pstryk nie udostępnia danego licznika.

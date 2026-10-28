@@ -8,7 +8,12 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DEFAULT_BATTERY_CAPACITY_KWH, DOMAIN
+from .const import (
+    CONF_PV_INSTALLED_KWP,
+    DEFAULT_BATTERY_CAPACITY_KWH,
+    DEFAULT_PV_INSTALLED_KWP,
+    DOMAIN,
+)
 
 
 NUMBERS = [
@@ -83,9 +88,9 @@ NUMBERS = [
         20,
     ),
     (
-        "pv_installed_kwp",
+        CONF_PV_INSTALLED_KWP,
         "Moc instalacji PV kWp",
-        0,
+        DEFAULT_PV_INSTALLED_KWP,
         200,
         0.1,
         "kWp",
@@ -158,7 +163,7 @@ class HomeOnNumber(CoordinatorEntity, NumberEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.58",
+            "sw_version": "1.2.59",
         }
 
     @property

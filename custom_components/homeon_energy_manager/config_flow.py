@@ -18,6 +18,7 @@ from .const import (
     CONF_PV_FORECAST_TODAY_SENSOR,
     CONF_PV_FORECAST_TOMORROW_SENSOR,
     CONF_INSTALLATION_TYPE,
+    CONF_PV_INSTALLED_KWP,
     CONF_BATTERY_CAPACITY_KWH,
     CONF_MIN_SOC,
     CONF_EMERGENCY_SOC,
@@ -49,6 +50,7 @@ from .const import (
     DEFAULT_INVERTER_WORK_MODE_SELL_OPTION,
     DEFAULT_INVERTER_WORK_MODE_PV_CHARGE_OPTION,
     DEFAULT_INSTALLATION_TYPE,
+    DEFAULT_PV_INSTALLED_KWP,
     INSTALLATION_TYPE_CT,
     INSTALLATION_TYPE_LOAD,
 )
@@ -112,6 +114,7 @@ def _schema(defaults: dict | None = None) -> vol.Schema:
             required_entity(CONF_SELL_PRICE_SENSOR, DEFAULT_PSTRYK_SELL_PRICE_SENSOR): SENSOR_SELECTOR,
             optional_entity(CONF_PV_FORECAST_TODAY_SENSOR): SENSOR_SELECTOR,
             optional_entity(CONF_PV_FORECAST_TOMORROW_SENSOR): SENSOR_SELECTOR,
+            vol.Required(CONF_PV_INSTALLED_KWP, default=value(CONF_PV_INSTALLED_KWP, DEFAULT_PV_INSTALLED_KWP)): vol.Coerce(float),
             vol.Required(CONF_BATTERY_CAPACITY_KWH, default=value(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH)): vol.Coerce(float),
             vol.Required(CONF_MIN_SOC, default=value(CONF_MIN_SOC, DEFAULT_MIN_SOC)): vol.Coerce(float),
             vol.Required(CONF_EMERGENCY_SOC, default=value(CONF_EMERGENCY_SOC, DEFAULT_EMERGENCY_SOC)): vol.Coerce(float),

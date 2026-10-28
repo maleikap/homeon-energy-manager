@@ -11,10 +11,12 @@ CONF_SELL_PRICE_SENSOR = "sell_price_sensor"
 CONF_PV_FORECAST_TODAY_SENSOR = "pv_forecast_today_sensor"
 CONF_PV_FORECAST_TOMORROW_SENSOR = "pv_forecast_tomorrow_sensor"
 CONF_INSTALLATION_TYPE = "installation_type"
+CONF_PV_INSTALLED_KWP = "pv_installed_kwp"
 
 INSTALLATION_TYPE_CT = "ct"
 INSTALLATION_TYPE_LOAD = "load"
 DEFAULT_INSTALLATION_TYPE = INSTALLATION_TYPE_CT
+DEFAULT_PV_INSTALLED_KWP = 0.0
 
 CONF_BATTERY_CAPACITY_KWH = "battery_capacity_kwh"
 CONF_MIN_SOC = "min_soc"
