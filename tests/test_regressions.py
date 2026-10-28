@@ -40,10 +40,21 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.58", manifest["version"])
+        self.assertEqual("1.2.59", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.58"', source)
+            self.assertIn('"sw_version": "1.2.59"', source)
+
+    def test_installed_pv_capacity_remains_in_options_and_runtime(self) -> None:
+        constants = (COMPONENT / "const.py").read_text(encoding="utf-8")
+        config_flow = (COMPONENT / "config_flow.py").read_text(encoding="utf-8")
+        setup = (COMPONENT / "__init__.py").read_text(encoding="utf-8")
+        coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+
+        self.assertIn('CONF_PV_INSTALLED_KWP = "pv_installed_kwp"', constants)
+        self.assertIn("vol.Required(CONF_PV_INSTALLED_KWP", config_flow)
+        self.assertIn("CONF_PV_INSTALLED_KWP: DEFAULT_PV_INSTALLED_KWP", setup)
+        self.assertIn("self._runtime_float(CONF_PV_INSTALLED_KWP", coordinator)
 
     def test_profit_mode_accounts_for_repurchase_losses_and_cycle_cost(self) -> None:
         coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")

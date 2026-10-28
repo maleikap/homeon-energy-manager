@@ -17,6 +17,7 @@ from .const import (
     CONF_SOC_SENSOR,
     CONF_BATTERY_POWER_SENSOR,
     CONF_PV_POWER_SENSOR,
+    CONF_PV_INSTALLED_KWP,
     CONF_LOAD_POWER_SENSOR,
     CONF_GRID_POWER_SENSOR,
     CONF_GRID_CONNECTION_SENSOR,
@@ -1712,7 +1713,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         return result
 
     def _pv_reality_data(self, pv_power_w: float) -> dict[str, Any]:
-        pv_kwp = self._runtime_float("pv_installed_kwp", 0.0)
+        pv_kwp = self._runtime_float(CONF_PV_INSTALLED_KWP, 0.0)
 
         if pv_kwp <= 0:
             return {

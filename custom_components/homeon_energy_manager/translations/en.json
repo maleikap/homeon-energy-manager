@@ -17,6 +17,7 @@
           "sell_price_sensor": "Sell price",
           "pv_forecast_today_sensor": "PV forecast today",
           "pv_forecast_tomorrow_sensor": "PV forecast tomorrow",
+          "pv_installed_kwp": "Installed PV capacity kWp",
           "battery_capacity_kwh": "Battery capacity kWh",
           "min_soc": "Minimum SOC",
           "emergency_soc": "Emergency SOC",
@@ -36,6 +37,7 @@
         "data_description": {
           "installation_type": "CT: loads may be on the GRID side and are measured by current transformers; the inverter uses Zero Export To CT. LOAD: all loads are behind LOAD without CT clamps; the inverter uses Zero Export To Load.",
           "grid_connection_sensor": "Select a Deye grid-connected status or phase-voltage entity. It is required for reliable OFF-GRID detection; 0 W alone cannot distinguish an outage from correct zero balancing.",
+          "pv_installed_kwp": "Combined nominal capacity of all PV modules in kWp. This value is used to evaluate actual PV production.",
           "battery_capacity_kwh": "Actual usable capacity of the complete battery system.",
           "night_consumption_kwh": "Review this value after changing battery capacity. Night consumption with its margin should not exceed battery capacity.",
           "night_safety_margin": "Night reserve multiplier. An excessive value can raise the minimum SOC target to 95%."
@@ -63,6 +65,7 @@
           "sell_price_sensor": "Sell price",
           "pv_forecast_today_sensor": "PV forecast today",
           "pv_forecast_tomorrow_sensor": "PV forecast tomorrow",
+          "pv_installed_kwp": "Installed PV capacity kWp",
           "battery_capacity_kwh": "Battery capacity kWh",
           "min_soc": "Minimum SOC",
           "emergency_soc": "Emergency SOC",
@@ -82,6 +85,7 @@
         "data_description": {
           "installation_type": "CT: loads may be on the GRID side and are measured by current transformers; the inverter uses Zero Export To CT. LOAD: all loads are behind LOAD without CT clamps; the inverter uses Zero Export To Load.",
           "grid_connection_sensor": "Select a Deye grid-connected status or phase-voltage entity. It is required for reliable OFF-GRID detection; 0 W alone cannot distinguish an outage from correct zero balancing.",
+          "pv_installed_kwp": "Combined nominal capacity of all PV modules in kWp. This value is used to evaluate actual PV production.",
           "battery_capacity_kwh": "Actual usable capacity of the complete battery system.",
           "night_consumption_kwh": "Review this value after changing battery capacity. Night consumption with its margin should not exceed battery capacity.",
           "night_safety_margin": "Night reserve multiplier. An excessive value can raise the minimum SOC target to 95%."

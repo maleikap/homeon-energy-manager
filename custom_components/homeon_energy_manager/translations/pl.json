@@ -16,6 +16,7 @@
           "sell_price_sensor": "Cena sprzedaży energii",
           "pv_forecast_today_sensor": "Prognoza PV dziś",
           "pv_forecast_tomorrow_sensor": "Prognoza PV jutro",
+          "pv_installed_kwp": "Moc instalacji PV kWp",
           "battery_capacity_kwh": "Pojemność magazynu kWh",
           "min_soc": "Minimalny SOC",
           "emergency_soc": "Awaryjny SOC",
@@ -35,6 +36,7 @@
         "data_description": {
           "installation_type": "CT: odbiorniki mogą być po stronie GRID i są mierzone przekładnikami; falownik używa Zero Export To CT. LOAD: wszystkie odbiorniki są za wyjściem LOAD, bez przekładników; falownik używa Zero Export To Load.",
           "grid_connection_sensor": "Wybierz encję Deye informującą o połączeniu z siecią albo napięciu fazy. Jest wymagana do pewnego wykrywania OFF-GRID; same 0 W na liczniku nie odróżnia awarii od poprawnego bilansowania.",
+          "pv_installed_kwp": "Łączna moc znamionowa wszystkich paneli PV w kWp. Wartość jest używana do oceny realnej produkcji PV.",
           "battery_capacity_kwh": "Rzeczywista użyteczna pojemność całego magazynu.",
           "night_consumption_kwh": "Sprawdź tę wartość po zmianie pojemności magazynu. Zużycie nocne z marginesem nie powinno przekraczać pojemności baterii.",
           "night_safety_margin": "Mnożnik rezerwy nocnej. Zbyt wysoka wartość może podnieść minimalny cel SOC do 95%."
@@ -62,6 +64,7 @@
           "sell_price_sensor": "Cena sprzedaży energii",
           "pv_forecast_today_sensor": "Prognoza PV dziś",
           "pv_forecast_tomorrow_sensor": "Prognoza PV jutro",
+          "pv_installed_kwp": "Moc instalacji PV kWp",
           "battery_capacity_kwh": "Pojemność magazynu kWh",
           "min_soc": "Minimalny SOC",
           "emergency_soc": "Awaryjny SOC",
@@ -81,6 +84,7 @@
         "data_description": {
           "installation_type": "CT: odbiorniki mogą być po stronie GRID i są mierzone przekładnikami; falownik używa Zero Export To CT. LOAD: wszystkie odbiorniki są za wyjściem LOAD, bez przekładników; falownik używa Zero Export To Load.",
           "grid_connection_sensor": "Wybierz encję Deye informującą o połączeniu z siecią albo napięciu fazy. Jest wymagana do pewnego wykrywania OFF-GRID; same 0 W na liczniku nie odróżnia awarii od poprawnego bilansowania.",
+          "pv_installed_kwp": "Łączna moc znamionowa wszystkich paneli PV w kWp. Wartość jest używana do oceny realnej produkcji PV.",
           "battery_capacity_kwh": "Rzeczywista użyteczna pojemność całego magazynu.",
           "night_consumption_kwh": "Sprawdź tę wartość po zmianie pojemności magazynu. Zużycie nocne z marginesem nie powinno przekraczać pojemności baterii.",
           "night_safety_margin": "Mnożnik rezerwy nocnej. Zbyt wysoka wartość może podnieść minimalny cel SOC do 95%."
