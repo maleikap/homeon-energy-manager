@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.60
+
+- tryb zarabiania może sprzedać energię do minimalnego SOC, gdy pełny cykl sprzedaży i późniejszego odkupienia pozostaje opłacalny,
+- po potwierdzonej sprzedaży manager zapamiętuje poziom magazynu i odtwarza go w najtańszych wymaganych godzinach przed porankiem,
+- ładowanie odtworzeniowe uwzględnia sprawność, koszt cyklu baterii oraz maksymalną opłacalną cenę zakupu,
+- sprzedaż w trybie zarabiania ma pierwszeństwo przed zwykłym tanim ładowaniem,
+- praca z PV bez ładowania z sieci przywraca minimalny SOC Time of Use zamiast blokować rozładowanie wartością 95%.
+
 ## 1.2.59
 
 - Przywrócono pole `Moc instalacji PV kWp` w formularzu tworzenia i edycji konfiguracji Managera.

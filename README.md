@@ -159,9 +159,9 @@ HomeOn porównuje najlepszą cenę sprzedaży z najtańszą ceną zakupu w harmo
 - straty wynikające ze sprawności ładowania i rozładowania,
 - ustawiony koszt cyklu baterii.
 
-Magazyn nie musi być pełny. W godzinach 06:00–10:00 HomeOn może sprzedać energię znajdującą się ponad dynamiczną rezerwą domu i nocy, jeżeli bieżąca cena sprzedaży zapewnia wymagany zysk względem najtańszego późniejszego zakupu. Poza porannym oknem sprzedaż jest kierowana do najlepszego opłacalnego okna cenowego. Manager nigdy nie sprzedaje energii poniżej obliczonej rezerwy.
+Magazyn nie musi być pełny. HomeOn kieruje sprzedaż do najlepszego opłacalnego okna cenowego. Gdy późniejszy zakup — po uwzględnieniu obu sprawności i kosztu cyklu — nadal daje wymagany zysk, manager może sprzedać użyteczną energię aż do minimalnego SOC falownika. W pozostałych przypadkach pozostawia dynamiczną rezerwę domu i nocy.
 
-HomeOn nie kupuje energii tylko po to, aby ponownie ją sprzedać. Po porannej sprzedaży późniejsze ładowanie z sieci jest uruchamiane w najtańszych wymaganych godzinach wyłącznie wtedy, gdy prognozowane PV nie wystarczy do odbudowania celu SOC. Bez kompletnego harmonogramu cen tryb zarabiania nie wykonuje cyklu.
+Po rzeczywistym potwierdzeniu eksportu HomeOn zapamiętuje SOC sprzed sprzedaży. Jeżeli PV nie odtworzy magazynu, energia jest odkupywana tylko w najtańszych wymaganych godzinach przed kolejnym porankiem i tylko poniżej wyliczonej maksymalnej opłacalnej ceny. Poza wybranymi godzinami ładowania Time of Use wraca do minimalnego SOC, aby bateria mogła zasilać dom. Sam dry-run nie uzbraja odkupienia. Bez kompletnego harmonogramu cen tryb zarabiania nie wykonuje takiego cyklu.
 
 Encje i parametry można później zmienić przez **Ustawienia → Urządzenia i usługi → HomeOn Energy Manager → Konfiguruj**, bez usuwania integracji. W tym miejscu można również dopasować encję trybu pracy falownika oraz dokładne nazwy opcji Deye.
 

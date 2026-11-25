@@ -298,7 +298,11 @@ def build_planner_data(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     # reserve in the presentation/planning pass.
     if (
         profit_mode_enabled
-        and str(data.get("profit_mode_current_good_pv_sale", "OFF")).upper() == "ON"
+        and str(data.get("mode", "NORMAL")) == "SELL_BATTERY_HIGH_PRICE"
+        and (
+            str(data.get("profit_mode_current_good_pv_sale", "OFF")).upper() == "ON"
+            or str(data.get("profit_mode_current_good_grid_sale", "OFF")).upper() == "ON"
+        )
     ):
         safe_to_sell_kwh = max(
             0.0,

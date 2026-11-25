@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.59", manifest["version"])
+        self.assertEqual("1.2.60", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.59"', source)
+            self.assertIn('"sw_version": "1.2.60"', source)
 
     def test_installed_pv_capacity_remains_in_options_and_runtime(self) -> None:
         constants = (COMPONENT / "const.py").read_text(encoding="utf-8")
@@ -77,11 +77,29 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn("current_good_pv_sale", coordinator)
         self.assertIn("current_sell_price >= best_sell_price - 0.01", coordinator)
         self.assertIn('item["dt"] > now + timedelta(minutes=20)', coordinator)
-        self.assertIn("prepare_charge = False", coordinator)
+        self.assertIn("grid_refill_allowed", coordinator)
+        self.assertIn("max_profitable_repurchase_price", coordinator)
+        self.assertIn("profit_recharge_pending", coordinator)
+        self.assertIn('mode = "PROFIT_RECHARGE"', coordinator)
         self.assertIn('"profit_mode_expected_net_profit"', sensors)
         self.assertNotIn("sell_price_now >= best_sell_price * 0.95", planner)
         self.assertIn('data.get("profit_mode_current_good_pv_sale", "OFF")', planner)
+        self.assertIn('data.get("profit_mode_current_good_grid_sale", "OFF")', planner)
         self.assertIn('data.get("profit_mode_sale_energy_kwh")', planner)
+
+    def test_profitable_sale_is_recharged_later_and_persists_across_restart(self) -> None:
+        coordinator = (COMPONENT / "coordinator.py").read_text(encoding="utf-8")
+        learning = (COMPONENT / "learning.py").read_text(encoding="utf-8")
+        sensors = (COMPONENT / "sensor.py").read_text(encoding="utf-8")
+
+        self.assertIn("round_trip_efficiency * max(0.0, current_sell_price - cycle_cost)", coordinator)
+        self.assertIn("if forecast_refill_allowed or grid_refill_allowed", coordinator)
+        self.assertIn('"PROFIT_RECHARGE"', coordinator)
+        self.assertIn('learn["profit_recharge_pending"]', learning)
+        self.assertIn("profitable_export_confirmed", learning)
+        self.assertIn("battery_discharge_w >= 200.0", learning)
+        self.assertIn("grid_export_w >= 100.0", learning)
+        self.assertIn('"profit_recharge_windows"', sensors)
 
     def test_daily_financial_stats_are_calculated_live(self) -> None:
         learning = (COMPONENT / "learning.py").read_text(encoding="utf-8")
@@ -174,9 +192,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn('str(last_mode) == "CHEAP_CHARGE"', source)
         self.assertIn('not cheap_grid_charge_plan.get("charge_now", False)', source)
 
-        pv_sale_mode = source.index(
-            'profit_mode_plan.get("current_good_pv_sale", False)'
-        )
+        pv_sale_mode = source.index("sell_ready\n            and profit_mode_enabled")
         cheap_mode = source.index('mode = "CHEAP_CHARGE"', pv_sale_mode)
         self.assertLess(pv_sale_mode, cheap_mode)
 
@@ -190,7 +206,7 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         executor = source[executor_start:executor_end]
 
         self.assertIn('elif mode == "HOME_BATTERY_PRIORITY":', executor)
-        self.assertIn('elif mode in ("NEGATIVE_IMPORT", "CHEAP_CHARGE"):', executor)
+        self.assertIn('elif mode in ("NEGATIVE_IMPORT", "CHEAP_CHARGE", "PROFIT_RECHARGE"):', executor)
         self.assertIn('elif mode == "EMERGENCY_RESERVE":', executor)
         self.assertNotIn("BLOCKED_HOME_PRIORITY", executor)
 
@@ -209,12 +225,15 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn('"no grid"', executor)
         self.assertIn("add_tou_commands(grid_charge=tou_grid_charge", executor)
         self.assertIn("and not full_soc_charge_lock", executor)
-        self.assertIn('data.get("charge_target_soc")', executor)
-        self.assertIn('data.get("cheap_charge_grid_target_soc")', executor)
+        self.assertIn('data.get("charge_target_soc", 95.0)', executor)
+        self.assertIn('else "cheap_charge_grid_target_soc"', executor)
+        self.assertIn('"profit_recharge_grid_target_soc"', executor)
         self.assertIn('data.get("discharge_target_soc")', executor)
         self.assertIn('data.get("self_use_reserve_soc")', executor)
         self.assertIn('tou_target_soc = minimum_soc', executor)
         self.assertIn('"rozładowanie do minimalnego SOC falownika"', executor)
+        self.assertIn('executor_mode in {"PV_LOW_PRICE_CHARGE", "PV_CHARGE"}', executor)
+        self.assertIn('"ładowanie z PV bez blokowania rozładowania baterii"', executor)
         self.assertNotIn('executor_mode == "PREPARE_NEGATIVE_PRICE_WINDOW"', executor)
         self.assertIn('"AKTYWNE — PRZYWRÓCONO TRYB I CEL ROZŁADOWANIA"', executor)
         self.assertIn('"inverter_tou_control_status"', executor)

@@ -252,6 +252,63 @@ async def update_learning(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     learn["stored_grid_charge_kwh"] = stored_grid_charge_kwh
     learn["stored_grid_charge_cost_pln_per_kwh"] = stored_grid_charge_cost
 
+    # Remember a profitable battery sale which is meant to be rebuilt from a
+    # later cheap grid window.  Arm the plan only after real battery discharge
+    # and grid export are visible.  This deliberately excludes dry-run and a
+    # sale preview which the inverter never executed.
+    profit_recharge_pending = bool(learn.get("profit_recharge_pending", False))
+    profit_recharge_target_soc = min(
+        95.0,
+        max(0.0, _f(learn.get("profit_recharge_target_soc"), 0.0)),
+    )
+    profit_recharge_max_buy_price = max(
+        0.0,
+        _f(learn.get("profit_recharge_max_buy_price"), 0.0),
+    )
+    profit_recharge_sale_price = max(
+        0.0,
+        _f(learn.get("profit_recharge_sale_price"), 0.0),
+    )
+    mode = str(data.get("mode", "UNKNOWN"))
+    profitable_export_confirmed = bool(
+        mode == "SELL_BATTERY_HIGH_PRICE"
+        and str(data.get("profit_mode_grid_refill_allowed", "OFF")).upper() == "ON"
+        and battery_discharge_w >= 200.0
+        and grid_export_w >= 100.0
+    )
+
+    if profitable_export_confirmed:
+        profit_recharge_pending = True
+        profit_recharge_target_soc = max(
+            profit_recharge_target_soc,
+            min(
+                95.0,
+                max(
+                    soc,
+                    _f(data.get("profit_mode_recharge_target_soc"), soc),
+                ),
+            ),
+        )
+        profit_recharge_max_buy_price = max(
+            profit_recharge_max_buy_price,
+            _f(data.get("profit_mode_max_repurchase_price"), 0.0),
+        )
+        profit_recharge_sale_price = max(profit_recharge_sale_price, sell_price)
+    elif (
+        profit_recharge_pending
+        and mode != "SELL_BATTERY_HIGH_PRICE"
+        and soc >= profit_recharge_target_soc - 0.5
+    ):
+        profit_recharge_pending = False
+        profit_recharge_target_soc = 0.0
+        profit_recharge_max_buy_price = 0.0
+        profit_recharge_sale_price = 0.0
+
+    learn["profit_recharge_pending"] = profit_recharge_pending
+    learn["profit_recharge_target_soc"] = profit_recharge_target_soc
+    learn["profit_recharge_max_buy_price"] = profit_recharge_max_buy_price
+    learn["profit_recharge_sale_price"] = profit_recharge_sale_price
+
     pv_forecast_factor = min(1.35, max(0.35, _f(learn.get("pv_forecast_factor"), 1.0)))
 
     _ewma(learn, "avg_load_w", load_w)
@@ -307,7 +364,6 @@ async def update_learning(coordinator, data: dict[str, Any]) -> dict[str, Any]:
     learn["energy_battery_discharge_kwh"] = _f(learn.get("energy_battery_discharge_kwh"), 0.0) + battery_discharge_w * dt_hours / 1000.0
     learn["energy_deye_self_kwh"] = _f(learn.get("energy_deye_self_kwh"), 0.0) + deye_self_w * dt_hours / 1000.0
 
-    mode = str(data.get("mode", "UNKNOWN"))
     mode_counts = learn.get("mode_counts")
     if not isinstance(mode_counts, dict):
         mode_counts = {}
@@ -402,6 +458,10 @@ async def update_learning(coordinator, data: dict[str, Any]) -> dict[str, Any]:
             learn.get("stored_grid_charge_cost_pln_per_kwh"),
             3,
         ),
+        "profit_recharge_pending": "ON" if profit_recharge_pending else "OFF",
+        "profit_recharge_target_soc": _round(profit_recharge_target_soc, 1),
+        "profit_recharge_max_buy_price": _round(profit_recharge_max_buy_price, 3),
+        "profit_recharge_sale_price": _round(profit_recharge_sale_price, 3),
         "learn_previous_day_pv_kwh": _round(learn.get("previous_day_pv_kwh"), 2),
         "learn_previous_day_forecast_kwh": _round(learn.get("previous_day_forecast_kwh"), 2),
         "pv_forecast_today_calibrated": _round(pv_forecast_today_kwh * pv_forecast_factor, 2),
