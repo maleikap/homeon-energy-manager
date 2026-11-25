@@ -247,6 +247,15 @@ SENSORS = [
     ("profit_mode_round_trip_efficiency", "Sprawność cyklu magazynu", PERCENT, "mdi:battery-sync"),
     ("profit_mode_forecast_refill_allowed", "Tryb zarabiania — późniejsze uzupełnienie z PV", None, "mdi:solar-power"),
     ("profit_mode_current_good_pv_sale", "Tryb zarabiania — sprzedaż teraz przed ładowaniem PV", None, "mdi:battery-arrow-down"),
+    ("profit_mode_current_good_grid_sale", "Tryb zarabiania — sprzedaż przed tanim odkupieniem", None, "mdi:battery-arrow-down"),
+    ("profit_mode_grid_refill_allowed", "Tryb zarabiania — odkupienie z sieci opłacalne", None, "mdi:transmission-tower-import"),
+    ("profit_mode_max_repurchase_price", "Maksymalna opłacalna cena odkupienia", "PLN/kWh", "mdi:cash-check"),
+    ("profit_mode_recharge_target_soc", "SOC do odtworzenia po sprzedaży", PERCENT, "mdi:battery-sync"),
+    ("profit_recharge_pending", "Oczekuje odtworzenie energii po sprzedaży", None, "mdi:battery-clock"),
+    ("profit_recharge_windows", "Godziny odkupienia energii po sprzedaży", None, "mdi:clock-check"),
+    ("profit_recharge_grid_target_soc", "Cel SOC odkupienia energii", PERCENT, "mdi:battery-charging"),
+    ("profit_recharge_missing_kwh", "Energia do odkupienia po sprzedaży", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-plus"),
+    ("profit_recharge_reason", "Decyzja odkupienia energii po sprzedaży", None, "mdi:text-box-check"),
     ("stored_grid_charge_kwh", "Energia w magazynie kupiona z sieci", UnitOfEnergy.KILO_WATT_HOUR, "mdi:battery-plus"),
     ("stored_grid_charge_cost", "Koszt energii kupionej do magazynu", "PLN/kWh", "mdi:cash-minus"),
     ("stored_energy_sale_floor", "Minimalna opłacalna cena sprzedaży magazynu", "PLN/kWh", "mdi:cash-check"),
@@ -338,7 +347,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.59",
+            "sw_version": "1.2.60",
         }
 
     @property

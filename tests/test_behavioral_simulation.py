@@ -326,6 +326,30 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(plan["sell_now"])
         self.assertEqual(16.0, plan["reserve_soc"])
 
+    def test_profit_mode_sells_high_and_plans_cheapest_grid_refill(self):
+        now = datetime(2026, 11, 25, 17, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        buy = [4.20, 2.10, 1.40, 0.82, 0.74, 0.88] + [1.20] * 18
+        sell = [4.00] + [1.10] * 23
+        self.set_prices(coordinator, now.replace(minute=0), buy, sell)
+
+        plan = coordinator._profit_mode_plan(
+            BUY, SELL, current_buy_price=4.20, current_sell_price=4.00,
+            soc=92.0, battery_capacity_kwh=35.84, reserve_soc=50.0,
+            pv_forecast_today_kwh=0.0, pv_produced_today_kwh=0.0,
+            expected_daily_consumption_kwh=30.0, consumed_today_kwh=24.0,
+            minimum_soc=16.0, pv_power_w=0.0, load_power_w=1000.0,
+            enabled=True,
+        )
+
+        self.assertTrue(plan["grid_refill_allowed"])
+        self.assertTrue(plan["current_good_grid_sale"])
+        self.assertTrue(plan["sell_now"])
+        self.assertEqual(16.0, plan["reserve_soc"])
+        self.assertEqual(92.0, plan["recharge_target_soc"])
+        self.assertGreater(plan["sale_energy_kwh"], 20.0)
+        self.assertGreater(plan["expected_net_profit"], 50.0)
+
     def test_good_pv_does_not_sell_battery_before_best_price(self):
         now = datetime(2026, 6, 10, 7, 30, tzinfo=WARSAW)
         coordinator = self.make_coordinator(now)
@@ -542,6 +566,39 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(0.0, result["learn_stored_grid_charge_kwh"])
 
+    async def test_confirmed_profitable_export_arms_and_completes_recharge(self):
+        now = datetime(2026, 11, 25, 18, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        data = {
+            "mode": "SELL_BATTERY_HIGH_PRICE", "soc": 88.0,
+            "battery_capacity_kwh": 35.84,
+            "load_power": 1000.0, "pv_power": 0.0,
+            "grid_import_w": 0.0, "grid_export_w": 9000.0,
+            "battery_charge_w": 0.0, "battery_discharge_w": 10000.0,
+            "deye_self_power": 0.0, "buy_price": 4.20, "sell_price": 4.00,
+            "pv_forecast_today": 0.0, "pv_forecast_tomorrow": 5.0,
+            "profit_mode_grid_refill_allowed": "ON",
+            "profit_mode_recharge_target_soc": 92.0,
+            "profit_mode_max_repurchase_price": 3.40,
+        }
+
+        result = await update_learning(coordinator, data)
+
+        self.assertEqual("ON", result["profit_recharge_pending"])
+        self.assertEqual(92.0, result["profit_recharge_target_soc"])
+        self.assertEqual(3.40, result["profit_recharge_max_buy_price"])
+
+        Clock.set(now + timedelta(minutes=15))
+        data.update({
+            "mode": "NORMAL", "soc": 92.0,
+            "grid_export_w": 0.0, "battery_discharge_w": 0.0,
+            "grid_import_w": 0.0, "battery_charge_w": 0.0,
+        })
+        result = await update_learning(coordinator, data)
+
+        self.assertEqual("OFF", result["profit_recharge_pending"])
+        self.assertEqual(0.0, result["profit_recharge_target_soc"])
+
     async def test_daily_finance_uses_matching_pstryk_instance_as_source_of_truth(self):
         now = datetime(2026, 10, 27, 8, 0, tzinfo=WARSAW)
         coordinator = self.make_coordinator(now)
@@ -672,6 +729,46 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("75.0", coordinator.hass.states.get("number.inverter_program_2_soc").state)
         self.assertEqual("Grid", coordinator.hass.states.get("select.inverter_program_3_charging").state)
         self.assertEqual("43", coordinator.hass.states.get("number.inverter_program_3_soc").state)
+
+    async def test_profit_recharge_uses_its_own_target_in_selected_tou_period(self):
+        now = datetime(2026, 11, 26, 3, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_six_deye_tou_slots(coordinator)
+        coordinator.hass.states.set("select.inverter_program_2_charging", "No Grid", {"options": ["Grid", "No Grid"]})
+        coordinator.hass.states.set("number.inverter_program_2_soc", "16")
+        data = {
+            "mode": "PROFIT_RECHARGE", "soc": 20.0, "min_soc": 16.0,
+            "night_self_use_active": True, "self_use_reserve_soc": 35.0,
+            "discharge_target_soc": 35.0, "charge_target_soc": 95.0,
+            "profit_recharge_grid_target_soc": 72.0, "sell_price": 0.40,
+            "pv_power": 0.0, "load_power": 500.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("PROFIT_RECHARGE", result["inverter_control_executor_mode"])
+        self.assertEqual("Grid", coordinator.hass.states.get("select.inverter_program_2_charging").state)
+        self.assertEqual("72.0", coordinator.hass.states.get("number.inverter_program_2_soc").state)
+
+    async def test_pv_charge_keeps_tou_at_minimum_soc_for_home_discharge(self):
+        now = datetime(2026, 11, 25, 11, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_six_deye_tou_slots(coordinator)
+        coordinator.hass.states.set("number.inverter_program_4_soc", "95")
+        data = {
+            "mode": "PV_CHARGE", "soc": 50.0, "min_soc": 16.0,
+            "night_self_use_active": False, "self_use_reserve_soc": 35.0,
+            "discharge_target_soc": 35.0, "charge_target_soc": 95.0,
+            "sell_price": 0.40, "pv_power": 1009.0, "load_power": 1327.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("No Grid", coordinator.hass.states.get("select.inverter_program_4_charging").state)
+        self.assertEqual("16.0", coordinator.hass.states.get("number.inverter_program_4_soc").state)
+        self.assertEqual("16.0", str(result["inverter_tou_target_soc"]))
 
     async def test_wait_mode_restores_self_use_full_current_and_minimum_tou_soc(self):
         now = datetime(2026, 1, 10, 20, 30, tzinfo=WARSAW)
