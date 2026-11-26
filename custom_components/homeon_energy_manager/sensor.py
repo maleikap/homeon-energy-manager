@@ -64,7 +64,15 @@ SENSORS = [
     ("battery_voltage_high_lock", "Blokada wysokiego napięcia", None, "mdi:battery-lock"),
     ("battery_voltage_recovery_target_soc", "Cel SOC odbudowy napięcia", PERCENT, "mdi:battery-plus"),
     ("inverter_tou_active_slot", "Aktywny program Time of Use", None, "mdi:clock-check-outline"),
+    ("inverter_tou_active_start", "Początek aktywnego programu Time of Use", None, "mdi:clock-start"),
+    ("inverter_tou_profile", "Profil encji Time of Use", None, "mdi:database-cog-outline"),
+    ("inverter_tou_time_entity", "Encja godziny programu Time of Use", None, "mdi:clock-outline"),
+    ("inverter_tou_charging_entity", "Encja ładowania programu Time of Use", None, "mdi:battery-clock"),
+    ("inverter_tou_soc_entity", "Encja SOC programu Time of Use", None, "mdi:battery-cog-outline"),
+    ("inverter_tou_current_soc", "Aktualny SOC programu Time of Use", PERCENT, "mdi:battery-clock-outline"),
     ("inverter_tou_target_soc", "Cel SOC programu Time of Use", PERCENT, "mdi:battery-clock-outline"),
+    ("inverter_tou_use_timer_entity", "Encja Use Timer", None, "mdi:timer-cog-outline"),
+    ("inverter_tou_use_timer_state", "Stan Use Timer", None, "mdi:timer-check-outline"),
     ("inverter_tou_control_status", "Sterowanie Time of Use", None, "mdi:calendar-sync"),
     ("battery_discharge_w", "Rozładowanie baterii", UnitOfPower.WATT, "mdi:battery-arrow-down"),
     ("battery_charge_w", "Ładowanie baterii", UnitOfPower.WATT, "mdi:battery-arrow-up"),
@@ -369,7 +377,7 @@ class HomeOnSensor(CoordinatorEntity, SensorEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.61",
+            "sw_version": "1.2.62",
         }
 
     @property
