@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.61
+
+- Dodano niezależną ochronę napięciową magazynu obok dotychczasowej kontroli SOC.
+- Niskie napięcie blokuje rozładowanie i sprzedaż oraz uruchamia odbudowę baterii z sieci; wysokie napięcie zatrzymuje każde ładowanie, również cykl miesięczny.
+- Osobne progi zadziałania i powrotu zapewniają histerezę bez przełączania trybów przy każdym wahnięciu napięcia.
+- Manager automatycznie wykrywa standardową encję `sensor.inverter_battery_voltage`; encję można również wybrać w konfiguracji.
+- Domyślne progi są wyliczane z napięcia nominalnego. Dla magazynów HV wymagane jest ustawienie prawidłowego napięcia nominalnego albo czterech własnych progów.
+
+- Dodano automatyczny cykl pełnego ładowania magazynu raz w miesiącu. Manager wybiera nadwyżkę PV albo najtańsze dostępne godziny zakupu i ustawia cel 100% SOC.
+- Wykonanie cyklu jest zapisywane trwale, więc restart Home Assistant nie powoduje ponownego ładowania w tym samym miesiącu.
+- Zwykła blokada ładowania przy 95% jest pomijana wyłącznie podczas aktywnego cyklu miesięcznego; po osiągnięciu 100% wraca bez zmian.
+- Dodano przełącznik funkcji oraz sensory statusu, decyzji, wybranych godzin, brakującej energii i czasu ostatniego wykonania.
+- Gdy brak harmonogramu cen, zaległy cykl korzysta po siódmym dniu miesiąca z nocnego okna zastępczego 01:00–05:00. OFF-GRID, `SAFE MODE`, cena ujemna i ochrona awaryjnego SOC zachowują wyższy priorytet.
+
 ## 1.2.60
 
 - tryb zarabiania może sprzedać energię do minimalnego SOC, gdy pełny cykl sprzedaży i późniejszego odkupienia pozostaje opłacalny,

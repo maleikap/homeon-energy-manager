@@ -9,13 +9,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
-from .learning import update_learning
+from .learning import monthly_full_charge_state, update_learning
 from .planner import build_planner_data
 
 from .const import (
     DOMAIN,
     CONF_SOC_SENSOR,
     CONF_BATTERY_POWER_SENSOR,
+    CONF_BATTERY_VOLTAGE_SENSOR,
     CONF_PV_POWER_SENSOR,
     CONF_PV_INSTALLED_KWP,
     CONF_LOAD_POWER_SENSOR,
@@ -189,6 +190,149 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                     return True, "ON-GRID", f"{prefix}{entity_id}={value:g} V"
 
         return None, "NIEZNANY", f"Nie rozpoznano stanu {entity_id}={raw}"
+
+    def _battery_voltage_state(self) -> dict[str, Any]:
+        """Read battery voltage and apply independent low/high hysteresis."""
+        configured_entity = str(
+            self._conf_value(CONF_BATTERY_VOLTAGE_SENSOR, "") or ""
+        ).strip()
+        entity_id = configured_entity
+        source = "Konfiguracja"
+
+        if not entity_id:
+            source = "Automatyczne wykrywanie"
+            candidates: list[str] = ["sensor.inverter_battery_voltage"]
+            for base in (
+                str(self._conf_value(CONF_BATTERY_POWER_SENSOR, "") or ""),
+                str(self._conf_value(CONF_SOC_SENSOR, "") or ""),
+            ):
+                for old in ("battery_power", "battery_soc", "battery_capacity", "battery"):
+                    if old in base:
+                        candidate = base.replace(old, "battery_voltage", 1)
+                        if candidate not in candidates:
+                            candidates.append(candidate)
+            entity_id = next(
+                (candidate for candidate in candidates if self.hass.states.get(candidate) is not None),
+                "",
+            )
+
+        nominal_v = max(1.0, self._runtime_float("battery_nominal_voltage_v", 51.2))
+        low_stop_v = self._runtime_float("battery_low_voltage_stop_v", 0.0)
+        low_recovery_v = self._runtime_float("battery_low_voltage_recovery_v", 0.0)
+        high_recovery_v = self._runtime_float("battery_high_voltage_recovery_v", 0.0)
+        high_stop_v = self._runtime_float("battery_high_voltage_stop_v", 0.0)
+        custom_thresholds = all(
+            value > 0.0
+            for value in (low_stop_v, low_recovery_v, high_recovery_v, high_stop_v)
+        )
+
+        if low_stop_v <= 0.0:
+            low_stop_v = nominal_v * 0.84
+        if low_recovery_v <= 0.0:
+            low_recovery_v = nominal_v * 0.90
+        if high_recovery_v <= 0.0:
+            high_recovery_v = nominal_v * 1.08
+        if high_stop_v <= 0.0:
+            high_stop_v = nominal_v * 1.12
+
+        base = {
+            "available": False,
+            "configured": bool(configured_entity),
+            "entity": entity_id or "-",
+            "source": source,
+            "voltage": 0.0,
+            "nominal_voltage": round(nominal_v, 1),
+            "low_stop": round(low_stop_v, 1),
+            "low_recovery": round(low_recovery_v, 1),
+            "high_recovery": round(high_recovery_v, 1),
+            "high_stop": round(high_stop_v, 1),
+            "low_lock": bool(getattr(self, "_homeon_battery_low_voltage_lock", False)),
+            "high_lock": bool(getattr(self, "_homeon_battery_high_voltage_lock", False)),
+            "status": "BRAK ENCJI",
+            "reason": "Nie skonfigurowano i nie wykryto encji napięcia baterii",
+        }
+        if not entity_id:
+            return base
+
+        state = self.hass.states.get(entity_id)
+        if state is None or str(state.state).strip().lower() in {
+            "", "unknown", "unavailable", "none", "null",
+        }:
+            base["status"] = "BRAK ODCZYTU"
+            base["reason"] = f"Encja {entity_id} nie udostępnia prawidłowego napięcia"
+            return base
+
+        voltage_v = self._as_float(state.state, None)
+        if voltage_v is None or voltage_v <= 0.0:
+            base["status"] = "BŁĘDNY ODCZYT"
+            base["reason"] = f"Nieprawidłowe napięcie {state.state} z {entity_id}"
+            return base
+        unit = str(state.attributes.get("unit_of_measurement", "") or "").strip().lower()
+        if unit == "kv":
+            voltage_v *= 1000.0
+
+        threshold_order_valid = (
+            0.0 < low_stop_v < low_recovery_v < high_recovery_v < high_stop_v
+        )
+        nominal_matches = 0.65 * nominal_v <= voltage_v <= 1.35 * nominal_v
+        if not threshold_order_valid:
+            base.update({
+                "status": "BŁĘDNE PROGI",
+                "voltage": round(voltage_v, 1),
+                "reason": "Progi muszą rosnąć: niski STOP < niski POWRÓT < wysoki POWRÓT < wysoki STOP",
+            })
+            return base
+        if not nominal_matches and not custom_thresholds:
+            base.update({
+                "status": "WYMAGA KONFIGURACJI",
+                "voltage": round(voltage_v, 1),
+                "reason": (
+                    f"Odczyt {voltage_v:.1f} V nie pasuje do napięcia nominalnego "
+                    f"{nominal_v:.1f} V — ustaw właściwe napięcie dla magazynu LV/HV"
+                ),
+            })
+            return base
+
+        low_lock = bool(getattr(self, "_homeon_battery_low_voltage_lock", False))
+        high_lock = bool(getattr(self, "_homeon_battery_high_voltage_lock", False))
+        if voltage_v <= low_stop_v:
+            low_lock = True
+            high_lock = False
+        elif low_lock and voltage_v >= low_recovery_v:
+            low_lock = False
+        if voltage_v >= high_stop_v:
+            high_lock = True
+            low_lock = False
+        elif high_lock and voltage_v <= high_recovery_v:
+            high_lock = False
+        self._homeon_battery_low_voltage_lock = low_lock
+        self._homeon_battery_high_voltage_lock = high_lock
+
+        if low_lock:
+            status = "NISKIE NAPIĘCIE"
+            reason = (
+                f"Napięcie {voltage_v:.1f} V — ochrona rozładowania aktywna do "
+                f"{low_recovery_v:.1f} V"
+            )
+        elif high_lock:
+            status = "WYSOKIE NAPIĘCIE"
+            reason = (
+                f"Napięcie {voltage_v:.1f} V — ochrona ładowania aktywna do spadku "
+                f"poniżej {high_recovery_v:.1f} V"
+            )
+        else:
+            status = "OK"
+            reason = f"Napięcie baterii {voltage_v:.1f} V mieści się w bezpiecznym zakresie"
+
+        base.update({
+            "available": True,
+            "voltage": round(voltage_v, 1),
+            "low_lock": low_lock,
+            "high_lock": high_lock,
+            "status": status,
+            "reason": reason,
+        })
+        return base
 
     @staticmethod
     def _reserve_pv_forecast(
@@ -971,6 +1115,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         minimum_soc: float = 0.0,
         expected_net_load_w: float = 0.0,
         hourly_profile: dict[str, Any] | None = None,
+        maximum_target_soc: float = 95.0,
     ) -> dict[str, Any]:
         """Choose the cheapest hours that finish before the reserve is needed."""
         now = dt_util.now()
@@ -1270,7 +1415,7 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             bridge_charge_only = True
 
         grid_charge_target_soc = min(
-            95.0,
+            max(0.0, min(100.0, maximum_target_soc)),
             max(
                 soc,
                 soc
@@ -1880,6 +2025,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         current_soc = float(self._as_float(data.get("soc"), 0.0) or 0.0)
         minimum_soc = float(self._as_float(data.get("min_soc"), 0.0) or 0.0)
         night_self_use_active = bool(data.get("night_self_use_active", False))
+        monthly_full_charge_mode = mode in {
+            "MONTHLY_FULL_CHARGE",
+            "MONTHLY_FULL_CHARGE_PV",
+        }
+        battery_voltage_low_lock = str(data.get("battery_voltage_low_lock", "OFF")) == "ON"
+        battery_voltage_high_lock = str(data.get("battery_voltage_high_lock", "OFF")) == "ON"
+        battery_voltage_low_mode = mode == "BATTERY_VOLTAGE_LOW"
         full_soc_charge_lock = bool(getattr(self, "_homeon_full_soc_charge_lock", False))
         if current_soc >= 95.0:
             full_soc_charge_lock = True
@@ -2120,7 +2272,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             full_soc_charge_lock
             and sell_solar_allowed
             and pv_export_surplus_w > 50.0
-            and mode not in ("SELL_BATTERY_HIGH_PRICE", "PREPARE_NEGATIVE_PRICE_WINDOW")
+            and mode not in (
+                "SELL_BATTERY_HIGH_PRICE",
+                "PREPARE_NEGATIVE_PRICE_WINDOW",
+                "MONTHLY_FULL_CHARGE",
+                "MONTHLY_FULL_CHARGE_PV",
+                "BATTERY_VOLTAGE_HIGH",
+            )
         ):
             executor_mode = "FULL_BATTERY_PV_EXPORT"
             action = "Magazyn pełny i cena dodatnia — Export First sprzedaje wyłącznie bieżącą nadwyżkę PV"
@@ -2140,12 +2298,48 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             sw(inverter_grid_charging, False)
             num(inverter_max_discharge_current, inverter_discharge_current_a)
 
+        elif mode == "BATTERY_VOLTAGE_HIGH":
+            action = "Wysokie napięcie baterii — zatrzymuję każde ładowanie i pozwalam zasilać dom"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
+            sw(inverter_grid_charging, False)
+            sw(inverter_export_surplus, sell_solar_allowed)
+            num(inverter_max_charge_current, 0.0)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
+
+        elif mode == "BATTERY_VOLTAGE_LOW":
+            action = "Niskie napięcie baterii — blokuję rozładowanie i odbudowuję napięcie z sieci"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
+            sw(inverter_export_surplus, False)
+            sw(inverter_grid_charging, True)
+            num(inverter_max_charge_current, inverter_charge_current_a)
+            num(inverter_max_discharge_current, 0.0)
+
         elif mode == "EMERGENCY_RESERVE":
             action = "Awaryjny SOC — ustawiam Zero Export To CT, włączam ładowanie z sieci i blokuję eksport"
             data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
             sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
             sw(inverter_export_surplus, False)
             sw(inverter_grid_charging, True)
+            num(inverter_max_charge_current, inverter_charge_current_a)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
+
+        elif mode == "MONTHLY_FULL_CHARGE":
+            action = "Miesięczny cykl — ustawiam cel 100%, ładuję z sieci w najtańszym oknie i blokuję eksport"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
+            sw(inverter_export_surplus, False)
+            sw(inverter_grid_charging, True)
+            num(inverter_max_charge_current, inverter_charge_current_a)
+            num(inverter_max_discharge_current, inverter_discharge_current_a)
+
+        elif mode == "MONTHLY_FULL_CHARGE_PV":
+            action = "Miesięczny cykl — ustawiam cel 100% i ładuję magazyn z nadwyżki PV bez zakupu z sieci"
+            data["inverter_work_mode_target"] = inverter_work_mode_pv_charge_option
+            sel(inverter_work_mode_select, inverter_work_mode_pv_charge_option)
+            sw(inverter_export_surplus, False)
+            sw(inverter_grid_charging, False)
             num(inverter_max_charge_current, inverter_charge_current_a)
             num(inverter_max_discharge_current, inverter_discharge_current_a)
 
@@ -2309,32 +2503,52 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             num(inverter_max_discharge_current, discharge_current)
 
         tou_grid_charge = (
-            executor_mode in {
-                "CHEAP_CHARGE",
-                "PROFIT_RECHARGE",
-                "NEGATIVE_IMPORT",
-                "EMERGENCY_RESERVE",
-            }
-            and not full_soc_charge_lock
+            not battery_voltage_high_lock
+            and (
+                (
+                    executor_mode in {
+                        "CHEAP_CHARGE",
+                        "PROFIT_RECHARGE",
+                        "NEGATIVE_IMPORT",
+                        "EMERGENCY_RESERVE",
+                    }
+                    and not full_soc_charge_lock
+                )
+                or executor_mode == "MONTHLY_FULL_CHARGE"
+                or executor_mode == "BATTERY_VOLTAGE_LOW"
+            )
         )
         if tou_grid_charge:
-            target_key = (
-                "profit_recharge_grid_target_soc"
-                if executor_mode == "PROFIT_RECHARGE"
-                else "cheap_charge_grid_target_soc"
-            )
-            tou_target_soc = float(
-                self._as_float(
-                    data.get(target_key),
-                    data.get("charge_target_soc", 95.0),
+            if executor_mode == "MONTHLY_FULL_CHARGE":
+                tou_target_soc = 100.0
+                tou_reason = "miesięczne ładowanie magazynu do 100%"
+            elif executor_mode == "BATTERY_VOLTAGE_LOW":
+                tou_target_soc = float(
+                    self._as_float(
+                        data.get("battery_voltage_recovery_target_soc"),
+                        min(100.0, current_soc + 10.0),
+                    )
+                    or min(100.0, current_soc + 10.0)
                 )
-                or 95.0
-            )
-            tou_reason = (
-                "odtworzenie energii sprzedanej drogo w najtańszym oknie"
-                if executor_mode == "PROFIT_RECHARGE"
-                else "ładowanie z sieci"
-            )
+                tou_reason = "odbudowa napięcia baterii po progu niskiego napięcia"
+            else:
+                target_key = (
+                    "profit_recharge_grid_target_soc"
+                    if executor_mode == "PROFIT_RECHARGE"
+                    else "cheap_charge_grid_target_soc"
+                )
+                tou_target_soc = float(
+                    self._as_float(
+                        data.get(target_key),
+                        data.get("charge_target_soc", 95.0),
+                    )
+                    or 95.0
+                )
+                tou_reason = (
+                    "odtworzenie energii sprzedanej drogo w najtańszym oknie"
+                    if executor_mode == "PROFIT_RECHARGE"
+                    else "ładowanie z sieci"
+                )
         elif executor_mode == "MORNING_RESERVE_HOLD":
             tou_target_soc = float(self._as_float(data.get("self_use_reserve_soc"), minimum_soc) or minimum_soc)
             tou_reason = "ochrona rezerwy do rana"
@@ -2353,6 +2567,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif executor_mode == "OFF_GRID":
             tou_target_soc = minimum_soc
             tou_reason = "OFF-GRID — PV i magazyn zasilają dom bez ładowania z sieci"
+        elif executor_mode == "MONTHLY_FULL_CHARGE_PV":
+            tou_target_soc = 100.0
+            tou_reason = "miesięczne ładowanie z PV do 100% bez zakupu z sieci"
         elif executor_mode in {"PV_LOW_PRICE_CHARGE", "PV_CHARGE"}:
             # The Deye TOU SOC is also the discharge floor. Setting the PV
             # charge target here (often 95%) made the inverter import from the
@@ -2446,6 +2663,20 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             return 10
 
         if full_soc_charge_lock:
+            if not monthly_full_charge_mode and not battery_voltage_low_mode:
+                desired = [
+                    command
+                    for command in desired
+                    if not (
+                        (command[0] == "number" and command[1] == inverter_max_charge_current)
+                        or (command[0] == "switch" and command[1] == inverter_grid_charging)
+                    )
+                ]
+                num(inverter_max_charge_current, 0.0)
+                sw(inverter_grid_charging, False)
+                action = f"{action}; ochrona pełnego SOC: prąd ładowania 0 A"
+
+        if battery_voltage_high_lock:
             desired = [
                 command
                 for command in desired
@@ -2456,7 +2687,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             ]
             num(inverter_max_charge_current, 0.0)
             sw(inverter_grid_charging, False)
-            action = f"{action}; ochrona pełnego SOC: prąd ładowania 0 A"
+            action = f"{action}; ochrona wysokiego napięcia: ładowanie 0 A"
+        elif battery_voltage_low_lock and executor_mode == "OFF_GRID":
+            num(inverter_max_discharge_current, inverter_safe_discharge_current_a)
+            action = f"{action}; niskie napięcie baterii: ograniczam rozładowanie w OFF-GRID"
 
         data["inverter_control_executor_mode"] = executor_mode
         data["inverter_control_action"] = action
@@ -2718,6 +2952,9 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             self._grid_connection_state()
         )
         off_grid_active = grid_connected is False
+        battery_voltage = self._battery_voltage_state()
+        battery_voltage_low_lock = bool(battery_voltage.get("low_lock", False))
+        battery_voltage_high_lock = bool(battery_voltage.get("high_lock", False))
 
         buy_price_entities = self._price_entity_ids(
             CONF_BUY_PRICE_SENSOR,
@@ -2882,6 +3119,10 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         if self._conf_value(CONF_GRID_CONNECTION_SENSOR) and grid_connected is None:
             data_quality_warnings.append(grid_connection_source)
+        if battery_voltage.get("configured", False) and not battery_voltage.get("available", False):
+            data_quality_warnings.append(str(battery_voltage.get("reason", "Brak napięcia baterii")))
+        elif battery_voltage.get("status") in {"WYMAGA KONFIGURACJI", "BŁĘDNE PROGI"}:
+            data_quality_warnings.append(str(battery_voltage.get("reason", "Sprawdź progi napięcia baterii")))
 
         data_quality_score = max(
             0.0,
@@ -2942,6 +3183,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         )
 
         # HOMEON_ADAPTIVE_TARGETS_START
+        monthly_full_charge = await monthly_full_charge_state(
+            self,
+            soc,
+            enabled and bool(store.get("monthly_full_charge", True)),
+        )
         learn = getattr(self, "_homeon_learning", {})
         if not isinstance(learn, dict):
             learn = {}
@@ -3136,6 +3382,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 + " | Korekta z realnej produkcji PV: "
                 + str(pv_reality.get("reason", "PV słabe"))
             )[:240]
+
+        if monthly_full_charge.get("due", False):
+            charge_target_soc = 100.0
+            target_reason = (
+                target_reason
+                + " | Miesięczny cykl pełnego ładowania ustawia cel 100%."
+            )[:240]
         # HOMEON_PV_REALITY_END
 
         # HOMEON_NEGATIVE_PRICE_WINDOW_START
@@ -3271,6 +3524,30 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                     f"przekracza opłacalny limit {profit_recharge_max_buy_price:.3f} PLN/kWh."
                 )
 
+        monthly_full_charge_plan: dict[str, Any] = {
+            "schedule_available": False,
+            "charge_now": False,
+            "windows": "brak",
+            "missing_kwh": max(
+                0.0,
+                battery_capacity_kwh * (100.0 - soc) / 100.0,
+            ),
+            "reason": str(monthly_full_charge.get("reason", "-")),
+        }
+        if monthly_full_charge.get("due", False):
+            monthly_full_charge_plan = self._cheap_grid_charge_plan(
+                buy_price_entities,
+                buy_price,
+                soc,
+                100.0,
+                battery_capacity_kwh,
+                6,
+                min_soc,
+                max(avg_night_load_w, load_power - pv_power, 200.0),
+                hourly_profile,
+                maximum_target_soc=100.0,
+            )
+
         # During daylight, do not buy energy when the live PV surplus or the
         # calibrated remaining forecast can rebuild the missing reserve.  The
         # emergency and negative-price modes are evaluated separately and keep
@@ -3326,6 +3603,60 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             profit_recharge_pending
             and profit_recharge_plan.get("charge_now", False)
         )
+
+        monthly_missing_kwh = max(
+            0.0,
+            battery_capacity_kwh * (100.0 - soc) / 100.0,
+        )
+        monthly_pv_can_finish = bool(
+            6 <= local_hour < 18
+            and (self._as_float(pv_reality.get("score"), 0.0) or 0.0) >= 50.0
+            and forecast_pv_surplus_for_charge_kwh >= monthly_missing_kwh + 0.5
+        )
+        monthly_fallback_night = bool(
+            monthly_full_charge.get("due", False)
+            and not monthly_full_charge_plan.get("schedule_available", False)
+            and dt_util.as_local(dt_util.now()).day >= 7
+            and 1 <= local_hour < 5
+        )
+        monthly_grid_charge_now = bool(
+            monthly_full_charge.get("due", False)
+            and (
+                monthly_full_charge_plan.get("charge_now", False)
+                or monthly_fallback_night
+            )
+            and not monthly_pv_can_finish
+        )
+        monthly_pv_charge_now = bool(
+            monthly_full_charge.get("due", False)
+            and soc < 99.5
+            and live_pv_surplus_for_charge_w > 50.0
+        )
+        if monthly_grid_charge_now:
+            monthly_full_charge["status"] = "ŁADOWANIE Z SIECI"
+            monthly_full_charge["reason"] = (
+                "Realizuję miesięczny cykl do 100% w najtańszym wybranym oknie"
+                if not monthly_fallback_night
+                else "Brak harmonogramu cen — realizuję zaległy cykl do 100% w nocnym oknie zastępczym"
+            )
+        elif monthly_pv_charge_now:
+            monthly_full_charge["status"] = "ŁADOWANIE Z PV"
+            monthly_full_charge["reason"] = "Nadwyżka PV realizuje miesięczny cykl do 100% bez zakupu z sieci"
+        elif monthly_full_charge.get("due", False):
+            monthly_full_charge["status"] = "OCZEKIWANIE"
+            monthly_full_charge["reason"] = (
+                "Oczekuję na wybrane tanie okno lub wystarczającą nadwyżkę PV; "
+                f"plan: {monthly_full_charge_plan.get('windows', 'brak')}"
+            )[:240]
+        if monthly_full_charge.get("due", False) and off_grid_active:
+            monthly_full_charge["status"] = "WSTRZYMANE — OFF-GRID"
+            monthly_full_charge["reason"] = "Brak sieci — cykl miesięczny czeka na powrót zasilania; priorytet ma bezpieczna praca OFF-GRID"
+        elif monthly_full_charge.get("due", False) and safe_mode_active:
+            monthly_full_charge["status"] = "WSTRZYMANE — SAFE MODE"
+            monthly_full_charge["reason"] = "Cykl miesięczny czeka na poprawne dane instalacji"
+        elif monthly_full_charge.get("due", False) and soc <= emergency_soc:
+            monthly_full_charge["status"] = "WSTRZYMANE — TRYB AWARYJNY"
+            monthly_full_charge["reason"] = "Najpierw odbudowuję rezerwę awaryjną; cykl do 100% pozostaje zaplanowany"
         # HOMEON_NEGATIVE_PRICE_WINDOW_END
 
         available_to_sell_kwh = max(0.0, battery_capacity_kwh * (soc - discharge_target_soc) / 100.0)
@@ -3485,6 +3816,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif safe_mode_active:
             mode = "SAFE_MODE"
             reason = safe_mode_reason
+        elif battery_voltage_high_lock:
+            mode = "BATTERY_VOLTAGE_HIGH"
+            reason = str(battery_voltage.get("reason", "Wysokie napięcie baterii — zatrzymuję ładowanie"))
+        elif battery_voltage_low_lock:
+            mode = "BATTERY_VOLTAGE_LOW"
+            reason = str(battery_voltage.get("reason", "Niskie napięcie baterii — blokuję rozładowanie"))
         elif soc <= emergency_soc:
             mode = "EMERGENCY_RESERVE"
             reason = "SOC jest poniżej poziomu awaryjnego"
@@ -3503,6 +3840,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         elif buy_price <= economic_negative_buy_price and soc < economic_max_soc_after_negative_charge:
             mode = "NEGATIVE_IMPORT"
             reason = "Cena zakupu jest ujemna lub zerowa — opłaca się ładować"
+        elif monthly_grid_charge_now:
+            mode = "MONTHLY_FULL_CHARGE"
+            reason = str(monthly_full_charge.get("reason", "Miesięczne ładowanie magazynu do 100%"))
+        elif monthly_pv_charge_now:
+            mode = "MONTHLY_FULL_CHARGE_PV"
+            reason = str(monthly_full_charge.get("reason", "Miesięczne ładowanie magazynu z PV do 100%"))
         elif (
             sell_ready
             and profit_mode_enabled
@@ -3620,10 +3963,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "DISABLED": 100,
             "OFF_GRID": 99,
             "SAFE_MODE": 95,
+            "BATTERY_VOLTAGE_HIGH": 94,
+            "BATTERY_VOLTAGE_LOW": 93,
             "EMERGENCY_RESERVE": 90,
             "NEGATIVE_IMPORT": 85,
             "NEGATIVE_PRICE_EXPORT_BLOCK": 82,
             "PREPARE_NEGATIVE_PRICE_WINDOW": 80,
+            "MONTHLY_FULL_CHARGE": 78,
+            "MONTHLY_FULL_CHARGE_PV": 77,
             "HOME_BATTERY_PRIORITY": 75,
             "PV_REALITY_HOLD": 70,
             "SELL_BATTERY_HIGH_PRICE": 60,
@@ -3642,9 +3989,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "DISABLED",
             "OFF_GRID",
             "SAFE_MODE",
+            "BATTERY_VOLTAGE_HIGH",
+            "BATTERY_VOLTAGE_LOW",
             "EMERGENCY_RESERVE",
             "NEGATIVE_IMPORT",
             "NEGATIVE_PRICE_EXPORT_BLOCK",
+            "MONTHLY_FULL_CHARGE",
+            "MONTHLY_FULL_CHARGE_PV",
             "HOME_BATTERY_PRIORITY",
             "SELL_BATTERY_HIGH_PRICE",
             "WAIT_BETTER_SELL_PRICE",
@@ -3727,6 +4078,22 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "soc": round(soc, 1),
             "battery_power": round(battery_power, 0),
             "battery_status": battery_status,
+            "battery_voltage": battery_voltage.get("voltage", 0.0),
+            "battery_voltage_status": battery_voltage.get("status", "BRAK ENCJI"),
+            "battery_voltage_reason": battery_voltage.get("reason", "-"),
+            "battery_voltage_entity": battery_voltage.get("entity", "-"),
+            "battery_voltage_source": battery_voltage.get("source", "-"),
+            "battery_voltage_nominal": battery_voltage.get("nominal_voltage", 0.0),
+            "battery_voltage_low_stop": battery_voltage.get("low_stop", 0.0),
+            "battery_voltage_low_recovery": battery_voltage.get("low_recovery", 0.0),
+            "battery_voltage_high_recovery": battery_voltage.get("high_recovery", 0.0),
+            "battery_voltage_high_stop": battery_voltage.get("high_stop", 0.0),
+            "battery_voltage_low_lock": "ON" if battery_voltage_low_lock else "OFF",
+            "battery_voltage_high_lock": "ON" if battery_voltage_high_lock else "OFF",
+            "battery_voltage_recovery_target_soc": round(
+                min(100.0, max(soc + 10.0, emergency_soc + 10.0)),
+                1,
+            ),
             "pv_power": round(pv_power, 0),
             "load_power": round(load_power, 0),
             "installation_type": installation_type.upper(),
@@ -3775,6 +4142,13 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             "cheap_charge_predicted_depletion_by": cheap_grid_charge_plan.get("predicted_depletion_by", "-"),
             "cheap_charge_predicted_use_kwh": cheap_grid_charge_plan.get("predicted_use_before_charge_kwh", 0.0),
             "cheap_charge_predictive_precharge": "ON" if cheap_grid_charge_plan.get("predictive_precharge", False) else "OFF",
+            "monthly_full_charge_status": str(monthly_full_charge.get("status", "WYŁĄCZONE")),
+            "monthly_full_charge_reason": str(monthly_full_charge.get("reason", "-"))[:240],
+            "monthly_full_charge_month": str(monthly_full_charge.get("month", "-")),
+            "monthly_full_charge_windows": str(monthly_full_charge_plan.get("windows", "brak")),
+            "monthly_full_charge_target_soc": 100.0,
+            "monthly_full_charge_missing_kwh": round(monthly_missing_kwh, 2),
+            "monthly_full_charge_completed_at": str(monthly_full_charge.get("completed_at", "-")),
             "grid_charge_blocked_by_pv": grid_charge_blocked_by_pv,
             "live_pv_surplus_for_charge_w": round(live_pv_surplus_for_charge_w, 0),
             "forecast_pv_surplus_for_charge_kwh": round(forecast_pv_surplus_for_charge_kwh, 2),

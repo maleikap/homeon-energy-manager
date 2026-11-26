@@ -2,6 +2,7 @@ DOMAIN = "homeon_energy_manager"
 
 CONF_SOC_SENSOR = "soc_sensor"
 CONF_BATTERY_POWER_SENSOR = "battery_power_sensor"
+CONF_BATTERY_VOLTAGE_SENSOR = "battery_voltage_sensor"
 CONF_PV_POWER_SENSOR = "pv_power_sensor"
 CONF_LOAD_POWER_SENSOR = "load_power_sensor"
 CONF_GRID_POWER_SENSOR = "grid_power_sensor"

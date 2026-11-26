@@ -28,6 +28,8 @@ Najważniejsze funkcje:
 - ocena jakości rzeczywistej produkcji PV,
 - przygotowanie miejsca przed tanią lub ujemną ceną,
 - ochrona minimalnego i awaryjnego SOC,
+- niezależna ochrona niskiego i wysokiego napięcia baterii,
+- automatyczne pełne ładowanie magazynu raz w miesiącu,
 - uczenie typowego zużycia domu,
 - diagnostyka danych i tryb `SAFE MODE`,
 - bezpieczne sterowanie falownikiem Deye,
@@ -201,6 +203,18 @@ Najważniejsze ustawienia dostępne jako encje `number`:
 - **Koszt cyklu baterii** — koszt uwzględniany przy ocenie opłacalności.
 
 Dobra cena sprzedaży ma pierwszeństwo przed zwykłym tanim ładowaniem. Ładowanie przy cenie ujemnej, `SAFE MODE` i awaryjny SOC pozostają nadrzędnymi zabezpieczeniami.
+
+### Ochrona napięciowa magazynu
+
+HomeOn może używać napięcia całego magazynu jako drugiego zabezpieczenia, niezależnego od SOC. Encję napięcia wybiera się w konfiguracji integracji; standardowa `sensor.inverter_battery_voltage` jest wykrywana automatycznie. Niskie napięcie zatrzymuje rozładowanie i sprzedaż oraz w instalacji on-grid uruchamia odbudowę baterii. Wysokie napięcie natychmiast zatrzymuje ładowanie, także przy aktywnym cyklu miesięcznym.
+
+Domyślne progi są wyliczane z encji **Napięcie nominalne baterii**. Wartość `0 V` w czterech encjach progów oznacza automat: niski STOP 84%, niski powrót 90%, wysoki powrót 108% i wysoki STOP 112% napięcia nominalnego. Można zamiast tego wpisać własne napięcia. Dla magazynu HV trzeba ustawić jego rzeczywiste napięcie nominalne; jeżeli odczyt nie pasuje do konfiguracji, manager pokazuje ostrzeżenie i nie stosuje przypadkowych progów LV.
+
+### Miesięczne ładowanie do pełna
+
+Przełącznik **Miesięczne ładowanie do pełna** jest domyślnie włączony. Raz w każdym miesiącu kalendarzowym manager ustawia cel 100% SOC. Najpierw próbuje wykonać cykl z nadwyżki PV albo w najtańszych godzinach znanych z harmonogramu ceny zakupu. Jeżeli harmonogram cen jest niedostępny, po siódmym dniu miesiąca używa nocnego okna zastępczego między 01:00 a 05:00.
+
+Osiągnięcie 100% z samego PV również zalicza cykl. Data wykonania jest zapisywana trwale, dlatego restart Home Assistant nie uruchamia drugiego pełnego ładowania w tym samym miesiącu. OFF-GRID, `SAFE MODE`, ceny ujemne i ochrona awaryjnego SOC zachowują wyższy priorytet. Status, wybrane godziny, brakującą energię i ostatnie wykonanie pokazują osobne sensory diagnostyczne.
 
 ### Ładowanie w najgorszych godzinach sprzedaży
 

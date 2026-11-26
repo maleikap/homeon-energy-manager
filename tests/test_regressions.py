@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.60", manifest["version"])
+        self.assertEqual("1.2.61", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.60"', source)
+            self.assertIn('"sw_version": "1.2.61"', source)
 
     def test_installed_pv_capacity_remains_in_options_and_runtime(self) -> None:
         constants = (COMPONENT / "const.py").read_text(encoding="utf-8")

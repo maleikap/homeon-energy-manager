@@ -8,6 +8,7 @@
           "installation_type": "Typ instalacji",
           "soc_sensor": "SOC magazynu energii",
           "battery_power_sensor": "Moc baterii",
+          "battery_voltage_sensor": "Napięcie baterii (opcjonalne, zalecane)",
           "pv_power_sensor": "Moc PV",
           "load_power_sensor": "Moc domu",
           "grid_power_sensor": "Moc sieci",
@@ -36,6 +37,7 @@
         "data_description": {
           "installation_type": "CT: odbiorniki mogą być po stronie GRID i są mierzone przekładnikami; falownik używa Zero Export To CT. LOAD: wszystkie odbiorniki są za wyjściem LOAD, bez przekładników; falownik używa Zero Export To Load.",
           "grid_connection_sensor": "Wybierz encję Deye informującą o połączeniu z siecią albo napięciu fazy. Jest wymagana do pewnego wykrywania OFF-GRID; same 0 W na liczniku nie odróżnia awarii od poprawnego bilansowania.",
+          "battery_voltage_sensor": "Wybierz napięcie całego magazynu, nie pojedynczej celi ani modułu. Manager użyje go jako niezależnego zabezpieczenia obok SOC.",
           "pv_installed_kwp": "Łączna moc znamionowa wszystkich paneli PV w kWp. Wartość jest używana do oceny realnej produkcji PV.",
           "battery_capacity_kwh": "Rzeczywista użyteczna pojemność całego magazynu.",
           "night_consumption_kwh": "Sprawdź tę wartość po zmianie pojemności magazynu. Zużycie nocne z marginesem nie powinno przekraczać pojemności baterii.",
@@ -56,6 +58,7 @@
           "installation_type": "Typ instalacji",
           "soc_sensor": "SOC magazynu energii",
           "battery_power_sensor": "Moc baterii",
+          "battery_voltage_sensor": "Napięcie baterii (opcjonalne, zalecane)",
           "pv_power_sensor": "Moc PV",
           "load_power_sensor": "Moc domu",
           "grid_power_sensor": "Moc sieci",
@@ -84,6 +87,7 @@
         "data_description": {
           "installation_type": "CT: odbiorniki mogą być po stronie GRID i są mierzone przekładnikami; falownik używa Zero Export To CT. LOAD: wszystkie odbiorniki są za wyjściem LOAD, bez przekładników; falownik używa Zero Export To Load.",
           "grid_connection_sensor": "Wybierz encję Deye informującą o połączeniu z siecią albo napięciu fazy. Jest wymagana do pewnego wykrywania OFF-GRID; same 0 W na liczniku nie odróżnia awarii od poprawnego bilansowania.",
+          "battery_voltage_sensor": "Wybierz napięcie całego magazynu, nie pojedynczej celi ani modułu. Manager użyje go jako niezależnego zabezpieczenia obok SOC.",
           "pv_installed_kwp": "Łączna moc znamionowa wszystkich paneli PV w kWp. Wartość jest używana do oceny realnej produkcji PV.",
           "battery_capacity_kwh": "Rzeczywista użyteczna pojemność całego magazynu.",
           "night_consumption_kwh": "Sprawdź tę wartość po zmianie pojemności magazynu. Zużycie nocne z marginesem nie powinno przekraczać pojemności baterii.",
