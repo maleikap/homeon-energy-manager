@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.62
+
+- Dodano automatyczne wykrywanie sześciu programów Time of Use integracji Solarman: `select.ss_prog*_time`, `select.ss_prog*_charge` i `number.ss_prog*_capacity`.
+- Godziny w formacie `3:00` i `03:00` są obsługiwane jednakowo, a aktywny program jest poprawnie wyznaczany również przy przejściu przez północ.
+- Opcja `Allow Grid` albo `No Grid or Gen` jest wybierana wyłącznie z listy `options` aktywnego slotu.
+- `switch.ss_use_timer` jest automatycznie utrzymywany w stanie włączonym podczas sterowania; w dry-run zmiana jest tylko prezentowana.
+- `switch.ss_grid_charge_enabled` jest używany automatycznie, gdy skonfigurowana standardowa encja ładowania z sieci nie istnieje.
+- Odczyt aktywnego programu, jego godziny i zapisanego SOC działa również przy wyłączonym sterowaniu falownikiem.
+- Dodano sensory diagnostyczne profilu Time of Use, użytych encji, aktualnego SOC programu i stanu `Use Timer`.
+
 ## 1.2.61
 
 - Dodano niezależną ochronę napięciową magazynu obok dotychczasowej kontroli SOC.

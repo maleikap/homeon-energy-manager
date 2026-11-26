@@ -102,6 +102,20 @@ W zwykłej pracy i podczas wybranych najgorszych godzin manager ustawia `Zero Ex
 
 Nazwy encji zależą od użytej integracji falownika i konfiguracji Home Assistant.
 
+### Programy Time of Use Solarman
+
+HomeOn automatycznie rozpoznaje standardowe encje Deye/Sunsynk oraz profil Solarman wykorzystujący:
+
+- `select.ss_prog1_time` … `select.ss_prog6_time`,
+- `select.ss_prog1_charge` … `select.ss_prog6_charge`,
+- `number.ss_prog1_capacity` … `number.ss_prog6_capacity`,
+- `switch.ss_use_timer`,
+- `switch.ss_grid_charge_enabled` jako zapasową globalną zgodę na ładowanie z sieci, gdy skonfigurowana standardowa encja nie istnieje.
+
+Manager odczytuje godzinę rozpoczęcia każdego programu z jego bieżącego stanu, dlatego nakładające się listy `options` nie powodują błędnego wyboru slotu. Obsługiwane są godziny co 15 minut, zapis z zerem i bez zera na początku oraz program obejmujący przejście przez północ. HomeOn nie zmienia godzin granicznych. Dla aktywnego programu ustawia wyłącznie dozwoloną opcję ładowania i jego cel SOC.
+
+Przy włączonym sterowaniu `Use Timer` jest utrzymywany w stanie `on`. W dry-run HomeOn jedynie pokazuje planowaną zmianę. Aktywny program, jego początek oraz bieżący SOC pozostają widoczne w diagnostyce również wtedy, gdy rzeczywiste sterowanie falownikiem jest wyłączone.
+
 ### Praca OFF-GRID
 
 W konfiguracji integracji warto wskazać encję **Obecność sieci / napięcie sieci**. Może to być `binary_sensor` informujący o połączeniu z siecią, tekstowy sensor stanu Deye albo sensor napięcia fazy. Odczyt napięcia do 50 V oznacza OFF-GRID, a od 80 V obecność sieci.

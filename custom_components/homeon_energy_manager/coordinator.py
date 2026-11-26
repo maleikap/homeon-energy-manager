@@ -2004,6 +2004,11 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         inverter_work_mode_select = conf_entity(CONF_INVERTER_WORK_MODE_SELECT, DEFAULT_INVERTER_WORK_MODE_SELECT)
         inverter_work_mode_sell_option = conf_entity(CONF_INVERTER_WORK_MODE_SELL_OPTION, DEFAULT_INVERTER_WORK_MODE_SELL_OPTION)
         inverter_work_mode_pv_charge_option = conf_entity(CONF_INVERTER_WORK_MODE_PV_CHARGE_OPTION, DEFAULT_INVERTER_WORK_MODE_PV_CHARGE_OPTION)
+        if (
+            self.hass.states.get(inverter_grid_charging) is None
+            and self.hass.states.get("switch.ss_grid_charge_enabled") is not None
+        ):
+            inverter_grid_charging = "switch.ss_grid_charge_enabled"
         installation_type = str(data.get("installation_type", DEFAULT_INSTALLATION_TYPE)).lower()
         if (
             installation_type == INSTALLATION_TYPE_LOAD
@@ -2098,6 +2103,151 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
         data["inverter_deye_services"] = "Brak usług HA"
         data["inverter_deye_test_mode"] = "OFF"
 
+        def _time_minutes(value: Any) -> int | None:
+            """Parse both Solarman H:MM and standard HA HH:MM values."""
+            text = str(value or "").strip()
+            try:
+                parts = text.split(":")
+                if len(parts) < 2:
+                    return None
+                hour = int(parts[0])
+                minute = int(parts[1])
+                if 0 <= hour <= 23 and 0 <= minute <= 59:
+                    return hour * 60 + minute
+            except (TypeError, ValueError):
+                return None
+            return None
+
+        tou_profiles: tuple[dict[str, Any], ...] = (
+            {
+                "name": "DEYE / SUNSYNK",
+                "use_timer": None,
+                "slots": {
+                    slot: {
+                        "time": f"time.inverter_program_{slot}_time",
+                        "charging": f"select.inverter_program_{slot}_charging",
+                        "soc": f"number.inverter_program_{slot}_soc",
+                    }
+                    for slot in range(1, 7)
+                },
+            },
+            {
+                "name": "SOLARMAN SS",
+                "use_timer": "switch.ss_use_timer",
+                "slots": {
+                    slot: {
+                        "time": f"select.ss_prog{slot}_time",
+                        "charging": f"select.ss_prog{slot}_charge",
+                        "soc": f"number.ss_prog{slot}_capacity",
+                    }
+                    for slot in range(1, 7)
+                },
+            },
+        )
+
+        def _tou_profile_score(profile: dict[str, Any]) -> tuple[int, int, int]:
+            valid_times = 0
+            complete_slots = 0
+            present_entities = 0
+            for entities in profile["slots"].values():
+                time_state = self.hass.states.get(entities["time"])
+                charging_state = self.hass.states.get(entities["charging"])
+                soc_state = self.hass.states.get(entities["soc"])
+                present = (time_state is not None, charging_state is not None, soc_state is not None)
+                present_entities += sum(present)
+                if time_state is not None and _time_minutes(time_state.state) is not None:
+                    valid_times += 1
+                if all(present):
+                    complete_slots += 1
+            return valid_times, complete_slots, present_entities
+
+        tou_profile = max(tou_profiles, key=_tou_profile_score)
+        tou_profile_score = _tou_profile_score(tou_profile)
+        tou_slots: dict[int, dict[str, str]] = tou_profile["slots"]
+        tou_use_timer_entity = str(tou_profile.get("use_timer") or "")
+        if tou_use_timer_entity and self.hass.states.get(tou_use_timer_entity) is None:
+            tou_use_timer_entity = ""
+
+        def _active_tou_slot() -> int | None:
+            """Return the slot with the latest configured start before now."""
+            now_local = dt_util.as_local(dt_util.now())
+            now_minutes = now_local.hour * 60 + now_local.minute
+            configured: list[tuple[int, int]] = []
+            for slot, entities in tou_slots.items():
+                state = self.hass.states.get(entities["time"])
+                start_minutes = _time_minutes(state.state if state is not None else None)
+                if start_minutes is not None:
+                    configured.append((slot, start_minutes))
+            if not configured:
+                return None
+            started = [
+                (slot, start_minutes)
+                for slot, start_minutes in configured
+                if start_minutes <= now_minutes
+            ]
+            if started:
+                return max(started, key=lambda item: (item[1], item[0]))[0]
+            # Before the first start after midnight, the final period from the
+            # preceding day remains active.
+            return max(configured, key=lambda item: (item[1], item[0]))[0]
+
+        tou_active_slot = _active_tou_slot()
+        active_tou_entities = tou_slots.get(tou_active_slot or 0, {})
+        active_tou_time_entity = str(active_tou_entities.get("time", ""))
+        active_tou_charging_entity = str(active_tou_entities.get("charging", ""))
+        active_tou_soc_entity = str(active_tou_entities.get("soc", ""))
+        active_tou_time_state = (
+            self.hass.states.get(active_tou_time_entity)
+            if active_tou_time_entity
+            else None
+        )
+        active_tou_soc_state = (
+            self.hass.states.get(active_tou_soc_entity)
+            if active_tou_soc_entity
+            else None
+        )
+        active_tou_soc = self._as_float(
+            active_tou_soc_state.state if active_tou_soc_state is not None else None,
+            None,
+        )
+        tou_use_timer_state = (
+            self.hass.states.get(tou_use_timer_entity)
+            if tou_use_timer_entity
+            else None
+        )
+
+        data["inverter_tou_profile"] = (
+            str(tou_profile["name"])
+            if tou_profile_score[0] > 0
+            else "NIE ROZPOZNANO"
+        )
+        data["inverter_tou_active_slot"] = tou_active_slot or 0
+        data["inverter_tou_active_start"] = (
+            str(active_tou_time_state.state)
+            if active_tou_time_state is not None
+            else "BRAK"
+        )
+        data["inverter_tou_time_entity"] = active_tou_time_entity or "BRAK"
+        data["inverter_tou_charging_entity"] = active_tou_charging_entity or "BRAK"
+        data["inverter_tou_soc_entity"] = active_tou_soc_entity or "BRAK"
+        data["inverter_tou_current_soc"] = (
+            round(float(active_tou_soc), 0)
+            if active_tou_soc is not None
+            else 0.0
+        )
+        data["inverter_tou_target_soc"] = data["inverter_tou_current_soc"]
+        data["inverter_tou_use_timer_entity"] = tou_use_timer_entity or "BRAK"
+        data["inverter_tou_use_timer_state"] = (
+            str(tou_use_timer_state.state)
+            if tou_use_timer_state is not None
+            else "BRAK ENCJI"
+        )
+        data["inverter_tou_control_status"] = (
+            "ODCZYT AKTYWNY — STEROWANIE WYŁĄCZONE"
+            if tou_active_slot is not None
+            else "BRAK POPRAWNYCH GODZIN TIME OF USE"
+        )
+
         if not enabled:
             data["deye_driver_safety_status"] = "DISABLED"
             data["deye_driver_block_reason"] = "HomeOn jest wyłączony"
@@ -2126,45 +2276,6 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         def sel(entity_id: str, option: str) -> None:
             desired.append(("select", str(entity_id), str(option)))
-
-        def _time_minutes(value: Any) -> int | None:
-            text = str(value or "").strip()
-            try:
-                parts = text.split(":")
-                if len(parts) < 2:
-                    return None
-                hour = int(parts[0])
-                minute = int(parts[1])
-                if 0 <= hour <= 23 and 0 <= minute <= 59:
-                    return hour * 60 + minute
-            except (TypeError, ValueError):
-                return None
-            return None
-
-        def _active_tou_slot() -> int | None:
-            """Return the Deye TOU slot whose configured start time is active."""
-            now_local = dt_util.as_local(dt_util.now())
-            now_minutes = now_local.hour * 60 + now_local.minute
-            configured: list[tuple[int, int]] = []
-            for slot in range(1, 7):
-                state = self.hass.states.get(f"time.inverter_program_{slot}_time")
-                start_minutes = _time_minutes(state.state if state is not None else None)
-                if start_minutes is not None:
-                    configured.append((slot, start_minutes))
-            if not configured:
-                return None
-            # Deye stores the beginning of every period. The active row is
-            # therefore the latest start at or before the current time. If
-            # the first configured start is later than now, the last row from
-            # the previous day remains active across midnight.
-            started = [
-                (slot, start_minutes)
-                for slot, start_minutes in configured
-                if start_minutes <= now_minutes
-            ]
-            if started:
-                return max(started, key=lambda item: (item[1], item[0]))[0]
-            return max(configured, key=lambda item: (item[1], item[0]))[0]
 
         def _tou_charge_options(entity_id: str) -> tuple[str | None, str | None]:
             state = self.hass.states.get(entity_id)
@@ -2199,13 +2310,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
 
         def add_tou_commands(*, grid_charge: bool, target_soc: float, reason: str) -> None:
             """Synchronize the active Deye TOU slot with every HomeOn decision."""
-            slot = _active_tou_slot()
+            slot = tou_active_slot
             data["inverter_tou_active_slot"] = slot or 0
             data["inverter_tou_control_status"] = "BRAK ENCJI TIME OF USE"
             if slot is None:
                 return
-            charging_entity = f"select.inverter_program_{slot}_charging"
-            soc_entity = f"number.inverter_program_{slot}_soc"
+            entities = tou_slots[slot]
+            charging_entity = entities["charging"]
+            soc_entity = entities["soc"]
             grid_option, no_grid_option = _tou_charge_options(charging_entity)
             option = grid_option if grid_charge else no_grid_option
             data["inverter_tou_charging_entity"] = charging_entity
@@ -2232,6 +2344,12 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
                 data["inverter_tou_control_status"] = "CZĘŚCIOWE — USTAWIONO TRYB BEZ ENCJI SOC"
             else:
                 data["inverter_tou_control_status"] = "BŁĄD — NIE ROZPOZNANO OPCJI TIME OF USE"
+
+        # Solarman ignores program SOC/charge selections while Use Timer is
+        # disabled. Keep it enabled whenever real inverter control is enabled;
+        # dry-run only reports the pending switch command.
+        if tou_use_timer_entity:
+            sw(tou_use_timer_entity, True)
 
         if mode == "OFF_GRID":
             executor_mode = "OFF_GRID"
@@ -2594,16 +2712,14 @@ class HomeOnEnergyCoordinator(DataUpdateCoordinator):
             domain, entity_id, _value = command
             is_tou_charge = (
                 domain == "select"
-                and "inverter_program_" in entity_id
-                and entity_id.endswith("_charging")
+                and entity_id == active_tou_charging_entity
             )
             is_tou_soc = (
                 domain == "number"
-                and "inverter_program_" in entity_id
-                and entity_id.endswith("_soc")
+                and entity_id == active_tou_soc_entity
             )
 
-            if entity_id == inverter_work_mode_select:
+            if entity_id in {inverter_work_mode_select, tou_use_timer_entity}:
                 return 0
             if executor_mode == "OFF_GRID":
                 # On a real outage, disabling grid-dependent functions and

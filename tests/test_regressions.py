@@ -40,10 +40,10 @@ class SimulatorReportRegressionTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
-        self.assertEqual("1.2.61", manifest["version"])
+        self.assertEqual("1.2.62", manifest["version"])
         for filename in ("sensor.py", "number.py", "switch.py"):
             source = (COMPONENT / filename).read_text(encoding="utf-8")
-            self.assertIn('"sw_version": "1.2.61"', source)
+            self.assertIn('"sw_version": "1.2.62"', source)
 
     def test_installed_pv_capacity_remains_in_options_and_runtime(self) -> None:
         constants = (COMPONENT / "const.py").read_text(encoding="utf-8")
@@ -220,6 +220,11 @@ class SimulatorReportRegressionTests(unittest.TestCase):
         self.assertIn('f"time.inverter_program_{slot}_time"', executor)
         self.assertIn('f"select.inverter_program_{slot}_charging"', executor)
         self.assertIn('f"number.inverter_program_{slot}_soc"', executor)
+        self.assertIn('f"select.ss_prog{slot}_time"', executor)
+        self.assertIn('f"select.ss_prog{slot}_charge"', executor)
+        self.assertIn('f"number.ss_prog{slot}_capacity"', executor)
+        self.assertIn('"switch.ss_use_timer"', executor)
+        self.assertIn('"SOLARMAN SS"', executor)
         self.assertIn("def add_tou_commands(*, grid_charge: bool, target_soc: float, reason: str)", executor)
         self.assertIn("_tou_charge_options", executor)
         self.assertIn('"no grid"', executor)

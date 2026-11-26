@@ -753,6 +753,39 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
             )
             coordinator.hass.states.set(f"number.inverter_program_{slot}_soc", "43")
 
+    def configure_solarman_tou_slots(self, coordinator, *, use_timer: str = "on"):
+        self.configure_deye(coordinator)
+        coordinator.hass.states.values.pop("switch.inverter_battery_grid_charging", None)
+        coordinator.hass.states.set("switch.ss_grid_charge_enabled", "off")
+        starts = ("1:00", "5:00", "9:00", "13:00", "17:00", "21:00")
+        time_options = (
+            ("21:00", "23:45", "0:00", "1:00", "3:00", "5:00"),
+            ("1:00", "3:00", "5:00", "7:00", "9:00"),
+            ("5:00", "7:00", "9:00", "11:00", "13:00"),
+            ("9:00", "11:00", "13:00", "15:00", "17:00"),
+            ("13:00", "15:00", "17:00", "19:00", "21:00"),
+            ("17:00", "19:00", "21:00", "23:45", "0:00", "1:00"),
+        )
+        charge_options = [
+            "No Grid or Gen",
+            "Allow Grid",
+            "Allow Gen",
+            "Allow Grid & Gen",
+        ]
+        for slot, start in enumerate(starts, start=1):
+            coordinator.hass.states.set(
+                f"select.ss_prog{slot}_time",
+                start,
+                {"options": list(time_options[slot - 1])},
+            )
+            coordinator.hass.states.set(
+                f"select.ss_prog{slot}_charge",
+                "No Grid or Gen",
+                {"options": charge_options},
+            )
+            coordinator.hass.states.set(f"number.ss_prog{slot}_capacity", str(10 + slot))
+        coordinator.hass.states.set("switch.ss_use_timer", use_timer)
+
     def test_battery_low_voltage_lock_has_recovery_hysteresis(self):
         coordinator = self.make_coordinator(datetime(2026, 11, 26, 2, 0, tzinfo=WARSAW))
         coordinator.entry.options[CONF_BATTERY_VOLTAGE_SENSOR] = "sensor.test_battery_voltage"
@@ -839,6 +872,78 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("16.0", coordinator.hass.states.get("number.inverter_program_6_soc").state)
         self.assertEqual("Grid", coordinator.hass.states.get("select.inverter_program_1_charging").state)
         self.assertEqual("43", coordinator.hass.states.get("number.inverter_program_1_soc").state)
+
+    async def test_solarman_profile_is_read_even_when_control_is_disabled(self):
+        now = datetime(2026, 11, 26, 0, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(
+            now,
+            runtime={"inverter_control": False, "dry_run": True},
+        )
+        self.configure_solarman_tou_slots(coordinator)
+
+        result = await coordinator._async_apply_inverter_control(
+            {"mode": "NORMAL", "soc": 41.0, "min_soc": 15.0}
+        )
+
+        self.assertEqual("SOLARMAN SS", result["inverter_tou_profile"])
+        self.assertEqual(6, result["inverter_tou_active_slot"])
+        self.assertEqual("21:00", result["inverter_tou_active_start"])
+        self.assertEqual("select.ss_prog6_time", result["inverter_tou_time_entity"])
+        self.assertEqual("select.ss_prog6_charge", result["inverter_tou_charging_entity"])
+        self.assertEqual("number.ss_prog6_capacity", result["inverter_tou_soc_entity"])
+        self.assertEqual(16.0, result["inverter_tou_current_soc"])
+        self.assertEqual(16.0, result["inverter_tou_target_soc"])
+        self.assertEqual("on", result["inverter_tou_use_timer_state"])
+
+    async def test_solarman_grid_charge_uses_active_slot_and_enables_timer(self):
+        now = datetime(2026, 11, 26, 3, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_solarman_tou_slots(coordinator, use_timer="off")
+        data = {
+            "mode": "CHEAP_CHARGE", "soc": 25.0, "min_soc": 16.0,
+            "night_self_use_active": True, "self_use_reserve_soc": 35.0,
+            "discharge_target_soc": 35.0, "charge_target_soc": 75.0,
+            "cheap_charge_grid_target_soc": 75.0, "sell_price": 0.40,
+            "pv_power": 0.0, "load_power": 500.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("SOLARMAN SS", result["inverter_tou_profile"])
+        self.assertEqual(1, result["inverter_tou_active_slot"])
+        self.assertEqual("on", coordinator.hass.states.get("switch.ss_use_timer").state)
+        self.assertEqual("on", coordinator.hass.states.get("switch.ss_grid_charge_enabled").state)
+        self.assertEqual(
+            "switch.ss_grid_charge_enabled",
+            result["inverter_entity_grid_charging"],
+        )
+        self.assertEqual("Allow Grid", coordinator.hass.states.get("select.ss_prog1_charge").state)
+        self.assertEqual("75.0", coordinator.hass.states.get("number.ss_prog1_capacity").state)
+        self.assertEqual("No Grid or Gen", coordinator.hass.states.get("select.ss_prog2_charge").state)
+
+    async def test_solarman_dry_run_reports_commands_without_writing(self):
+        now = datetime(2026, 11, 26, 6, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now, runtime={"dry_run": True})
+        self.configure_solarman_tou_slots(coordinator, use_timer="off")
+        data = {
+            "mode": "CHEAP_CHARGE", "soc": 25.0, "min_soc": 16.0,
+            "night_self_use_active": True, "self_use_reserve_soc": 35.0,
+            "discharge_target_soc": 35.0, "charge_target_soc": 75.0,
+            "cheap_charge_grid_target_soc": 75.0, "sell_price": 0.40,
+            "pv_power": 0.0, "load_power": 500.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual(2, result["inverter_tou_active_slot"])
+        self.assertEqual(75.0, result["inverter_tou_target_soc"])
+        self.assertEqual("off", coordinator.hass.states.get("switch.ss_use_timer").state)
+        self.assertEqual("No Grid or Gen", coordinator.hass.states.get("select.ss_prog2_charge").state)
+        self.assertEqual("12", coordinator.hass.states.get("number.ss_prog2_capacity").state)
+        self.assertIn("switch.ss_use_timer", result["inverter_deye_changes"])
+        self.assertIn("select.ss_prog2_charge", result["inverter_deye_changes"])
 
     async def test_cheap_charge_is_written_to_the_current_tou_period(self):
         now = datetime(2026, 10, 16, 3, 30, tzinfo=WARSAW)
