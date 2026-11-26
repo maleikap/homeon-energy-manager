@@ -9,6 +9,7 @@
           "installation_type": "Installation type",
           "soc_sensor": "Battery SOC",
           "battery_power_sensor": "Battery power",
+          "battery_voltage_sensor": "Battery voltage (optional, recommended)",
           "pv_power_sensor": "PV power",
           "load_power_sensor": "Load power",
           "grid_power_sensor": "Grid power",
@@ -37,6 +38,7 @@
         "data_description": {
           "installation_type": "CT: loads may be on the GRID side and are measured by current transformers; the inverter uses Zero Export To CT. LOAD: all loads are behind LOAD without CT clamps; the inverter uses Zero Export To Load.",
           "grid_connection_sensor": "Select a Deye grid-connected status or phase-voltage entity. It is required for reliable OFF-GRID detection; 0 W alone cannot distinguish an outage from correct zero balancing.",
+          "battery_voltage_sensor": "Select the complete battery-system voltage, not a single cell or module. It is used as an independent safeguard alongside SOC.",
           "pv_installed_kwp": "Combined nominal capacity of all PV modules in kWp. This value is used to evaluate actual PV production.",
           "battery_capacity_kwh": "Actual usable capacity of the complete battery system.",
           "night_consumption_kwh": "Review this value after changing battery capacity. Night consumption with its margin should not exceed battery capacity.",
@@ -57,6 +59,7 @@
           "installation_type": "Installation type",
           "soc_sensor": "Battery SOC",
           "battery_power_sensor": "Battery power",
+          "battery_voltage_sensor": "Battery voltage (optional, recommended)",
           "pv_power_sensor": "PV power",
           "load_power_sensor": "Load power",
           "grid_power_sensor": "Grid power",
@@ -85,6 +88,7 @@
         "data_description": {
           "installation_type": "CT: loads may be on the GRID side and are measured by current transformers; the inverter uses Zero Export To CT. LOAD: all loads are behind LOAD without CT clamps; the inverter uses Zero Export To Load.",
           "grid_connection_sensor": "Select a Deye grid-connected status or phase-voltage entity. It is required for reliable OFF-GRID detection; 0 W alone cannot distinguish an outage from correct zero balancing.",
+          "battery_voltage_sensor": "Select the complete battery-system voltage, not a single cell or module. It is used as an independent safeguard alongside SOC.",
           "pv_installed_kwp": "Combined nominal capacity of all PV modules in kWp. This value is used to evaluate actual PV production.",
           "battery_capacity_kwh": "Actual usable capacity of the complete battery system.",
           "night_consumption_kwh": "Review this value after changing battery capacity. Night consumption with its margin should not exceed battery capacity.",

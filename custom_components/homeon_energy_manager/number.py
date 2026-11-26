@@ -111,6 +111,10 @@ NUMBERS = [
     ("battery_charge_efficiency_percent", "Sprawność ładowania baterii", 50, 100, 0.5, "%", "mdi:battery-plus", 94),
     ("battery_discharge_efficiency_percent", "Sprawność rozładowania baterii", 50, 100, 0.5, "%", "mdi:battery-minus", 94),
     ("battery_nominal_voltage_v", "Napięcie nominalne baterii", 12, 1000, 0.1, "V", "mdi:sine-wave", 51.2),
+    ("battery_low_voltage_stop_v", "Napięcie ochrony przed rozładowaniem", 0, 1000, 0.1, "V", "mdi:battery-alert", 0),
+    ("battery_low_voltage_recovery_v", "Napięcie powrotu po niskim napięciu", 0, 1000, 0.1, "V", "mdi:battery-check", 0),
+    ("battery_high_voltage_recovery_v", "Napięcie powrotu po wysokim napięciu", 0, 1000, 0.1, "V", "mdi:battery-check-outline", 0),
+    ("battery_high_voltage_stop_v", "Napięcie ochrony przed przeładowaniem", 0, 1000, 0.1, "V", "mdi:battery-alert-variant", 0),
     ("mode_min_hold_minutes", "Minimalny czas trybu EMS", 0, 60, 1, "min", "mdi:timer-lock", 10),
     ("deye_min_command_interval_seconds", "Minimalny odstęp komend Deye", 0, 1800, 5, "s", "mdi:timer-cog", 120),
     ("deye_max_changes_per_run", "Maksymalna liczba zmian Deye", 1, 10, 1, "zmian", "mdi:shield-counter", 6),
@@ -163,7 +167,7 @@ class HomeOnNumber(CoordinatorEntity, NumberEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.60",
+            "sw_version": "1.2.61",
         }
 
     @property

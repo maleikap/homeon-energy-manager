@@ -77,7 +77,7 @@ def _ewma(learn: dict[str, Any], key: str, value: float, alpha: float = 0.03) ->
     _ewma_dict(learn, key, value, alpha)
 
 
-async def _ensure_learning_loaded(coordinator) -> dict[str, Any]:
+async def ensure_learning_loaded(coordinator) -> dict[str, Any]:
     if not hasattr(coordinator, "_homeon_learning_store"):
         coordinator._homeon_learning_store = Store(
             coordinator.hass,
@@ -95,8 +95,67 @@ async def _ensure_learning_loaded(coordinator) -> dict[str, Any]:
     return coordinator._homeon_learning
 
 
+async def monthly_full_charge_state(
+    coordinator,
+    soc: float,
+    enabled: bool,
+) -> dict[str, Any]:
+    """Return and persist the once-per-calendar-month full-charge state."""
+    learn = await ensure_learning_loaded(coordinator)
+    now = dt_util.as_local(dt_util.now())
+    current_month = now.strftime("%Y-%m")
+    completed_month = str(learn.get("monthly_full_charge_completed_month", "") or "")
+    completed_at = str(learn.get("monthly_full_charge_completed_at", "") or "")
+
+    result = {
+        "enabled": bool(enabled),
+        "month": current_month,
+        "target_soc": 100.0,
+        "completion_soc": 99.5,
+        "completed_month": completed_month or "-",
+        "completed_at": completed_at or "-",
+        "completed_now": False,
+        "due": False,
+        "status": "WYŁĄCZONE",
+        "reason": "Miesięczne ładowanie do pełna jest wyłączone",
+    }
+    if not enabled:
+        return result
+
+    if completed_month == current_month:
+        result.update({
+            "status": "ZAKOŃCZONE",
+            "reason": f"Pełne ładowanie za {current_month} zostało już wykonane",
+        })
+        return result
+
+    # Integer SOC sensors normally jump from 99% to 100%. The small tolerance
+    # also supports inverters which report SOC with decimal rounding.
+    if float(soc) >= 99.5:
+        completed_at = now.isoformat()
+        learn["monthly_full_charge_completed_month"] = current_month
+        learn["monthly_full_charge_completed_at"] = completed_at
+        learn["last_saved_ts"] = completed_at
+        await coordinator._homeon_learning_store.async_save(learn)
+        result.update({
+            "completed_month": current_month,
+            "completed_at": completed_at,
+            "completed_now": True,
+            "status": "ZAKOŃCZONE",
+            "reason": f"Magazyn osiągnął 100% — cykl za {current_month} zakończony",
+        })
+        return result
+
+    result.update({
+        "due": True,
+        "status": "OCZEKIWANIE",
+        "reason": f"Cykl za {current_month} oczekuje na najtańsze okno ładowania",
+    })
+    return result
+
+
 async def update_learning(coordinator, data: dict[str, Any]) -> dict[str, Any]:
-    learn = await _ensure_learning_loaded(coordinator)
+    learn = await ensure_learning_loaded(coordinator)
 
     now = dt_util.now()
     now_iso = now.isoformat()

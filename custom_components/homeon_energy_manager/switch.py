@@ -16,6 +16,7 @@ SWITCHES = [
     ("inverter_control", "Sterowanie falownikiem", "mdi:power-settings", False),
     ("battery_trade", "Tryb handlu baterią", "mdi:cash-sync", False),
     ("profit_mode", "Tryb zarabiania", "mdi:finance", False),
+    ("monthly_full_charge", "Miesięczne ładowanie do pełna", "mdi:battery-sync", True),
 ]
 
 
@@ -47,7 +48,7 @@ class HomeOnSwitch(CoordinatorEntity, SwitchEntity):
             "name": "HomeOn Energy Manager",
             "manufacturer": "HomeOn",
             "model": "Energy Manager",
-            "sw_version": "1.2.60",
+            "sw_version": "1.2.61",
         }
 
     @property

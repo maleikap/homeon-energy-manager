@@ -21,6 +21,7 @@ install_homeassistant_stubs()
 
 from custom_components.homeon_energy_manager.const import DOMAIN  # noqa: E402
 from custom_components.homeon_energy_manager.const import (  # noqa: E402
+    CONF_BATTERY_VOLTAGE_SENSOR,
     CONF_GRID_CONNECTION_SENSOR,
     CONF_SELL_PRICE_SENSOR,
     DEFAULT_PSTRYK_SELL_PRICE_SENSOR,
@@ -31,7 +32,10 @@ from custom_components.homeon_energy_manager.const import (  # noqa: E402
 from custom_components.homeon_energy_manager.coordinator import (  # noqa: E402
     HomeOnEnergyCoordinator,
 )
-from custom_components.homeon_energy_manager.learning import update_learning  # noqa: E402
+from custom_components.homeon_energy_manager.learning import (  # noqa: E402
+    monthly_full_charge_state,
+    update_learning,
+)
 
 
 BUY = "sensor.test_buy"
@@ -599,6 +603,89 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("OFF", result["profit_recharge_pending"])
         self.assertEqual(0.0, result["profit_recharge_target_soc"])
 
+    async def test_monthly_full_charge_is_persisted_and_not_repeated(self):
+        now = datetime(2026, 11, 3, 2, 0, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+
+        class RecordingStore:
+            def __init__(self):
+                self.saved: list[dict] = []
+
+            async def async_save(self, data):
+                self.saved.append(dict(data))
+
+        store = RecordingStore()
+        coordinator._homeon_learning_store = store
+        coordinator._homeon_learning_loaded = True
+        coordinator._homeon_learning = {}
+
+        waiting = await monthly_full_charge_state(coordinator, 62.0, True)
+        self.assertTrue(waiting["due"])
+        self.assertEqual("OCZEKIWANIE", waiting["status"])
+
+        completed = await monthly_full_charge_state(coordinator, 100.0, True)
+        self.assertFalse(completed["due"])
+        self.assertTrue(completed["completed_now"])
+        self.assertEqual("2026-11", completed["completed_month"])
+        self.assertEqual(1, len(store.saved))
+
+        repeated = await monthly_full_charge_state(coordinator, 60.0, True)
+        self.assertFalse(repeated["due"])
+        self.assertEqual("ZAKOŃCZONE", repeated["status"])
+        self.assertEqual(1, len(store.saved))
+
+        Clock.set(datetime(2026, 12, 1, 2, 0, tzinfo=WARSAW))
+        next_month = await monthly_full_charge_state(coordinator, 60.0, True)
+        self.assertTrue(next_month["due"])
+        self.assertEqual("2026-12", next_month["month"])
+
+    async def test_manager_selects_monthly_full_charge_in_cheapest_current_hour(self):
+        now = datetime(2026, 11, 3, 2, 5, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now, runtime={"inverter_control": False})
+        coordinator.entry.data.update({
+            "soc_sensor": "sensor.test_soc",
+            "battery_power_sensor": "sensor.test_battery_power",
+            "pv_power_sensor": "sensor.test_pv_power",
+            "load_power_sensor": "sensor.test_load_power",
+            "grid_power_sensor": "sensor.test_grid_power",
+            "buy_price_sensor": BUY,
+            "sell_price_sensor": SELL,
+            "pv_forecast_today_sensor": "sensor.test_pv_today",
+            "pv_forecast_tomorrow_sensor": "sensor.test_pv_tomorrow",
+        })
+        states = coordinator.hass.states
+        states.set("sensor.test_soc", "60")
+        states.set("sensor.test_battery_power", "0")
+        states.set("sensor.test_pv_power", "0")
+        states.set("sensor.test_load_power", "500")
+        states.set("sensor.test_grid_power", "500")
+        states.set("sensor.test_pv_today", "2")
+        states.set("sensor.test_pv_tomorrow", "2")
+        self.set_prices(
+            coordinator,
+            now.replace(minute=0),
+            [0.10, 0.80, 0.90, 1.00, 1.10],
+            [0.40, 0.40, 0.40, 0.40, 0.40],
+        )
+
+        result = await coordinator._async_update_data()
+
+        self.assertEqual("MONTHLY_FULL_CHARGE", result["mode"])
+        self.assertEqual("ŁADOWANIE Z SIECI", result["monthly_full_charge_status"])
+        self.assertEqual(100.0, result["monthly_full_charge_target_soc"])
+        self.assertIn("02:00", result["monthly_full_charge_windows"])
+
+        coordinator.entry.options[CONF_BATTERY_VOLTAGE_SENSOR] = "sensor.test_battery_voltage"
+        states.set("sensor.test_battery_voltage", "42.0", {"unit_of_measurement": "V"})
+        low_voltage_result = await coordinator._async_update_data()
+        self.assertEqual("BATTERY_VOLTAGE_LOW", low_voltage_result["mode"])
+        self.assertEqual("ON", low_voltage_result["battery_voltage_low_lock"])
+
+        states.set("sensor.test_battery_voltage", "58.0", {"unit_of_measurement": "V"})
+        high_voltage_result = await coordinator._async_update_data()
+        self.assertEqual("BATTERY_VOLTAGE_HIGH", high_voltage_result["mode"])
+        self.assertEqual("ON", high_voltage_result["battery_voltage_high_lock"])
+
     async def test_daily_finance_uses_matching_pstryk_instance_as_source_of_truth(self):
         now = datetime(2026, 10, 27, 8, 0, tzinfo=WARSAW)
         coordinator = self.make_coordinator(now)
@@ -665,6 +752,52 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
                 {"options": ["Grid", "No Grid"]},
             )
             coordinator.hass.states.set(f"number.inverter_program_{slot}_soc", "43")
+
+    def test_battery_low_voltage_lock_has_recovery_hysteresis(self):
+        coordinator = self.make_coordinator(datetime(2026, 11, 26, 2, 0, tzinfo=WARSAW))
+        coordinator.entry.options[CONF_BATTERY_VOLTAGE_SENSOR] = "sensor.test_battery_voltage"
+        coordinator.hass.states.set("sensor.test_battery_voltage", "42.0", {"unit_of_measurement": "V"})
+
+        low = coordinator._battery_voltage_state()
+        self.assertTrue(low["available"])
+        self.assertTrue(low["low_lock"])
+        self.assertEqual("NISKIE NAPIĘCIE", low["status"])
+
+        coordinator.hass.states.set("sensor.test_battery_voltage", "44.0", {"unit_of_measurement": "V"})
+        still_locked = coordinator._battery_voltage_state()
+        self.assertTrue(still_locked["low_lock"])
+
+        coordinator.hass.states.set("sensor.test_battery_voltage", "47.0", {"unit_of_measurement": "V"})
+        recovered = coordinator._battery_voltage_state()
+        self.assertFalse(recovered["low_lock"])
+        self.assertEqual("OK", recovered["status"])
+
+    def test_battery_high_voltage_lock_has_recovery_hysteresis(self):
+        coordinator = self.make_coordinator(datetime(2026, 11, 26, 12, 0, tzinfo=WARSAW))
+        coordinator.hass.states.set("sensor.inverter_battery_voltage", "58.0", {"unit_of_measurement": "V"})
+
+        high = coordinator._battery_voltage_state()
+        self.assertTrue(high["high_lock"])
+        self.assertEqual("WYSOKIE NAPIĘCIE", high["status"])
+
+        coordinator.hass.states.set("sensor.inverter_battery_voltage", "56.0", {"unit_of_measurement": "V"})
+        still_locked = coordinator._battery_voltage_state()
+        self.assertTrue(still_locked["high_lock"])
+
+        coordinator.hass.states.set("sensor.inverter_battery_voltage", "55.0", {"unit_of_measurement": "V"})
+        recovered = coordinator._battery_voltage_state()
+        self.assertFalse(recovered["high_lock"])
+        self.assertEqual("OK", recovered["status"])
+
+    def test_hv_voltage_does_not_use_lv_thresholds_without_configuration(self):
+        coordinator = self.make_coordinator(datetime(2026, 11, 26, 12, 0, tzinfo=WARSAW))
+        coordinator.hass.states.set("sensor.inverter_battery_voltage", "400.0", {"unit_of_measurement": "V"})
+
+        result = coordinator._battery_voltage_state()
+
+        self.assertFalse(result["available"])
+        self.assertFalse(result["high_lock"])
+        self.assertEqual("WYMAGA KONFIGURACJI", result["status"])
 
     async def test_tou_updates_current_period_not_next_future_period(self):
         """Deye program times are period starts, not the preceding period ends."""
@@ -769,6 +902,89 @@ class BehavioralManagerSimulationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("No Grid", coordinator.hass.states.get("select.inverter_program_4_charging").state)
         self.assertEqual("16.0", coordinator.hass.states.get("number.inverter_program_4_soc").state)
         self.assertEqual("16.0", str(result["inverter_tou_target_soc"]))
+
+    async def test_low_voltage_protection_charges_and_blocks_discharge_even_with_high_soc(self):
+        now = datetime(2026, 11, 26, 3, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_six_deye_tou_slots(coordinator)
+        data = {
+            "mode": "BATTERY_VOLTAGE_LOW", "soc": 70.0, "min_soc": 16.0,
+            "battery_voltage_low_lock": "ON", "battery_voltage_high_lock": "OFF",
+            "battery_voltage_recovery_target_soc": 80.0,
+            "night_self_use_active": True, "self_use_reserve_soc": 35.0,
+            "discharge_target_soc": 35.0, "charge_target_soc": 75.0,
+            "sell_price": 1.20, "pv_power": 0.0, "load_power": 500.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("BATTERY_VOLTAGE_LOW", result["inverter_control_executor_mode"])
+        self.assertEqual("on", coordinator.hass.states.get("switch.inverter_battery_grid_charging").state)
+        self.assertEqual("0.0", coordinator.hass.states.get("number.inverter_battery_max_discharging_current").state)
+        self.assertEqual("Grid", coordinator.hass.states.get("select.inverter_program_2_charging").state)
+        self.assertEqual("80.0", coordinator.hass.states.get("number.inverter_program_2_soc").state)
+
+    async def test_high_voltage_protection_stops_monthly_charging(self):
+        now = datetime(2026, 11, 26, 3, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_six_deye_tou_slots(coordinator)
+        data = {
+            "mode": "MONTHLY_FULL_CHARGE", "soc": 96.0, "min_soc": 16.0,
+            "battery_voltage_low_lock": "OFF", "battery_voltage_high_lock": "ON",
+            "night_self_use_active": True, "self_use_reserve_soc": 35.0,
+            "discharge_target_soc": 35.0, "charge_target_soc": 100.0,
+            "sell_price": 0.40, "pv_power": 0.0, "load_power": 500.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("off", coordinator.hass.states.get("switch.inverter_battery_grid_charging").state)
+        self.assertEqual("0.0", coordinator.hass.states.get("number.inverter_battery_max_charging_current").state)
+        self.assertEqual("No Grid", coordinator.hass.states.get("select.inverter_program_2_charging").state)
+        self.assertIn("ochrona wysokiego napięcia", result["inverter_control_action"])
+
+    async def test_monthly_full_charge_reaches_100_despite_normal_95_percent_lock(self):
+        now = datetime(2026, 11, 3, 3, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_six_deye_tou_slots(coordinator)
+        coordinator.hass.states.set("select.inverter_program_2_charging", "No Grid", {"options": ["Grid", "No Grid"]})
+        coordinator.hass.states.set("number.inverter_program_2_soc", "95")
+        data = {
+            "mode": "MONTHLY_FULL_CHARGE", "soc": 96.0, "min_soc": 16.0,
+            "night_self_use_active": True, "self_use_reserve_soc": 35.0,
+            "discharge_target_soc": 35.0, "charge_target_soc": 100.0,
+            "sell_price": 0.40, "pv_power": 0.0, "load_power": 500.0,
+            "economic_pv_export_opportunity": "OFF", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("MONTHLY_FULL_CHARGE", result["inverter_control_executor_mode"])
+        self.assertEqual("on", coordinator.hass.states.get("switch.inverter_battery_grid_charging").state)
+        self.assertEqual(80.0, float(coordinator.hass.states.get("number.inverter_battery_max_charging_current").state))
+        self.assertEqual("Grid", coordinator.hass.states.get("select.inverter_program_2_charging").state)
+        self.assertEqual("100.0", coordinator.hass.states.get("number.inverter_program_2_soc").state)
+
+    async def test_monthly_full_charge_keeps_pv_in_battery_above_95_percent(self):
+        now = datetime(2026, 11, 3, 12, 30, tzinfo=WARSAW)
+        coordinator = self.make_coordinator(now)
+        self.configure_six_deye_tou_slots(coordinator)
+        data = {
+            "mode": "MONTHLY_FULL_CHARGE_PV", "soc": 96.0, "min_soc": 16.0,
+            "night_self_use_active": False, "self_use_reserve_soc": 35.0,
+            "discharge_target_soc": 35.0, "charge_target_soc": 100.0,
+            "sell_price": 0.80, "pv_power": 5000.0, "load_power": 500.0,
+            "economic_pv_export_opportunity": "ON", "plan_safe_to_sell_kwh": 0.0,
+        }
+
+        result = await coordinator._async_apply_inverter_control(data)
+
+        self.assertEqual("MONTHLY_FULL_CHARGE_PV", result["inverter_control_executor_mode"])
+        self.assertEqual("off", coordinator.hass.states.get("switch.inverter_battery_grid_charging").state)
+        self.assertEqual("off", coordinator.hass.states.get("switch.inverter_export_surplus").state)
+        self.assertEqual("100.0", coordinator.hass.states.get("number.inverter_program_5_soc").state)
 
     async def test_wait_mode_restores_self_use_full_current_and_minimum_tou_soc(self):
         now = datetime(2026, 1, 10, 20, 30, tzinfo=WARSAW)
